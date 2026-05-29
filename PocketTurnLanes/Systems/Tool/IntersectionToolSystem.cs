@@ -34,6 +34,7 @@ namespace PocketTurnLanes.Systems.Tool
         private const int MaxSplitRetryAttempts = 4;
         private const float MinimumRetryProgress = 2f;
         private const float PreviewSplitNodeTolerance = 0.004f;
+        private const int MaxReplacementPreviewWaitFrames = 6;
         private const float PrefabWidthTolerance = 0.05f;
         private const float SplitNodePositionTolerance = 2.5f;
         private const float PocketEdgeLengthTolerance = 4f;
@@ -45,7 +46,9 @@ namespace PocketTurnLanes.Systems.Tool
         private ValidationSystem m_ValidationSystem;
         private NodeReductionSystem m_NodeReductionSystem;
         private EntityQuery m_DefinitionQuery;
+        private EntityQuery m_ReplacementPreviewDefinitionQuery;
         private EntityQuery m_TempSplitNodeQuery;
+        private EntityQuery m_TempPreviewEdgeQuery;
         private EntityQuery m_RoadPrefabQuery;
         private Entity m_HoveredIntersection = Entity.Null;
         private Entity m_PreviewIntersection = Entity.Null;
@@ -57,9 +60,11 @@ namespace PocketTurnLanes.Systems.Tool
         private bool m_ApplyPreviewNextFrame;
         private bool m_ApplyRetryNextFrame;
         private bool m_ApplyReplacementNextFrame;
+        private bool m_RebuildSplitPreviewForApply;
         private bool m_PreviewValidationPending;
         private bool m_VerifyAppliedSplits;
         private bool m_VerifyAppliedReplacements;
+        private bool m_HasReplacementPreviewDefinitions;
         private int m_PreviewCreatedFrame = -1;
         private int m_PreviewEdgeCount;
         private readonly List<SplitCandidate> m_PreviewCandidates = new List<SplitCandidate>();
@@ -81,11 +86,21 @@ namespace PocketTurnLanes.Systems.Tool
             m_ValidationSystem = World.GetOrCreateSystemManaged<ValidationSystem>();
             m_NodeReductionSystem = World.GetOrCreateSystemManaged<NodeReductionSystem>();
             m_DefinitionQuery = GetDefinitionQuery();
+            m_ReplacementPreviewDefinitionQuery = GetEntityQuery(
+                ComponentType.ReadOnly<CreationDefinition>(),
+                ComponentType.ReadOnly<ReplacementPreviewDefinition>());
             m_TempSplitNodeQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Temp>(),
                 ComponentType.ReadOnly<Node>(),
                 ComponentType.Exclude<Deleted>());
+            m_TempPreviewEdgeQuery = GetEntityQuery(
+                ComponentType.ReadOnly<Temp>(),
+                ComponentType.ReadOnly<Edge>(),
+                ComponentType.ReadOnly<Curve>(),
+                ComponentType.ReadOnly<PrefabRef>(),
+                ComponentType.Exclude<Deleted>());
             m_RoadPrefabQuery = GetEntityQuery(
+                ComponentType.ReadOnly<PrefabData>(),
                 ComponentType.ReadOnly<RoadData>(),
                 ComponentType.ReadOnly<NetGeometryData>(),
                 ComponentType.Exclude<Deleted>());
@@ -153,6 +168,23 @@ namespace PocketTurnLanes.Systems.Tool
                 m_ClearSplitDefinitions = true;
                 m_ApplyReplacementNextFrame = false;
                 Mod.log.Info($"[IntersectionTool] Applying queued pocket lane replacement definitions count={m_AppliedReplacementCandidates.Count}.");
+                return result;
+            }
+
+            if (m_RebuildSplitPreviewForApply)
+            {
+                if (UnityEngine.Time.frameCount <= m_PreviewCreatedFrame)
+                {
+                    return result;
+                }
+
+                result = RebuildSplitDefinitionsForApply(result);
+                m_RebuildSplitPreviewForApply = false;
+                m_ApplyPreviewNextFrame = true;
+                m_PreviewReady = true;
+                m_PreviewDirty = false;
+                m_PreviewValidationPending = false;
+                m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
                 return result;
             }
 
@@ -245,6 +277,19 @@ namespace PocketTurnLanes.Systems.Tool
 
             if ((applyPressed || m_ApplyPreviewNextFrame) && m_PreviewEdgeCount > 0)
             {
+                if (m_HasReplacementPreviewDefinitions &&
+                    !m_ReplacementPreviewDefinitionQuery.IsEmptyIgnoreFilter)
+                {
+                    applyMode = ApplyMode.Clear;
+                    result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, result);
+                    m_HasReplacementPreviewDefinitions = false;
+                    m_RebuildSplitPreviewForApply = true;
+                    m_ApplyPreviewNextFrame = true;
+                    m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
+                    Mod.log.Info($"[IntersectionTool] Cleared replacement preview definitions before applying split preview node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount}; fresh split definitions will be rebuilt before apply.");
+                    return result;
+                }
+
                 if (UnityEngine.Time.frameCount <= m_PreviewCreatedFrame)
                 {
                     m_ApplyPreviewNextFrame = true;
@@ -1362,6 +1407,8 @@ namespace PocketTurnLanes.Systems.Tool
                    m_PreviewReady ||
                    m_PreviewValidationPending ||
                    m_ApplyPreviewNextFrame ||
+                   m_RebuildSplitPreviewForApply ||
+                   m_HasReplacementPreviewDefinitions ||
                    m_PreviewIntersection != Entity.Null ||
                    m_PreviewEdge != Entity.Null ||
                    m_PreviewEdgeCount > 0;
@@ -1376,9 +1423,11 @@ namespace PocketTurnLanes.Systems.Tool
             m_ApplyPreviewNextFrame = false;
             m_ApplyRetryNextFrame = false;
             m_ApplyReplacementNextFrame = false;
+            m_RebuildSplitPreviewForApply = false;
             m_PreviewValidationPending = false;
             m_PreviewCreatedFrame = -1;
             m_PreviewEdgeCount = 0;
+            m_HasReplacementPreviewDefinitions = false;
             m_PreviewCandidates.Clear();
             m_NextPreviewCandidates.Clear();
             m_AppliedCandidates.Clear();
@@ -1420,7 +1469,7 @@ namespace PocketTurnLanes.Systems.Tool
             for (int i = 0; i < m_PreviewCandidates.Count; i++)
             {
                 SplitCandidate candidate = m_PreviewCandidates[i];
-                if (HasPreviewSplitNode(candidate))
+                if (TryFindPreviewSplitNode(candidate, out _))
                 {
                     visibleCount++;
                     m_NextPreviewCandidates.Add(candidate);
@@ -1491,10 +1540,10 @@ namespace PocketTurnLanes.Systems.Tool
             if (m_NextPreviewCandidates.Count == 0)
             {
                 applyMode = ApplyMode.Clear;
-                JobHandle result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
+                JobHandle clearResult = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
                 MarkNoSplitPreviewReady(m_PreviewIntersection);
                 Mod.log.Info($"[IntersectionTool] Split preview validation complete node={FormatEntity(m_PreviewIntersection)} visible=0, retried=0, exhausted={exhaustedCount}; no visible split definitions remain.");
-                return result;
+                return clearResult;
             }
 
             if (m_NextPreviewCandidates.Count != m_PreviewCandidates.Count)
@@ -1502,12 +1551,31 @@ namespace PocketTurnLanes.Systems.Tool
                 return RequeueSplitPreview(m_NextPreviewCandidates, inputDeps, visibleCount, 0, exhaustedCount);
             }
 
+            JobHandle result = inputDeps;
+            int replacementPreviewCount = 0;
+            for (int i = 0; i < m_PreviewCandidates.Count; i++)
+            {
+                if (TryApplyReplacementPreview(m_PreviewCandidates[i], ref result))
+                {
+                    replacementPreviewCount++;
+                }
+            }
+
+            if (replacementPreviewCount < m_PreviewCandidates.Count &&
+                UnityEngine.Time.frameCount - m_PreviewCreatedFrame < MaxReplacementPreviewWaitFrames)
+            {
+                m_PreviewValidationPending = true;
+                m_PreviewReady = false;
+                Mod.log.Info($"[IntersectionTool] Waiting for replacement preview edges node={FormatEntity(m_PreviewIntersection)} previewed={replacementPreviewCount}/{m_PreviewCandidates.Count} frameDelta={UnityEngine.Time.frameCount - m_PreviewCreatedFrame}.");
+                return result;
+            }
+
             m_NextPreviewCandidates.Clear();
             m_PreviewValidationPending = false;
             m_PreviewReady = true;
             m_PreviewDirty = false;
-            Mod.log.Info($"[IntersectionTool] Split preview validation complete node={FormatEntity(m_PreviewIntersection)} visible={visibleCount}, retried=0, exhausted={exhaustedCount}. Ready for click apply.");
-            return inputDeps;
+            Mod.log.Info($"[IntersectionTool] Split preview validation complete node={FormatEntity(m_PreviewIntersection)} visible={visibleCount}, retried=0, exhausted={exhaustedCount}, replacementPreviewed={replacementPreviewCount}. Ready for click apply.");
+            return result;
         }
 
         private JobHandle RequeueSplitPreview(List<SplitCandidate> candidates, JobHandle inputDeps, int visibleCount, int retryCount, int exhaustedCount)
@@ -1592,6 +1660,57 @@ namespace PocketTurnLanes.Systems.Tool
             return result;
         }
 
+        private JobHandle RebuildSplitDefinitionsForApply(JobHandle inputDeps)
+        {
+            JobHandle result = inputDeps;
+            int queuedCount = 0;
+            Entity previewNode = Entity.Null;
+            Entity lastQueuedEdge = Entity.Null;
+
+            for (int i = 0; i < m_PreviewCandidates.Count; i++)
+            {
+                SplitCandidate candidate = m_PreviewCandidates[i];
+                if (candidate.Edge == Entity.Null ||
+                    candidate.SourcePrefab == Entity.Null ||
+                    !EntityManager.Exists(candidate.Edge))
+                {
+                    Mod.log.Warn($"[IntersectionTool] Cannot rebuild clean apply split definition edge={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)}: edge or prefab is missing.");
+                    continue;
+                }
+
+                int randomSeed = EntityManager.TryGetComponent(candidate.Edge, out PseudoRandomSeed seed)
+                    ? seed.m_Seed
+                    : candidate.Edge.Index;
+
+                SplitDefinitionRequest request = new SplitDefinitionRequest
+                {
+                    Edge = candidate.Edge,
+                    Prefab = candidate.SourcePrefab,
+                    HitPosition = candidate.HitPosition,
+                    CurvePosition = candidate.CurvePosition,
+                    RandomSeed = randomSeed
+                };
+
+                JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
+                {
+                    Request = request,
+                    ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+                }.Schedule(result);
+
+                m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+                result = createDefinitionJobHandle;
+                queuedCount++;
+                previewNode = candidate.Node;
+                lastQueuedEdge = candidate.Edge;
+            }
+
+            m_PreviewIntersection = previewNode;
+            m_PreviewEdge = lastQueuedEdge;
+            m_PreviewEdgeCount = queuedCount;
+            Mod.log.Info($"[IntersectionTool] Rebuilt clean split definitions for apply node={FormatEntity(previewNode)} definitions={queuedCount}; replacement preview definitions were discarded before apply.");
+            return result;
+        }
+
         private void MarkNoSplitPreviewReady(Entity nodeEntity)
         {
             m_PreviewIntersection = nodeEntity;
@@ -1607,8 +1726,11 @@ namespace PocketTurnLanes.Systems.Tool
             m_QueuedReplacementCandidates.Clear();
         }
 
-        private bool HasPreviewSplitNode(SplitCandidate candidate)
+        private bool TryFindPreviewSplitNode(SplitCandidate candidate, out Entity splitNode)
         {
+            splitNode = Entity.Null;
+
+            using (NativeArray<Entity> entities = m_TempSplitNodeQuery.ToEntityArray(Allocator.Temp))
             using (NativeArray<Temp> temps = m_TempSplitNodeQuery.ToComponentDataArray<Temp>(Allocator.Temp))
             {
                 for (int i = 0; i < temps.Length; i++)
@@ -1623,12 +1745,279 @@ namespace PocketTurnLanes.Systems.Tool
 
                     if (math.abs(temp.m_CurvePosition - candidate.CurvePosition) <= PreviewSplitNodeTolerance)
                     {
+                        splitNode = entities[i];
                         return true;
                     }
                 }
             }
 
             return false;
+        }
+
+        private bool TryApplyReplacementPreview(SplitCandidate candidate, ref JobHandle result)
+        {
+            if (candidate.TargetPrefab == Entity.Null)
+            {
+                return false;
+            }
+
+            if (!TryFindPreviewSplitNode(candidate, out Entity splitNode) ||
+                !TryFindPreviewPocketEdge(candidate, splitNode, out Entity pocketEdge, out float lengthError))
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot preview pocket lane replacement original={FormatEntity(candidate.Edge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)}: preview pocket edge was not found.");
+                return false;
+            }
+
+            if (!TryFindPreviewOuterEdge(candidate, splitNode, pocketEdge, out Entity outerEdge, out float outerLengthError))
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot preview pocket lane replacement original={FormatEntity(candidate.Edge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)}: preview outer edge was not found.");
+                return false;
+            }
+
+            ReplacementCandidate replacementCandidate = new ReplacementCandidate
+            {
+                Node = candidate.Node,
+                SplitNode = splitNode,
+                OriginalEdge = candidate.Edge,
+                PocketEdge = pocketEdge,
+                SourcePrefab = candidate.SourcePrefab,
+                TargetPrefab = candidate.TargetPrefab,
+                InvertTarget = candidate.InvertTarget,
+                HitPosition = candidate.HitPosition,
+                OriginalForwardLanes = candidate.OriginalForwardLanes,
+                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
+                TargetForwardLanes = candidate.TargetForwardLanes,
+                TargetBackwardLanes = candidate.TargetBackwardLanes
+            };
+
+            if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest definitionRequest))
+            {
+                return false;
+            }
+
+            if (!TryBuildPreviewSourceDefinitionRequest(outerEdge, candidate.SourcePrefab, out ReplacementDefinitionRequest outerDefinitionRequest))
+            {
+                return false;
+            }
+
+            definitionRequest.PreviewOnly = true;
+            outerDefinitionRequest.PreviewOnly = true;
+
+            JobHandle definitionJobHandle = new CreateReplacementDefinitionJob
+            {
+                Request = definitionRequest,
+                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+            }.Schedule(result);
+            JobHandle outerDefinitionJobHandle = new CreateReplacementDefinitionJob
+            {
+                Request = outerDefinitionRequest,
+                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+            }.Schedule(definitionJobHandle);
+
+            m_ToolOutputBarrier.AddJobHandleForProducer(definitionJobHandle);
+            m_ToolOutputBarrier.AddJobHandleForProducer(outerDefinitionJobHandle);
+            result = outerDefinitionJobHandle;
+            m_HasReplacementPreviewDefinitions = true;
+
+            Mod.log.Info($"[IntersectionTool] Created pocket lane replacement definition preview original={FormatEntity(candidate.Edge)} pocket={FormatEntity(pocketEdge)} outer={FormatEntity(outerEdge)} splitNode={FormatEntity(splitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} pocketFlags={definitionRequest.Flags} outerFlags={outerDefinitionRequest.Flags} pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={lengthError:0.##}m outerLengthError={outerLengthError:0.##}m.");
+            return true;
+        }
+
+        private bool TryFindPreviewPocketEdge(
+            SplitCandidate candidate,
+            Entity splitNode,
+            out Entity pocketEdge,
+            out float lengthError)
+        {
+            pocketEdge = Entity.Null;
+            lengthError = 0f;
+
+            float bestScore = float.MaxValue;
+            float bestLengthError = float.MaxValue;
+            Entity bestEdge = Entity.Null;
+            Entity bestRejectedEdge = Entity.Null;
+            float bestRejectedLengthError = float.MaxValue;
+            int tempEdgeCount = 0;
+            int connectedMatchCount = 0;
+            int prefabMatchCount = 0;
+
+            using (NativeArray<Entity> entities = m_TempPreviewEdgeQuery.ToEntityArray(Allocator.Temp))
+            using (NativeArray<Temp> temps = m_TempPreviewEdgeQuery.ToComponentDataArray<Temp>(Allocator.Temp))
+            {
+                for (int i = 0; i < entities.Length; i++)
+                {
+                    Entity edgeEntity = entities[i];
+                    Temp temp = temps[i];
+                    if ((temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0 ||
+                        !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
+                        !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
+                        !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
+                    {
+                        continue;
+                    }
+
+                    tempEdgeCount++;
+                    bool connectsSplitNode = edge.m_Start == splitNode || edge.m_End == splitNode;
+                    Entity otherNode = edge.m_Start == splitNode ? edge.m_End : edge.m_Start;
+                    bool connectsCandidateNode = connectsSplitNode && IsSameOrTempOriginalNode(otherNode, candidate.Node);
+                    if (!connectsCandidateNode)
+                    {
+                        continue;
+                    }
+
+                    connectedMatchCount++;
+                    if (prefabRef.m_Prefab != candidate.SourcePrefab &&
+                        prefabRef.m_Prefab != candidate.TargetPrefab)
+                    {
+                        continue;
+                    }
+
+                    prefabMatchCount++;
+                    float candidateLengthError = math.abs(curve.m_Length - candidate.SplitDistance);
+                    if (candidateLengthError > PocketEdgeLengthTolerance)
+                    {
+                        if (candidateLengthError < bestRejectedLengthError)
+                        {
+                            bestRejectedLengthError = candidateLengthError;
+                            bestRejectedEdge = edgeEntity;
+                        }
+
+                        continue;
+                    }
+
+                    float score = candidateLengthError;
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestLengthError = candidateLengthError;
+                        bestEdge = edgeEntity;
+                    }
+                }
+            }
+
+            if (bestEdge == Entity.Null)
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot find preview pocket edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedDistance={candidate.SplitDistance:0.##}m tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                return false;
+            }
+
+            pocketEdge = bestEdge;
+            lengthError = bestLengthError;
+            return true;
+        }
+
+        private bool TryFindPreviewOuterEdge(
+            SplitCandidate candidate,
+            Entity splitNode,
+            Entity pocketEdge,
+            out Entity outerEdge,
+            out float lengthError)
+        {
+            outerEdge = Entity.Null;
+            lengthError = 0f;
+
+            float expectedLength = -1f;
+            if (EntityManager.TryGetComponent(candidate.Edge, out Curve originalCurve))
+            {
+                expectedLength = math.max(0f, originalCurve.m_Length - candidate.SplitDistance);
+            }
+
+            float bestScore = float.MaxValue;
+            float bestLengthError = float.MaxValue;
+            Entity bestEdge = Entity.Null;
+            Entity bestRejectedEdge = Entity.Null;
+            float bestRejectedLengthError = float.MaxValue;
+            int tempEdgeCount = 0;
+            int connectedMatchCount = 0;
+            int prefabMatchCount = 0;
+
+            using (NativeArray<Entity> entities = m_TempPreviewEdgeQuery.ToEntityArray(Allocator.Temp))
+            using (NativeArray<Temp> temps = m_TempPreviewEdgeQuery.ToComponentDataArray<Temp>(Allocator.Temp))
+            {
+                for (int i = 0; i < entities.Length; i++)
+                {
+                    Entity edgeEntity = entities[i];
+                    if (edgeEntity == pocketEdge)
+                    {
+                        continue;
+                    }
+
+                    Temp temp = temps[i];
+                    if ((temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0 ||
+                        !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
+                        !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
+                        !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
+                    {
+                        continue;
+                    }
+
+                    tempEdgeCount++;
+                    if (edge.m_Start != splitNode && edge.m_End != splitNode)
+                    {
+                        continue;
+                    }
+
+                    Entity otherNode = edge.m_Start == splitNode ? edge.m_End : edge.m_Start;
+                    if (IsSameOrTempOriginalNode(otherNode, candidate.Node))
+                    {
+                        continue;
+                    }
+
+                    connectedMatchCount++;
+                    if (prefabRef.m_Prefab != candidate.SourcePrefab &&
+                        prefabRef.m_Prefab != candidate.TargetPrefab)
+                    {
+                        continue;
+                    }
+
+                    prefabMatchCount++;
+                    float candidateLengthError = expectedLength >= 0f
+                        ? math.abs(curve.m_Length - expectedLength)
+                        : 0f;
+                    if (expectedLength >= 0f && candidateLengthError > PocketEdgeLengthTolerance)
+                    {
+                        if (candidateLengthError < bestRejectedLengthError)
+                        {
+                            bestRejectedLengthError = candidateLengthError;
+                            bestRejectedEdge = edgeEntity;
+                        }
+
+                        continue;
+                    }
+
+                    float sourcePrefabPenalty = prefabRef.m_Prefab == candidate.SourcePrefab ? 0f : PocketEdgeLengthTolerance;
+                    float score = candidateLengthError + sourcePrefabPenalty;
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestLengthError = candidateLengthError;
+                        bestEdge = edgeEntity;
+                    }
+                }
+            }
+
+            if (bestEdge == Entity.Null)
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot find preview outer edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedLength={FormatMeters(expectedLength)} tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                return false;
+            }
+
+            outerEdge = bestEdge;
+            lengthError = bestLengthError;
+            return true;
+        }
+
+        private bool IsSameOrTempOriginalNode(Entity node, Entity originalNode)
+        {
+            if (node == originalNode)
+            {
+                return true;
+            }
+
+            return node != Entity.Null &&
+                   EntityManager.TryGetComponent(node, out Temp temp) &&
+                   temp.m_Original == originalNode &&
+                   (temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) == (TempFlags)0;
         }
 
         private void SetVanillaMutationSystemsEnabled(bool enabled)
@@ -1716,10 +2105,11 @@ namespace PocketTurnLanes.Systems.Tool
             for (int i = 0; i < m_AppliedCandidates.Count; i++)
             {
                 SplitCandidate candidate = m_AppliedCandidates[i];
-                if (!IsEdgeStillConnectedToNode(candidate.Node, candidate.Edge))
+                bool replacementQueued = TryQueuePocketLaneReplacement(candidate, ref result, out bool foundPocketEdge);
+                if (foundPocketEdge || !IsEdgeStillConnectedToNode(candidate.Node, candidate.Edge))
                 {
                     succeededCount++;
-                    if (TryQueuePocketLaneReplacement(candidate, ref result))
+                    if (replacementQueued)
                     {
                         replacementCount++;
                     }
@@ -1849,8 +2239,13 @@ namespace PocketTurnLanes.Systems.Tool
             return false;
         }
 
-        private bool TryQueuePocketLaneReplacement(SplitCandidate splitCandidate, ref JobHandle result)
+        private bool TryQueuePocketLaneReplacement(
+            SplitCandidate splitCandidate,
+            ref JobHandle result,
+            out bool foundPocketEdge)
         {
+            foundPocketEdge = false;
+
             if (splitCandidate.TargetPrefab == Entity.Null)
             {
                 Mod.log.Warn($"[IntersectionTool] Cannot queue pocket lane replacement original={FormatEntity(splitCandidate.Edge)}: no target prefab was selected.");
@@ -1862,8 +2257,18 @@ namespace PocketTurnLanes.Systems.Tool
                     out Entity pocketEdge,
                     out Entity splitNode,
                     out float splitNodeDistance,
-                    out float lengthError))
+                    out float lengthError,
+                    true))
             {
+                return false;
+            }
+
+            foundPocketEdge = true;
+
+            if (EntityManager.TryGetComponent(pocketEdge, out PrefabRef pocketPrefabRef) &&
+                pocketPrefabRef.m_Prefab == splitCandidate.TargetPrefab)
+            {
+                Mod.log.Info($"[IntersectionTool] Pocket lane replacement already present after split original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m.");
                 return false;
             }
 
@@ -1898,7 +2303,7 @@ namespace PocketTurnLanes.Systems.Tool
             result = createDefinitionJobHandle;
             m_QueuedReplacementCandidates.Add(replacementCandidate);
 
-            Mod.log.Info($"[IntersectionTool] Queued pocket lane replacement original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} sourcePrefab={GetPrefabNameFromPrefab(splitCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} lanes={splitCandidate.OriginalForwardLanes}/{splitCandidate.OriginalBackwardLanes}->{splitCandidate.TargetForwardLanes}/{splitCandidate.TargetBackwardLanes} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m.");
+            Mod.log.Info($"[IntersectionTool] Queued pocket lane replacement original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} sourcePrefab={GetPrefabNameFromPrefab(splitCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} lanes={splitCandidate.OriginalForwardLanes}/{splitCandidate.OriginalBackwardLanes}->{splitCandidate.TargetForwardLanes}/{splitCandidate.TargetBackwardLanes} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m reusedOriginal={(pocketEdge == splitCandidate.Edge ? "yes" : "no")}.");
             return true;
         }
 
@@ -1907,7 +2312,8 @@ namespace PocketTurnLanes.Systems.Tool
             out Entity pocketEdge,
             out Entity splitNode,
             out float splitNodeDistance,
-            out float lengthError)
+            out float lengthError,
+            bool allowOriginalEdgeAsPocket = false)
         {
             pocketEdge = Entity.Null;
             splitNode = Entity.Null;
@@ -1935,7 +2341,7 @@ namespace PocketTurnLanes.Systems.Tool
             for (int i = 0; i < connectedEdges.Length; i++)
             {
                 Entity edgeEntity = connectedEdges[i].m_Edge;
-                if (edgeEntity == candidate.Edge ||
+                if ((edgeEntity == candidate.Edge && !allowOriginalEdgeAsPocket) ||
                     !IsRoadEdge(edgeEntity) ||
                     !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
                     !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
@@ -1945,7 +2351,8 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 scannedCount++;
-                if (prefabRef.m_Prefab != candidate.SourcePrefab)
+                if (prefabRef.m_Prefab != candidate.SourcePrefab &&
+                    prefabRef.m_Prefab != candidate.TargetPrefab)
                 {
                     continue;
                 }
@@ -1989,7 +2396,7 @@ namespace PocketTurnLanes.Systems.Tool
                 bestNodeDistance > SplitNodePositionTolerance ||
                 bestLengthError > PocketEdgeLengthTolerance)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot find generated pocket edge original={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} node={FormatEntity(candidate.Node)} expectedSplit=({candidate.HitPosition.x:0.##},{candidate.HitPosition.y:0.##},{candidate.HitPosition.z:0.##}) expectedDistance={candidate.SplitDistance:0.##}m scanned={scannedCount} sourcePrefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedNodeDistance={FormatMeters(bestRejectedNodeDistance)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                Mod.log.Warn($"[IntersectionTool] Cannot find generated pocket edge original={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} node={FormatEntity(candidate.Node)} expectedSplit=({candidate.HitPosition.x:0.##},{candidate.HitPosition.y:0.##},{candidate.HitPosition.z:0.##}) expectedDistance={candidate.SplitDistance:0.##}m scanned={scannedCount} sourceOrTargetPrefabMatches={prefabMatchCount} allowOriginal={allowOriginalEdgeAsPocket} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedNodeDistance={FormatMeters(bestRejectedNodeDistance)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
                 return false;
             }
 
@@ -2049,6 +2456,56 @@ namespace PocketTurnLanes.Systems.Tool
                 StartNode = startNode,
                 EndNode = endNode,
                 Flags = flags,
+                FixedIndex = fixedIndex,
+                RandomSeed = randomSeed
+            };
+            return true;
+        }
+
+        private bool TryBuildPreviewSourceDefinitionRequest(
+            Entity sourceEdge,
+            Entity sourcePrefab,
+            out ReplacementDefinitionRequest request)
+        {
+            request = default;
+
+            if (!EntityManager.Exists(sourceEdge) ||
+                !EntityManager.TryGetComponent(sourceEdge, out Edge edge) ||
+                !EntityManager.TryGetComponent(sourceEdge, out Curve curve))
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing Edge or Curve.");
+                return false;
+            }
+
+            Entity prefab = sourcePrefab;
+            if (prefab == Entity.Null &&
+                EntityManager.TryGetComponent(sourceEdge, out PrefabRef prefabRef))
+            {
+                prefab = prefabRef.m_Prefab;
+            }
+
+            if (prefab == Entity.Null)
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing source prefab.");
+                return false;
+            }
+
+            int randomSeed = EntityManager.TryGetComponent(sourceEdge, out PseudoRandomSeed seed)
+                ? seed.m_Seed
+                : sourceEdge.Index;
+            int fixedIndex = EntityManager.TryGetComponent(sourceEdge, out Fixed fixedData)
+                ? fixedData.m_Index
+                : -1;
+
+            request = new ReplacementDefinitionRequest
+            {
+                OriginalEdge = sourceEdge,
+                Prefab = prefab,
+                Curve = curve.m_Bezier,
+                Length = curve.m_Length > 0.01f ? curve.m_Length : MathUtils.Length(curve.m_Bezier),
+                StartNode = edge.m_Start,
+                EndNode = edge.m_End,
+                Flags = CreationFlags.Recreate | CreationFlags.Align | CreationFlags.SubElevation,
                 FixedIndex = fixedIndex,
                 RandomSeed = randomSeed
             };
@@ -2174,6 +2631,11 @@ namespace PocketTurnLanes.Systems.Tool
             public CreationFlags Flags;
             public int FixedIndex;
             public int RandomSeed;
+            public bool PreviewOnly;
+        }
+
+        private struct ReplacementPreviewDefinition : IComponentData
+        {
         }
 
         private struct RoadLaneCounts
@@ -2295,6 +2757,11 @@ namespace PocketTurnLanes.Systems.Tool
                     m_Flags = Request.Flags,
                     m_RandomSeed = Request.RandomSeed
                 });
+                if (Request.PreviewOnly)
+                {
+                    ECB.AddComponent<ReplacementPreviewDefinition>(definitionEntity);
+                }
+
                 ECB.AddComponent<Updated>(definitionEntity);
                 ECB.AddComponent(definitionEntity, new NetCourse
                 {
@@ -2327,5 +2794,6 @@ namespace PocketTurnLanes.Systems.Tool
                 });
             }
         }
+
     }
 }
