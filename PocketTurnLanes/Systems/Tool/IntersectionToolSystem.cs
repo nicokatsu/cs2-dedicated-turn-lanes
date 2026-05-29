@@ -39,7 +39,7 @@ namespace PocketTurnLanes.Systems.Tool
         private const float SplitNodePositionTolerance = 2.5f;
         private const float PocketEdgeLengthTolerance = 4f;
 
-        public override string toolID => "PocketTurnLanes Intersection Tool";
+        public override string toolID => $"{Mod.ModId} Intersection Tool";
 
         private IntersectionOverlaySystem m_OverlaySystem;
         private ToolOutputBarrier m_ToolOutputBarrier;

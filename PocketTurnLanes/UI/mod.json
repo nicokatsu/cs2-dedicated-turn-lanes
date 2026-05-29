@@ -1,9 +1,9 @@
 {
-  "id": "PocketTurnLanes",
-  "displayName": "Pocket Turn Lanes",
+  "id": "DedicatedTurnLanes",
+  "displayName": "Dedicated Turn Lanes",
   "author": "glydd",
   "version": "1.0.0",
-  "description": "Intersection tooling for generated pocket turn lanes.",
+  "description": "Adds an intersection tool that previews eligible incoming roads and applies generated dedicated turn lane segments with compatible road prefabs.",
   "isCodeMod": true,
   "dependencies": []
 }

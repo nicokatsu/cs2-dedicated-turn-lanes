@@ -6,7 +6,7 @@ namespace PocketTurnLanes.Systems.UI
 {
     public partial class PocketTurnLaneUISystem : UISystemBase
     {
-        private const string BindingGroup = "PocketTurnLanes";
+        private const string BindingGroup = Mod.BindingGroup;
 
         private IntersectionToolSystem m_IntersectionToolSystem;
         private ValueBinding<bool> m_ToolEnabledBinding;

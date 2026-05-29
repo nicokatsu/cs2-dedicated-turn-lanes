@@ -10,12 +10,16 @@ namespace PocketTurnLanes
 {
     public class Mod : IMod
     {
-        public static ILog log = LogManager.GetLogger($"{nameof(PocketTurnLanes)}.{nameof(Mod)}")
+        public const string ModId = "DedicatedTurnLanes";
+        public const string DisplayName = "Dedicated Turn Lanes";
+        public const string BindingGroup = ModId;
+
+        public static ILog log = LogManager.GetLogger($"{ModId}.{nameof(Mod)}")
             .SetShowsErrorsInUI(false);
 
         public void OnLoad(UpdateSystem updateSystem)
         {
-            log.Info(nameof(OnLoad));
+            log.Info($"{DisplayName} {nameof(OnLoad)} bindingGroup={BindingGroup}");
 
             if (GameManager.instance.modManager.TryGetExecutableAsset(this, out var asset))
                 log.Info($"Current mod asset at {asset.path}");

@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <Configurations>Debug;Release</Configurations>
+        <AssemblyName>DedicatedTurnLanes</AssemblyName>
 
         <!--The file where mod information which is required for publishing mod on PDX mods are stored-->
         <PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
@@ -68,7 +69,7 @@
     </ItemGroup>
 
     <Target Name="BuildFrontend" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true'">
-        <Message Text="[PocketTurnLanes] Building UI module" Importance="high" />
+        <Message Text="[DedicatedTurnLanes] Building UI module" Importance="high" />
         <Exec Command="npm install --prefer-offline --no-audit" WorkingDirectory="UI" Condition="!Exists('UI\node_modules')" />
         <Exec Command="npm run build" WorkingDirectory="UI" />
     </Target>
