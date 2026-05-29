@@ -1,0 +1,15 @@
+.idea/
+.vs/
+AGENTS.md
+bin/
+obj/
+Library/
+**/bin/
+**/obj/
+**/Library/
+**/node_modules/
+**/dist/
+**/.devlogs/
+*.user
+*.suo
+*.sln.DotSettings.user

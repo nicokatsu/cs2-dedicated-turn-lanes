@@ -1,0 +1,9 @@
+{
+  "id": "PocketTurnLanes",
+  "displayName": "Pocket Turn Lanes",
+  "author": "glydd",
+  "version": "1.0.0",
+  "description": "Intersection tooling for generated pocket turn lanes.",
+  "isCodeMod": true,
+  "dependencies": []
+}
