@@ -40,6 +40,7 @@ namespace PocketTurnLanes.Systems.Tool
         private const float PrefabWidthTolerance = 0.05f;
         private const float SplitNodePositionTolerance = 2.5f;
         private const float PocketEdgeLengthTolerance = 4f;
+        private const float MergedEdgeLengthTolerance = 12f;
 
         public override string toolID => $"{Mod.ModId} Intersection Tool";
 
@@ -67,12 +68,15 @@ namespace PocketTurnLanes.Systems.Tool
         private bool m_PreviewValidationPending;
         private bool m_VerifyAppliedSplits;
         private bool m_VerifyAppliedReplacements;
+        private bool m_VerifyAppliedNodeMerges;
         private bool m_HasReplacementPreviewDefinitions;
         private int m_PreviewCreatedFrame = -1;
         private int m_PreviewEdgeCount;
         private readonly List<SplitCandidate> m_PreviewCandidates = new List<SplitCandidate>();
         private readonly List<SplitCandidate> m_NextPreviewCandidates = new List<SplitCandidate>();
         private readonly List<SplitCandidate> m_AppliedCandidates = new List<SplitCandidate>();
+        private readonly List<NodeMergeCandidate> m_PreviewNodeMergeCandidates = new List<NodeMergeCandidate>();
+        private readonly List<NodeMergeCandidate> m_AppliedNodeMergeCandidates = new List<NodeMergeCandidate>();
         private readonly List<ReplacementCandidate> m_QueuedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_AppliedReplacementCandidates = new List<ReplacementCandidate>();
 
@@ -141,6 +145,11 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 if (TryQueueFailedSplitRetries(ref result))
+                {
+                    return result;
+                }
+
+                if (TryQueueAppliedNodeMergeSplits(ref result))
                 {
                     return result;
                 }
@@ -305,6 +314,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 CaptureAppliedCandidates();
+                CaptureAppliedNodeMergeCandidates();
                 applyMode = ApplyMode.Apply;
                 m_ClearSplitDefinitions = true;
                 m_ApplyPreviewNextFrame = false;
@@ -502,8 +512,10 @@ namespace PocketTurnLanes.Systems.Tool
             applyMode = ApplyMode.Clear;
             inputDeps = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
             m_PreviewCandidates.Clear();
+            m_PreviewNodeMergeCandidates.Clear();
 
-            int queuedCount = 0;
+            int splitQueuedCount = 0;
+            int mergeQueuedCount = 0;
             int skippedCount = 0;
             JobHandle result = inputDeps;
             Entity lastQueuedEdge = Entity.Null;
@@ -558,7 +570,7 @@ namespace PocketTurnLanes.Systems.Tool
 
                     m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
 
-                    queuedCount++;
+                    splitQueuedCount++;
                     m_PreviewCandidates.Add(new SplitCandidate
                     {
                         Node = nodeEntity,
@@ -584,10 +596,39 @@ namespace PocketTurnLanes.Systems.Tool
                 }
                 else
                 {
-                    skippedCount++;
+                    if (!TryFindPocketLaneReplacementPrefab(
+                            nodeEntity,
+                            edgeEntity,
+                            out ReplacementPrefabMatch prefabMatch))
+                    {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    if (!TryBuildNodeMergeCandidate(
+                            nodeEntity,
+                            edgeEntity,
+                            prefabMatch,
+                            out NodeMergeCandidate mergeCandidate))
+                    {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    if (!QueueNodeMergeDefinition(mergeCandidate, ref result))
+                    {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    mergeQueuedCount++;
+                    m_PreviewNodeMergeCandidates.Add(mergeCandidate);
+                    lastQueuedEdge = edgeEntity;
+                    Mod.log.Info($"[IntersectionTool] Prepared road-node merge preview shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} continuation={FormatEntity(mergeCandidate.ContinuationEdge)} farNode={FormatEntity(mergeCandidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(mergeCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(mergeCandidate.TargetPrefab)} orientation={(mergeCandidate.InvertTarget ? "reversed" : "direct")} shortLength={mergeCandidate.ShortEdgeLength:0.##}m continuationLength={mergeCandidate.ContinuationEdgeLength:0.##}m mergedLength={mergeCandidate.MergedLength:0.##}m expectedSplit={mergeCandidate.ExpectedSplitDistance:0.##}m expectedPocket={mergeCandidate.ExpectedPocketDistance:0.##}m lanes={mergeCandidate.OriginalForwardLanes}/{mergeCandidate.OriginalBackwardLanes}->{mergeCandidate.TargetForwardLanes}/{mergeCandidate.TargetBackwardLanes} frame={UnityEngine.Time.frameCount}.");
                 }
             }
 
+            int queuedCount = splitQueuedCount + mergeQueuedCount;
             if (queuedCount > 0)
             {
                 m_PreviewIntersection = nodeEntity;
@@ -598,7 +639,7 @@ namespace PocketTurnLanes.Systems.Tool
                 m_PreviewDirty = false;
                 m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
                 ShowExpandableIntersectionOverlay(nodeEntity);
-                Mod.log.Info($"[IntersectionTool] Created {queuedCount} preview split definitions around node {FormatEntity(nodeEntity)}; skipped {skippedCount} edge(s). Validating visible split nodes before click apply.");
+                Mod.log.Info($"[IntersectionTool] Created preview definitions around node {FormatEntity(nodeEntity)} splitDefinitions={splitQueuedCount} roadNodeMergeDefinitions={mergeQueuedCount}; skipped {skippedCount} edge(s). Validating visible split nodes before click apply.");
             }
             else
             {
@@ -1520,6 +1561,308 @@ namespace PocketTurnLanes.Systems.Tool
             return true;
         }
 
+        private bool TryBuildNodeMergeCandidate(
+            Entity nodeEntity,
+            Entity edgeEntity,
+            ReplacementPrefabMatch prefabMatch,
+            out NodeMergeCandidate candidate)
+        {
+            candidate = default;
+
+            if (!EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
+                !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
+                !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef) ||
+                !EntityManager.TryGetComponent(prefabRef.m_Prefab, out NetGeometryData geometryData))
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot prepare road-node merge fallback edge={FormatEntity(edgeEntity)}: missing Edge, Curve, PrefabRef, or prefab NetGeometryData.");
+                return false;
+            }
+
+            bool nodeIsStartOnShortEdge = edge.m_Start == nodeEntity;
+            bool nodeIsEndOnShortEdge = edge.m_End == nodeEntity;
+            if (!nodeIsStartOnShortEdge && !nodeIsEndOnShortEdge)
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot prepare road-node merge fallback edge={FormatEntity(edgeEntity)}: node {FormatEntity(nodeEntity)} is not an endpoint.");
+                return false;
+            }
+
+            if (!TryGetMergeableRoadNode(
+                    nodeEntity,
+                    edgeEntity,
+                    edge,
+                    prefabRef.m_Prefab,
+                    out Entity removableNode,
+                    out Entity continuationEdge,
+                    out Edge continuationEdgeData,
+                    out Curve continuationCurve,
+                    out Entity farNode))
+            {
+                return false;
+            }
+
+            Entity neighbor1 = edge.m_Start == removableNode ? edge.m_End : edge.m_Start;
+            Entity neighbor2 = continuationEdgeData.m_Start == removableNode ? continuationEdgeData.m_End : continuationEdgeData.m_Start;
+            bool isForward = edge.m_End == removableNode;
+            Bezier4x3 mergedBezier = ComputeMergedBezier(removableNode, edge, curve, continuationEdgeData, continuationCurve);
+            Entity startNode = isForward ? neighbor1 : neighbor2;
+            Entity endNode = isForward ? neighbor2 : neighbor1;
+            if (!isForward)
+            {
+                mergedBezier = MathUtils.Invert(mergedBezier);
+            }
+
+            if (startNode != nodeEntity && endNode != nodeEntity)
+            {
+                Mod.log.Warn($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)}: merged edge would not connect hovered node {FormatEntity(nodeEntity)} start={FormatEntity(startNode)} end={FormatEntity(endNode)}.");
+                return false;
+            }
+
+            float mergedLength = MathUtils.Length(mergedBezier);
+            if (!TryCalculateMergedSplitGeometry(
+                    nodeEntity,
+                    edgeEntity,
+                    edge,
+                    curve,
+                    startNode == nodeEntity,
+                    mergedBezier,
+                    mergedLength,
+                    geometryData,
+                    out float splitPosition,
+                    out float splitDistance,
+                    out float intersectionDistance,
+                    out float pocketDistance,
+                    out float targetDistance,
+                    out float3 hitPosition))
+            {
+                return false;
+            }
+
+            int randomSeed = EntityManager.TryGetComponent(edgeEntity, out PseudoRandomSeed seed)
+                ? seed.m_Seed
+                : edgeEntity.Index;
+            bool hasUpgraded = EntityManager.TryGetComponent(edgeEntity, out Upgraded upgraded);
+
+            candidate = new NodeMergeCandidate
+            {
+                Node = nodeEntity,
+                ShortEdge = edgeEntity,
+                RemovableNode = removableNode,
+                ContinuationEdge = continuationEdge,
+                FarNode = farNode,
+                SourcePrefab = prefabRef.m_Prefab,
+                TargetPrefab = prefabMatch.Prefab,
+                InvertTarget = prefabMatch.Invert,
+                ShortEdgeLength = curve.m_Length,
+                ContinuationEdgeLength = continuationCurve.m_Length,
+                MergedLength = mergedLength,
+                ExpectedSplitPosition = splitPosition,
+                ExpectedSplitDistance = splitDistance,
+                ExpectedIntersectionDistance = intersectionDistance,
+                ExpectedPocketDistance = pocketDistance,
+                ExpectedTargetDistance = targetDistance,
+                ExpectedHitPosition = hitPosition,
+                OriginalForwardLanes = prefabMatch.OriginalCounts.Forward,
+                OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
+                TargetForwardLanes = prefabMatch.TargetCounts.Forward,
+                TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                MergeRequest = new NodeMergeDefinitionRequest
+                {
+                    Prefab = prefabRef.m_Prefab,
+                    RemovedNode = removableNode,
+                    StartNode = startNode,
+                    EndNode = endNode,
+                    MergedCurve = mergedBezier,
+                    MergedLength = mergedLength,
+                    RandomSeed = randomSeed,
+                    HasUpgraded = hasUpgraded,
+                    Upgraded = upgraded,
+                    FirstDeletion = new EdgeDeletionDefinitionRequest
+                    {
+                        Edge = edgeEntity,
+                        StartNode = edge.m_Start,
+                        EndNode = edge.m_End,
+                        Curve = curve.m_Bezier,
+                        Length = curve.m_Length > 0.01f ? curve.m_Length : MathUtils.Length(curve.m_Bezier)
+                    },
+                    SecondDeletion = new EdgeDeletionDefinitionRequest
+                    {
+                        Edge = continuationEdge,
+                        StartNode = continuationEdgeData.m_Start,
+                        EndNode = continuationEdgeData.m_End,
+                        Curve = continuationCurve.m_Bezier,
+                        Length = continuationCurve.m_Length > 0.01f ? continuationCurve.m_Length : MathUtils.Length(continuationCurve.m_Bezier)
+                    }
+                }
+            };
+
+            Mod.log.Info($"[IntersectionTool] Road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} shortLength={curve.m_Length:0.##}m continuationLength={continuationCurve.m_Length:0.##}m mergedLength={mergedLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m target={targetDistance:0.##}m. Safety: removable node has exactly two connected road edges and both prefabs match.");
+            return true;
+        }
+
+        private bool TryGetMergeableRoadNode(
+            Entity intersectionNode,
+            Entity edgeEntity,
+            Edge edge,
+            Entity sourcePrefab,
+            out Entity removableNode,
+            out Entity continuationEdge,
+            out Edge continuationEdgeData,
+            out Curve continuationCurve,
+            out Entity farNode)
+        {
+            removableNode = Entity.Null;
+            continuationEdge = Entity.Null;
+            continuationEdgeData = default;
+            continuationCurve = default;
+            farNode = Entity.Null;
+
+            removableNode = edge.m_Start == intersectionNode
+                ? edge.m_End
+                : edge.m_End == intersectionNode
+                    ? edge.m_Start
+                    : Entity.Null;
+            if (removableNode == Entity.Null ||
+                !EntityManager.Exists(removableNode) ||
+                !EntityManager.HasComponent<Node>(removableNode) ||
+                EntityManager.HasComponent<Roundabout>(removableNode))
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)}: far endpoint {FormatEntity(removableNode)} is not a removable road node.");
+                return false;
+            }
+
+            if (!EntityManager.TryGetBuffer(removableNode, true, out DynamicBuffer<ConnectedEdge> removableConnectedEdges))
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)}: missing ConnectedEdge buffer.");
+                return false;
+            }
+
+            if (removableConnectedEdges.Length != 2)
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)}: connectedEdges={removableConnectedEdges.Length}; Network Tools-style road-node removal only allows exactly two connected edges, so intersections are protected.");
+                return false;
+            }
+
+            for (int i = 0; i < removableConnectedEdges.Length; i++)
+            {
+                Entity candidateEdge = removableConnectedEdges[i].m_Edge;
+                if (candidateEdge != edgeEntity)
+                {
+                    continuationEdge = candidateEdge;
+                    break;
+                }
+            }
+
+            if (continuationEdge == Entity.Null ||
+                !IsRoadEdge(continuationEdge) ||
+                !EntityManager.TryGetComponent(continuationEdge, out continuationEdgeData) ||
+                !EntityManager.TryGetComponent(continuationEdge, out continuationCurve) ||
+                !EntityManager.TryGetComponent(continuationEdge, out PrefabRef continuationPrefabRef))
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: continuation is not a complete road edge.");
+                return false;
+            }
+
+            if (EntityManager.HasComponent<Owner>(edgeEntity) ||
+                EntityManager.HasComponent<Owner>(continuationEdge))
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)}: owned sub-net edges are not merged automatically.");
+                return false;
+            }
+
+            if (continuationPrefabRef.m_Prefab != sourcePrefab)
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: prefab mismatch source={GetPrefabNameFromPrefab(sourcePrefab)} continuation={GetPrefabNameFromPrefab(continuationPrefabRef.m_Prefab)}.");
+                return false;
+            }
+
+            farNode = continuationEdgeData.m_Start == removableNode
+                ? continuationEdgeData.m_End
+                : continuationEdgeData.m_End == removableNode
+                    ? continuationEdgeData.m_Start
+                    : Entity.Null;
+            if (farNode == Entity.Null ||
+                farNode == intersectionNode ||
+                !EntityManager.Exists(farNode) ||
+                !EntityManager.HasComponent<Node>(farNode))
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: invalid far node {FormatEntity(farNode)}.");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool TryCalculateMergedSplitGeometry(
+            Entity nodeEntity,
+            Entity sourceEdgeEntity,
+            Edge sourceEdge,
+            Curve sourceCurve,
+            bool nodeIsStartOnMergedEdge,
+            Bezier4x3 mergedBezier,
+            float mergedLength,
+            NetGeometryData geometryData,
+            out float splitPosition,
+            out float splitDistance,
+            out float intersectionDistance,
+            out float pocketDistance,
+            out float targetDistance,
+            out float3 hitPosition,
+            float targetPocketLength = PocketLaneLength)
+        {
+            splitPosition = 0f;
+            splitDistance = 0f;
+            intersectionDistance = 0f;
+            pocketDistance = 0f;
+            targetDistance = 0f;
+            hitPosition = default;
+
+            if (mergedLength <= 0.01f)
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged curve length is {mergedLength:0.###}m.");
+                return false;
+            }
+
+            GetMinMaxSplitPositions(
+                mergedLength,
+                geometryData.m_DefaultWidth,
+                geometryData.m_EdgeLengthRange.min,
+                out float minSplit,
+                out float maxSplit);
+
+            if (minSplit >= maxSplit)
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge is still too short to split safely (length={mergedLength:0.##}m).");
+                return false;
+            }
+
+            bool nodeIsStartOnSourceEdge = sourceEdge.m_Start == nodeEntity;
+            intersectionDistance = GetIntersectionExitDistance(
+                nodeEntity,
+                sourceEdgeEntity,
+                sourceEdge,
+                sourceCurve,
+                nodeIsStartOnSourceEdge);
+            float maxDistanceFromNode = mergedLength * 0.5f;
+            if (maxDistanceFromNode - intersectionDistance < MinimumPocketLaneLength)
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge still has no room for an aligned pocket lane (mergedLength={mergedLength:0.##}m intersection={intersectionDistance:0.##}m).");
+                return false;
+            }
+
+            float desiredDistance = GetGridAlignedSplitDistance(
+                intersectionDistance,
+                targetPocketLength,
+                MinimumPocketLaneLength,
+                maxDistanceFromNode);
+            targetDistance = desiredDistance;
+            float desiredPosition = GetCurvePositionAtDistance(mergedBezier, nodeIsStartOnMergedEdge, desiredDistance);
+            splitPosition = math.clamp(desiredPosition, minSplit, maxSplit);
+            splitDistance = GetCurveDistanceFromNode(mergedBezier, nodeIsStartOnMergedEdge, splitPosition);
+            pocketDistance = math.max(0f, splitDistance - intersectionDistance);
+            hitPosition = MathUtils.Position(mergedBezier, splitPosition);
+            return true;
+        }
+
         private float GetIntersectionExitDistance(
             Entity nodeEntity,
             Entity edgeEntity,
@@ -1673,23 +2016,68 @@ namespace PocketTurnLanes.Systems.Tool
 
         private static float GetCurvePositionAtDistance(Curve curve, bool fromStart, float distance)
         {
+            return GetCurvePositionAtDistance(curve.m_Bezier, fromStart, distance);
+        }
+
+        private static float GetCurvePositionAtDistance(Bezier4x3 bezier, bool fromStart, float distance)
+        {
             if (distance <= 0f)
             {
                 return fromStart ? 0f : 1f;
             }
 
-            Bezier4x3 bezier = fromStart ? curve.m_Bezier : MathUtils.Invert(curve.m_Bezier);
+            Bezier4x3 orientedBezier = fromStart ? bezier : MathUtils.Invert(bezier);
             Bounds1 range = new Bounds1(0f, 1f);
             float remainingDistance = distance;
-            float position = MathUtils.ClampLength(bezier, ref range, ref remainingDistance) ? range.max : 1f;
+            float position = MathUtils.ClampLength(orientedBezier, ref range, ref remainingDistance) ? range.max : 1f;
             return fromStart ? position : 1f - position;
         }
 
         private static float GetCurveDistanceFromNode(Curve curve, bool fromStart, float position)
         {
+            return GetCurveDistanceFromNode(curve.m_Bezier, fromStart, position);
+        }
+
+        private static float GetCurveDistanceFromNode(Bezier4x3 bezier, bool fromStart, float position)
+        {
             position = math.saturate(position);
             Bounds1 range = fromStart ? new Bounds1(0f, position) : new Bounds1(position, 1f);
-            return MathUtils.Length(curve.m_Bezier, range);
+            return MathUtils.Length(bezier, range);
+        }
+
+        private static Bezier4x3 ComputeMergedBezier(Entity nodeEntity, Edge edge1, Curve curve1, Edge edge2, Curve curve2)
+        {
+            Bezier4x3 bezier1 = edge1.m_Start == nodeEntity ? MathUtils.Invert(curve1.m_Bezier) : curve1.m_Bezier;
+            Bezier4x3 bezier2 = edge2.m_End == nodeEntity ? MathUtils.Invert(curve2.m_Bezier) : curve2.m_Bezier;
+
+            float3 startTangent = bezier1.b - bezier1.a;
+            float3 endTangent = bezier2.c - bezier2.d;
+            if (math.lengthsq(startTangent) <= 0.0001f)
+            {
+                startTangent = bezier1.d - bezier1.a;
+            }
+
+            if (math.lengthsq(endTangent) <= 0.0001f)
+            {
+                endTangent = bezier2.a - bezier2.d;
+            }
+
+            startTangent = math.normalizesafe(startTangent, new float3(0f, 0f, 1f));
+            endTangent = math.normalizesafe(endTangent, new float3(0f, 0f, -1f));
+
+            float lengthA = math.distance(bezier1.a, bezier1.b);
+            float lengthB = math.distance(bezier2.c, bezier2.d);
+            float totalDistance = math.distance(bezier1.a, bezier2.d);
+            float q1Length = lengthA + totalDistance * 0.1f;
+            float q2Length = lengthB + totalDistance * 0.1f;
+
+            float3 q0 = bezier1.a;
+            float3 q3 = bezier2.d;
+            return new Bezier4x3(
+                q0,
+                q0 + startTangent * q1Length,
+                q3 + endTangent * q2Length,
+                q3);
         }
 
         private static bool TryGetOutwardDirection(Edge edge, Curve curve, Entity nodeEntity, bool nodeIsStart, out float2 direction)
@@ -1821,6 +2209,9 @@ namespace PocketTurnLanes.Systems.Tool
                    m_ApplyPreviewNextFrame ||
                    m_RebuildSplitPreviewForApply ||
                    m_HasReplacementPreviewDefinitions ||
+                   m_PreviewNodeMergeCandidates.Count > 0 ||
+                   m_AppliedNodeMergeCandidates.Count > 0 ||
+                   m_VerifyAppliedNodeMerges ||
                    m_PreviewIntersection != Entity.Null ||
                    m_PreviewEdge != Entity.Null ||
                    m_PreviewEdgeCount > 0;
@@ -1843,7 +2234,10 @@ namespace PocketTurnLanes.Systems.Tool
             m_PreviewCandidates.Clear();
             m_NextPreviewCandidates.Clear();
             m_AppliedCandidates.Clear();
+            m_PreviewNodeMergeCandidates.Clear();
+            m_AppliedNodeMergeCandidates.Clear();
             m_VerifyAppliedSplits = false;
+            m_VerifyAppliedNodeMerges = false;
             m_QueuedReplacementCandidates.Clear();
             m_AppliedReplacementCandidates.Clear();
             m_VerifyAppliedReplacements = false;
@@ -1868,7 +2262,10 @@ namespace PocketTurnLanes.Systems.Tool
             if (m_PreviewCandidates.Count == 0)
             {
                 m_PreviewValidationPending = false;
-                m_PreviewReady = false;
+                m_PreviewReady = m_PreviewNodeMergeCandidates.Count > 0;
+                m_PreviewDirty = false;
+                int visibleMergePreviews = CountVisibleNodeMergePreviews();
+                Mod.log.Info($"[IntersectionTool] Preview validation complete node={FormatEntity(m_PreviewIntersection)} visibleSplits=0 roadNodeMergeDefinitions={m_PreviewNodeMergeCandidates.Count} visibleMergePreviews={visibleMergePreviews}; ready={m_PreviewReady}.");
                 return inputDeps;
             }
 
@@ -1951,6 +2348,11 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (m_NextPreviewCandidates.Count == 0)
             {
+                if (m_PreviewNodeMergeCandidates.Count > 0)
+                {
+                    return RequeueSplitPreview(m_NextPreviewCandidates, inputDeps, visibleCount, 0, exhaustedCount);
+                }
+
                 applyMode = ApplyMode.Clear;
                 JobHandle clearResult = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
                 MarkNoSplitPreviewReady(m_PreviewIntersection);
@@ -1986,7 +2388,8 @@ namespace PocketTurnLanes.Systems.Tool
             m_PreviewValidationPending = false;
             m_PreviewReady = true;
             m_PreviewDirty = false;
-            Mod.log.Info($"[IntersectionTool] Split preview validation complete node={FormatEntity(m_PreviewIntersection)} visible={visibleCount}, retried=0, exhausted={exhaustedCount}, replacementPreviewed={replacementPreviewCount}. Ready for click apply.");
+            int visibleMergeCount = CountVisibleNodeMergePreviews();
+            Mod.log.Info($"[IntersectionTool] Split preview validation complete node={FormatEntity(m_PreviewIntersection)} visible={visibleCount}, retried=0, exhausted={exhaustedCount}, replacementPreviewed={replacementPreviewCount}, roadNodeMergeDefinitions={m_PreviewNodeMergeCandidates.Count}, visibleMergePreviews={visibleMergeCount}. Ready for click apply.");
             return result;
         }
 
@@ -1997,6 +2400,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             m_PreviewCandidates.Clear();
             int queuedCount = 0;
+            int mergeQueuedCount = 0;
             Entity previewNode = Entity.Null;
             Entity lastQueuedEdge = Entity.Null;
 
@@ -2053,7 +2457,21 @@ namespace PocketTurnLanes.Systems.Tool
                 result = createDefinitionJobHandle;
             }
 
-            if (queuedCount == 0)
+            for (int i = 0; i < m_PreviewNodeMergeCandidates.Count; i++)
+            {
+                NodeMergeCandidate mergeCandidate = m_PreviewNodeMergeCandidates[i];
+                if (!QueueNodeMergeDefinition(mergeCandidate, ref result))
+                {
+                    continue;
+                }
+
+                mergeQueuedCount++;
+                previewNode = mergeCandidate.Node;
+                lastQueuedEdge = mergeCandidate.ShortEdge;
+            }
+
+            int totalQueuedCount = queuedCount + mergeQueuedCount;
+            if (totalQueuedCount == 0)
             {
                 applyMode = ApplyMode.None;
                 m_OverlaySystem.Clear();
@@ -2064,13 +2482,13 @@ namespace PocketTurnLanes.Systems.Tool
 
             m_PreviewIntersection = previewNode;
             m_PreviewEdge = lastQueuedEdge;
-            m_PreviewEdgeCount = queuedCount;
+            m_PreviewEdgeCount = totalQueuedCount;
             m_PreviewReady = false;
             m_PreviewValidationPending = true;
             m_PreviewDirty = false;
             m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
             ShowExpandableIntersectionOverlay(previewNode);
-            Mod.log.Info($"[IntersectionTool] Rebuilt preview split definitions for retry pass node={FormatEntity(previewNode)} definitions={queuedCount}, visible={visibleCount}, retrying={retryCount}, exhausted={exhaustedCount}.");
+            Mod.log.Info($"[IntersectionTool] Rebuilt preview definitions for retry pass node={FormatEntity(previewNode)} splitDefinitions={queuedCount}, roadNodeMergeDefinitions={mergeQueuedCount}, visible={visibleCount}, retrying={retryCount}, exhausted={exhaustedCount}.");
             return result;
         }
 
@@ -2078,6 +2496,7 @@ namespace PocketTurnLanes.Systems.Tool
         {
             JobHandle result = inputDeps;
             int queuedCount = 0;
+            int mergeQueuedCount = 0;
             Entity previewNode = Entity.Null;
             Entity lastQueuedEdge = Entity.Null;
 
@@ -2118,11 +2537,47 @@ namespace PocketTurnLanes.Systems.Tool
                 lastQueuedEdge = candidate.Edge;
             }
 
+            for (int i = 0; i < m_PreviewNodeMergeCandidates.Count; i++)
+            {
+                NodeMergeCandidate mergeCandidate = m_PreviewNodeMergeCandidates[i];
+                if (!QueueNodeMergeDefinition(mergeCandidate, ref result))
+                {
+                    continue;
+                }
+
+                mergeQueuedCount++;
+                previewNode = mergeCandidate.Node;
+                lastQueuedEdge = mergeCandidate.ShortEdge;
+            }
+
             m_PreviewIntersection = previewNode;
             m_PreviewEdge = lastQueuedEdge;
-            m_PreviewEdgeCount = queuedCount;
-            Mod.log.Info($"[IntersectionTool] Rebuilt clean split definitions for apply node={FormatEntity(previewNode)} definitions={queuedCount}; replacement preview definitions were discarded before apply.");
+            m_PreviewEdgeCount = queuedCount + mergeQueuedCount;
+            Mod.log.Info($"[IntersectionTool] Rebuilt clean definitions for apply node={FormatEntity(previewNode)} splitDefinitions={queuedCount} roadNodeMergeDefinitions={mergeQueuedCount}; replacement preview definitions were discarded before apply.");
             return result;
+        }
+
+        private bool QueueNodeMergeDefinition(NodeMergeCandidate candidate, ref JobHandle result)
+        {
+            if (candidate.MergeRequest.Prefab == Entity.Null ||
+                candidate.MergeRequest.FirstDeletion.Edge == Entity.Null ||
+                candidate.MergeRequest.SecondDeletion.Edge == Entity.Null ||
+                candidate.MergeRequest.StartNode == Entity.Null ||
+                candidate.MergeRequest.EndNode == Entity.Null)
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot queue road-node merge definition shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)}: incomplete merge request.");
+                return false;
+            }
+
+            JobHandle createDefinitionJobHandle = new CreateNodeMergeDefinitionJob
+            {
+                Request = candidate.MergeRequest,
+                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+            }.Schedule(result);
+
+            m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+            result = createDefinitionJobHandle;
+            return true;
         }
 
         private void MarkNoSplitPreviewReady(Entity nodeEntity)
@@ -2138,6 +2593,7 @@ namespace PocketTurnLanes.Systems.Tool
             m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
             m_PreviewCandidates.Clear();
             m_NextPreviewCandidates.Clear();
+            m_PreviewNodeMergeCandidates.Clear();
             m_QueuedReplacementCandidates.Clear();
         }
 
@@ -2167,6 +2623,103 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             return false;
+        }
+
+        private int CountVisibleNodeMergePreviews()
+        {
+            int visibleCount = 0;
+            for (int i = 0; i < m_PreviewNodeMergeCandidates.Count; i++)
+            {
+                if (TryFindPreviewMergedEdge(m_PreviewNodeMergeCandidates[i], out _, out _, false))
+                {
+                    visibleCount++;
+                }
+            }
+
+            return visibleCount;
+        }
+
+        private bool TryFindPreviewMergedEdge(
+            NodeMergeCandidate candidate,
+            out Entity mergedEdge,
+            out float lengthError,
+            bool logFailure)
+        {
+            mergedEdge = Entity.Null;
+            lengthError = 0f;
+
+            float bestLengthError = float.MaxValue;
+            Entity bestEdge = Entity.Null;
+            Entity bestRejectedEdge = Entity.Null;
+            float bestRejectedLengthError = float.MaxValue;
+            int tempEdgeCount = 0;
+            int endpointMatchCount = 0;
+            int prefabMatchCount = 0;
+
+            using (NativeArray<Entity> entities = m_TempPreviewEdgeQuery.ToEntityArray(Allocator.Temp))
+            using (NativeArray<Temp> temps = m_TempPreviewEdgeQuery.ToComponentDataArray<Temp>(Allocator.Temp))
+            {
+                for (int i = 0; i < entities.Length; i++)
+                {
+                    Entity edgeEntity = entities[i];
+                    Temp temp = temps[i];
+                    if ((temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0 ||
+                        !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
+                        !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
+                        !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
+                    {
+                        continue;
+                    }
+
+                    tempEdgeCount++;
+                    bool connectsExpectedNodes =
+                        (IsSameOrTempOriginalNode(edge.m_Start, candidate.Node) && IsSameOrTempOriginalNode(edge.m_End, candidate.FarNode)) ||
+                        (IsSameOrTempOriginalNode(edge.m_Start, candidate.FarNode) && IsSameOrTempOriginalNode(edge.m_End, candidate.Node));
+                    if (!connectsExpectedNodes)
+                    {
+                        continue;
+                    }
+
+                    endpointMatchCount++;
+                    if (prefabRef.m_Prefab != candidate.SourcePrefab)
+                    {
+                        continue;
+                    }
+
+                    prefabMatchCount++;
+                    float candidateLengthError = math.abs(curve.m_Length - candidate.MergedLength);
+                    if (candidateLengthError > MergedEdgeLengthTolerance)
+                    {
+                        if (candidateLengthError < bestRejectedLengthError)
+                        {
+                            bestRejectedLengthError = candidateLengthError;
+                            bestRejectedEdge = edgeEntity;
+                        }
+
+                        continue;
+                    }
+
+                    if (candidateLengthError < bestLengthError)
+                    {
+                        bestLengthError = candidateLengthError;
+                        bestEdge = edgeEntity;
+                    }
+                }
+            }
+
+            if (bestEdge == Entity.Null)
+            {
+                if (logFailure)
+                {
+                    Mod.log.Warn($"[IntersectionTool] Cannot find road-node merge preview edge shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} expectedNode={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} expectedLength={candidate.MergedLength:0.##}m tempEdges={tempEdgeCount} endpointMatches={endpointMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                }
+
+                return false;
+            }
+
+            mergedEdge = bestEdge;
+            lengthError = bestLengthError;
+            return true;
         }
 
         private bool TryApplyReplacementPreview(SplitCandidate candidate, ref JobHandle result)
@@ -2481,6 +3034,13 @@ namespace PocketTurnLanes.Systems.Tool
             m_VerifyAppliedReplacements = m_AppliedReplacementCandidates.Count > 0;
         }
 
+        private void CaptureAppliedNodeMergeCandidates()
+        {
+            m_AppliedNodeMergeCandidates.Clear();
+            m_AppliedNodeMergeCandidates.AddRange(m_PreviewNodeMergeCandidates);
+            m_VerifyAppliedNodeMerges = m_AppliedNodeMergeCandidates.Count > 0;
+        }
+
         private void VerifyAppliedReplacements()
         {
             m_VerifyAppliedReplacements = false;
@@ -2666,6 +3226,233 @@ namespace PocketTurnLanes.Systems.Tool
             m_ApplyRetryNextFrame = true;
             m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
             Mod.log.Info($"[IntersectionTool] Split verification queued {retryCount} retry split definition(s); succeeded={succeededCount}, exhausted={exhaustedCount}, replacementQueued={replacementCount}. They will be applied on the next tool frame.");
+            return true;
+        }
+
+        private bool TryQueueAppliedNodeMergeSplits(ref JobHandle result)
+        {
+            if (!m_VerifyAppliedNodeMerges)
+            {
+                return false;
+            }
+
+            m_VerifyAppliedNodeMerges = false;
+            m_PreviewCandidates.Clear();
+            m_PreviewNodeMergeCandidates.Clear();
+
+            int verifiedMergeCount = 0;
+            int queuedSplitCount = 0;
+            int missingMergedEdgeCount = 0;
+            int noRoomCount = 0;
+            int deletedNodeCount = 0;
+            Entity previewNode = Entity.Null;
+            Entity lastQueuedEdge = Entity.Null;
+
+            for (int i = 0; i < m_AppliedNodeMergeCandidates.Count; i++)
+            {
+                NodeMergeCandidate mergeCandidate = m_AppliedNodeMergeCandidates[i];
+                if (TryMarkMergedRoadNodeDeleted(mergeCandidate, out int remainingConnectedEdges))
+                {
+                    deletedNodeCount++;
+                }
+                else if (remainingConnectedEdges > 0)
+                {
+                    Mod.log.Info($"[IntersectionTool] Road-node merge postprocess kept node={FormatEntity(mergeCandidate.RemovableNode)} for now: connectedEdges={remainingConnectedEdges}.");
+                }
+
+                if (!TryFindAppliedMergedEdge(
+                        mergeCandidate,
+                        out Entity mergedEdge,
+                        out float mergedLengthError,
+                        out float mergedLength))
+                {
+                    missingMergedEdgeCount++;
+                    continue;
+                }
+
+                verifiedMergeCount++;
+                if (!TryBuildSplitDefinitionRequest(
+                        mergeCandidate.Node,
+                        mergedEdge,
+                        out SplitDefinitionRequest request,
+                        out float splitPosition,
+                        out float splitDistance,
+                        out float intersectionDistance,
+                        out float pocketDistance,
+                        out float targetDistance))
+                {
+                    noRoomCount++;
+                    Mod.log.Warn($"[IntersectionTool] Road-node merge verified but split cannot be prepared mergedEdge={FormatEntity(mergedEdge)} shortEdge={FormatEntity(mergeCandidate.ShortEdge)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} mergedLength={mergedLength:0.##}m expectedLength={mergeCandidate.MergedLength:0.##}m lengthError={mergedLengthError:0.##}m.");
+                    continue;
+                }
+
+                JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
+                {
+                    Request = request,
+                    ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+                }.Schedule(result);
+
+                m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+                result = createDefinitionJobHandle;
+
+                m_PreviewCandidates.Add(new SplitCandidate
+                {
+                    Node = mergeCandidate.Node,
+                    Edge = mergedEdge,
+                    SourcePrefab = mergeCandidate.SourcePrefab,
+                    TargetPrefab = mergeCandidate.TargetPrefab,
+                    InvertTarget = mergeCandidate.InvertTarget,
+                    CurvePosition = splitPosition,
+                    HitPosition = request.HitPosition,
+                    TargetDistance = targetDistance,
+                    SplitDistance = splitDistance,
+                    IntersectionDistance = intersectionDistance,
+                    PocketDistance = pocketDistance,
+                    OriginalForwardLanes = mergeCandidate.OriginalForwardLanes,
+                    OriginalBackwardLanes = mergeCandidate.OriginalBackwardLanes,
+                    TargetForwardLanes = mergeCandidate.TargetForwardLanes,
+                    TargetBackwardLanes = mergeCandidate.TargetBackwardLanes,
+                    Attempt = 0
+                });
+
+                queuedSplitCount++;
+                previewNode = mergeCandidate.Node;
+                lastQueuedEdge = mergedEdge;
+                Mod.log.Info($"[IntersectionTool] Road-node merge verified; queued split on merged edge shortEdge={FormatEntity(mergeCandidate.ShortEdge)} continuation={FormatEntity(mergeCandidate.ContinuationEdge)} mergedEdge={FormatEntity(mergedEdge)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} node={FormatEntity(mergeCandidate.Node)} farNode={FormatEntity(mergeCandidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(mergeCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(mergeCandidate.TargetPrefab)} orientation={(mergeCandidate.InvertTarget ? "reversed" : "direct")} mergedLength={mergedLength:0.##}m expectedLength={mergeCandidate.MergedLength:0.##}m lengthError={mergedLengthError:0.##}m split={splitPosition:0.###} distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m target={targetDistance:0.##}m.");
+            }
+
+            m_AppliedNodeMergeCandidates.Clear();
+            if (queuedSplitCount == 0)
+            {
+                Mod.log.Info($"[IntersectionTool] Road-node merge verification complete: verified={verifiedMergeCount}, queuedSplits=0, missingMergedEdge={missingMergedEdgeCount}, noRoom={noRoomCount}, deletedNodes={deletedNodeCount}.");
+                return false;
+            }
+
+            m_PreviewIntersection = previewNode;
+            m_PreviewEdge = lastQueuedEdge;
+            m_PreviewEdgeCount = queuedSplitCount;
+            m_PreviewReady = true;
+            m_PreviewDirty = false;
+            m_ApplyPreviewNextFrame = false;
+            m_ApplyRetryNextFrame = true;
+            m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
+            Mod.log.Info($"[IntersectionTool] Road-node merge verification queued {queuedSplitCount} split definition(s); verified={verifiedMergeCount}, missingMergedEdge={missingMergedEdgeCount}, noRoom={noRoomCount}, deletedNodes={deletedNodeCount}. They will be applied on the next tool frame.");
+            return true;
+        }
+
+        private bool TryMarkMergedRoadNodeDeleted(NodeMergeCandidate candidate, out int remainingConnectedEdges)
+        {
+            remainingConnectedEdges = -1;
+            if (candidate.RemovableNode == Entity.Null ||
+                !EntityManager.Exists(candidate.RemovableNode) ||
+                EntityManager.HasComponent<Deleted>(candidate.RemovableNode))
+            {
+                return false;
+            }
+
+            if (!EntityManager.TryGetBuffer(candidate.RemovableNode, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
+            {
+                Mod.log.Warn($"[IntersectionTool] Road-node merge postprocess cannot inspect removable node={FormatEntity(candidate.RemovableNode)}: missing ConnectedEdge buffer.");
+                return false;
+            }
+
+            remainingConnectedEdges = connectedEdges.Length;
+            if (connectedEdges.Length != 0)
+            {
+                return false;
+            }
+
+            EntityManager.AddComponent<Deleted>(candidate.RemovableNode);
+            Mod.log.Info($"[IntersectionTool] Road-node merge postprocess marked removable node={FormatEntity(candidate.RemovableNode)} Deleted after both original edges detached.");
+            return true;
+        }
+
+        private bool TryFindAppliedMergedEdge(
+            NodeMergeCandidate candidate,
+            out Entity mergedEdge,
+            out float lengthError,
+            out float mergedLength)
+        {
+            mergedEdge = Entity.Null;
+            lengthError = 0f;
+            mergedLength = 0f;
+
+            if (!EntityManager.TryGetBuffer(candidate.Node, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} node={FormatEntity(candidate.Node)}: node has no ConnectedEdge buffer.");
+                return false;
+            }
+
+            float bestValidError = float.MaxValue;
+            float bestRejectedError = float.MaxValue;
+            Entity bestEdge = Entity.Null;
+            Entity bestRejectedEdge = Entity.Null;
+            float bestLength = 0f;
+            int scannedCount = 0;
+            int endpointMatchCount = 0;
+            int prefabMatchCount = 0;
+
+            for (int i = 0; i < connectedEdges.Length; i++)
+            {
+                Entity edgeEntity = connectedEdges[i].m_Edge;
+                if (edgeEntity == Entity.Null ||
+                    !EntityManager.Exists(edgeEntity) ||
+                    EntityManager.HasComponent<Deleted>(edgeEntity) ||
+                    !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
+                    !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
+                    !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
+                {
+                    continue;
+                }
+
+                scannedCount++;
+                Entity otherNode = edge.m_Start == candidate.Node
+                    ? edge.m_End
+                    : edge.m_End == candidate.Node
+                        ? edge.m_Start
+                        : Entity.Null;
+                if (otherNode != candidate.FarNode)
+                {
+                    continue;
+                }
+
+                endpointMatchCount++;
+                if (prefabRef.m_Prefab != candidate.SourcePrefab)
+                {
+                    continue;
+                }
+
+                prefabMatchCount++;
+                float candidateLength = curve.m_Length > 0.01f ? curve.m_Length : MathUtils.Length(curve.m_Bezier);
+                float candidateLengthError = math.abs(candidateLength - candidate.MergedLength);
+                if (candidateLengthError > MergedEdgeLengthTolerance)
+                {
+                    if (candidateLengthError < bestRejectedError)
+                    {
+                        bestRejectedError = candidateLengthError;
+                        bestRejectedEdge = edgeEntity;
+                    }
+
+                    continue;
+                }
+
+                if (candidateLengthError < bestValidError)
+                {
+                    bestValidError = candidateLengthError;
+                    bestLength = candidateLength;
+                    bestEdge = edgeEntity;
+                }
+            }
+
+            if (bestEdge == Entity.Null)
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} expectedLength={candidate.MergedLength:0.##}m scanned={scannedCount} endpointMatches={endpointMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedError)}.");
+                return false;
+            }
+
+            mergedEdge = bestEdge;
+            lengthError = bestValidError;
+            mergedLength = bestLength;
             return true;
         }
 
@@ -3180,6 +3967,30 @@ namespace PocketTurnLanes.Systems.Tool
             public int RandomSeed;
         }
 
+        private struct EdgeDeletionDefinitionRequest
+        {
+            public Entity Edge;
+            public Entity StartNode;
+            public Entity EndNode;
+            public Bezier4x3 Curve;
+            public float Length;
+        }
+
+        private struct NodeMergeDefinitionRequest
+        {
+            public Entity Prefab;
+            public Entity RemovedNode;
+            public Entity StartNode;
+            public Entity EndNode;
+            public Bezier4x3 MergedCurve;
+            public float MergedLength;
+            public int RandomSeed;
+            public bool HasUpgraded;
+            public Upgraded Upgraded;
+            public EdgeDeletionDefinitionRequest FirstDeletion;
+            public EdgeDeletionDefinitionRequest SecondDeletion;
+        }
+
         private struct SplitCandidate
         {
             public Entity Node;
@@ -3198,6 +4009,32 @@ namespace PocketTurnLanes.Systems.Tool
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
             public int Attempt;
+        }
+
+        private struct NodeMergeCandidate
+        {
+            public Entity Node;
+            public Entity ShortEdge;
+            public Entity RemovableNode;
+            public Entity ContinuationEdge;
+            public Entity FarNode;
+            public Entity SourcePrefab;
+            public Entity TargetPrefab;
+            public bool InvertTarget;
+            public float ShortEdgeLength;
+            public float ContinuationEdgeLength;
+            public float MergedLength;
+            public float ExpectedSplitPosition;
+            public float ExpectedSplitDistance;
+            public float ExpectedIntersectionDistance;
+            public float ExpectedPocketDistance;
+            public float ExpectedTargetDistance;
+            public float3 ExpectedHitPosition;
+            public int OriginalForwardLanes;
+            public int OriginalBackwardLanes;
+            public int TargetForwardLanes;
+            public int TargetBackwardLanes;
+            public NodeMergeDefinitionRequest MergeRequest;
         }
 
         private struct ReplacementDefinitionRequest
@@ -3258,6 +4095,120 @@ namespace PocketTurnLanes.Systems.Tool
             public int OriginalBackwardLanes;
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
+        }
+
+        private struct CreateNodeMergeDefinitionJob : IJob
+        {
+            [ReadOnly]
+            public NodeMergeDefinitionRequest Request;
+
+            public EntityCommandBuffer ECB;
+
+            public void Execute()
+            {
+                if (Request.Prefab == Entity.Null ||
+                    Request.StartNode == Entity.Null ||
+                    Request.EndNode == Entity.Null ||
+                    Request.FirstDeletion.Edge == Entity.Null ||
+                    Request.SecondDeletion.Edge == Entity.Null)
+                {
+                    return;
+                }
+
+                Entity definitionEntity = ECB.CreateEntity();
+                ECB.AddComponent(definitionEntity, new CreationDefinition
+                {
+                    m_Original = Entity.Null,
+                    m_Prefab = Request.Prefab,
+                    m_Flags = CreationFlags.Construction | CreationFlags.Upgrade,
+                    m_RandomSeed = Request.RandomSeed
+                });
+                if (Request.HasUpgraded)
+                {
+                    ECB.AddComponent(definitionEntity, Request.Upgraded);
+                }
+
+                ECB.AddComponent<Updated>(definitionEntity);
+                ECB.AddComponent(definitionEntity, new NetCourse
+                {
+                    m_Curve = Request.MergedCurve,
+                    m_Length = Request.MergedLength,
+                    m_FixedIndex = -1,
+                    m_Elevation = default,
+                    m_StartPosition = new CoursePos
+                    {
+                        m_Entity = Request.StartNode,
+                        m_Position = Request.MergedCurve.a,
+                        m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(Request.MergedCurve)),
+                        m_CourseDelta = 0f,
+                        m_Elevation = default,
+                        m_Flags = CoursePosFlags.IsFirst,
+                        m_ParentMesh = -1,
+                        m_SplitPosition = 0f
+                    },
+                    m_EndPosition = new CoursePos
+                    {
+                        m_Entity = Request.EndNode,
+                        m_Position = Request.MergedCurve.d,
+                        m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(Request.MergedCurve)),
+                        m_CourseDelta = 1f,
+                        m_Elevation = default,
+                        m_Flags = CoursePosFlags.IsLast,
+                        m_ParentMesh = -1,
+                        m_SplitPosition = 0f
+                    }
+                });
+
+                AddDeleteDefinition(Request.FirstDeletion);
+                AddDeleteDefinition(Request.SecondDeletion);
+            }
+
+            private void AddDeleteDefinition(EdgeDeletionDefinitionRequest deletion)
+            {
+                if (deletion.Edge == Entity.Null ||
+                    deletion.StartNode == Entity.Null ||
+                    deletion.EndNode == Entity.Null)
+                {
+                    return;
+                }
+
+                Entity definitionEntity = ECB.CreateEntity();
+                ECB.AddComponent(definitionEntity, new CreationDefinition
+                {
+                    m_Original = deletion.Edge,
+                    m_Flags = CreationFlags.Delete | CreationFlags.Hidden
+                });
+                ECB.AddComponent<Updated>(definitionEntity);
+                ECB.AddComponent(definitionEntity, new NetCourse
+                {
+                    m_Curve = deletion.Curve,
+                    m_Length = deletion.Length,
+                    m_FixedIndex = -1,
+                    m_Elevation = default,
+                    m_StartPosition = new CoursePos
+                    {
+                        m_Entity = deletion.StartNode,
+                        m_Position = deletion.Curve.a,
+                        m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(deletion.Curve)),
+                        m_CourseDelta = 0f,
+                        m_Elevation = default,
+                        m_Flags = default,
+                        m_ParentMesh = -1,
+                        m_SplitPosition = 0f
+                    },
+                    m_EndPosition = new CoursePos
+                    {
+                        m_Entity = deletion.EndNode,
+                        m_Position = deletion.Curve.d,
+                        m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(deletion.Curve)),
+                        m_CourseDelta = 1f,
+                        m_Elevation = default,
+                        m_Flags = default,
+                        m_ParentMesh = -1,
+                        m_SplitPosition = 0f
+                    }
+                });
+            }
         }
 
         private struct CreateSplitDefinitionJob : IJob
