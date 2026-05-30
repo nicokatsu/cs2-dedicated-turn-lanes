@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -10,6 +10,7 @@ using Game.Common;
 using Game.Net;
 using Game.Pathfind;
 using Game.Prefabs;
+using PocketTurnLanes.Tool;
 using Unity.Entities;
 using Unity.Mathematics;
 using NetCarLane = Game.Net.CarLane;
@@ -837,10 +838,10 @@ namespace PocketTurnLanes.Systems.Tool
                     laneEntity == Entity.Null ||
                     !EntityManager.Exists(laneEntity) ||
                     EntityManager.HasComponent<Deleted>(laneEntity) ||
-                    IsMasterConnectorLane(laneEntity) ||
+                    NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
                     !EntityManager.HasComponent<NetCarLane>(laneEntity) ||
                     !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
-                    !TryGetConnectedEdgesFromLane(request.IntersectionNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
+                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, request.IntersectionNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
                     sourceEdge != request.PocketEdge ||
                     targetEdge == request.PocketEdge)
                 {
@@ -971,66 +972,20 @@ namespace PocketTurnLanes.Systems.Tool
                 return TurnDirection.Right;
             }
 
-            if (!TryGetEdgeDirectionFromNode(sourceEdge, intersectionNode, out float2 sourceOutward) ||
-                !TryGetEdgeDirectionFromNode(targetEdge, intersectionNode, out float2 targetOutward))
+            if (!NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, sourceEdge, intersectionNode, out float2 sourceOutward) ||
+                !NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, targetEdge, intersectionNode, out float2 targetOutward))
             {
                 return TurnDirection.Ambiguous;
             }
 
             float2 incoming = -sourceOutward;
-            float cross = Cross(incoming, targetOutward);
+            float cross = NetTopologyHelpers.Cross(incoming, targetOutward);
             if (math.abs(cross) < 0.25f)
             {
                 return TurnDirection.Ambiguous;
             }
 
             return cross > 0f ? TurnDirection.Left : TurnDirection.Right;
-        }
-
-        private bool TryGetEdgeDirectionFromNode(Entity edgeEntity, Entity nodeEntity, out float2 direction)
-        {
-            direction = default;
-            if (!EntityManager.TryGetComponent(edgeEntity, out NetEdge edge) ||
-                !EntityManager.TryGetComponent(edgeEntity, out Curve curve))
-            {
-                return false;
-            }
-
-            bool nodeIsStart = edge.m_Start == nodeEntity;
-            bool nodeIsEnd = edge.m_End == nodeEntity;
-            if (!nodeIsStart && !nodeIsEnd)
-            {
-                return false;
-            }
-
-            float3 tangent = MathUtils.Tangent(curve.m_Bezier, nodeIsStart ? 0f : 1f);
-            if (!nodeIsStart)
-            {
-                tangent = -tangent;
-            }
-
-            direction = tangent.xz;
-            if (math.lengthsq(direction) <= 0.0001f)
-            {
-                direction = nodeIsStart
-                    ? (curve.m_Bezier.d - curve.m_Bezier.a).xz
-                    : (curve.m_Bezier.a - curve.m_Bezier.d).xz;
-            }
-
-            float lengthSq = math.lengthsq(direction);
-            if (lengthSq <= 0.0001f)
-            {
-                direction = default;
-                return false;
-            }
-
-            direction *= math.rsqrt(lengthSq);
-            return true;
-        }
-
-        private static float Cross(float2 a, float2 b)
-        {
-            return a.x * b.y - a.y * b.x;
         }
 
         private bool TryBuildDesiredMappings(
@@ -1910,10 +1865,10 @@ namespace PocketTurnLanes.Systems.Tool
                     laneEntity == Entity.Null ||
                     !EntityManager.Exists(laneEntity) ||
                     EntityManager.HasComponent<Deleted>(laneEntity) ||
-                    IsMasterConnectorLane(laneEntity) ||
+                    NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
                     !EntityManager.HasComponent<NetCarLane>(laneEntity) ||
                     !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
-                    !TryGetConnectedEdgesFromLane(splitNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
+                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, splitNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
                     sourceEdge != outerEdge ||
                     targetEdge != pocketEdge)
                 {
@@ -1961,11 +1916,11 @@ namespace PocketTurnLanes.Systems.Tool
                     laneEntity == Entity.Null ||
                     !EntityManager.Exists(laneEntity) ||
                     EntityManager.HasComponent<Deleted>(laneEntity) ||
-                    IsMasterConnectorLane(laneEntity) ||
+                    NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
                     !EntityManager.HasComponent<NetCarLane>(laneEntity) ||
                     !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
                     !lane.m_StartNode.OwnerEquals(lane.m_EndNode) ||
-                    !TryGetConnectedEdgesFromLane(splitNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
+                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, splitNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
                     sourceEdge != targetEdge ||
                     (sourceEdge != outerEdge && sourceEdge != pocketEdge))
                 {
@@ -1983,57 +1938,11 @@ namespace PocketTurnLanes.Systems.Tool
             }
         }
 
-        private bool IsMasterConnectorLane(Entity laneEntity)
-        {
-            if (EntityManager.HasComponent<MasterLane>(laneEntity))
-            {
-                return true;
-            }
-
-            if (EntityManager.TryGetComponent(laneEntity, out PrefabRef prefabRef) &&
-                EntityManager.TryGetComponent(prefabRef.m_Prefab, out NetLaneData laneData))
-            {
-                return (laneData.m_Flags & LaneFlags.Master) != 0;
-            }
-
-            return false;
-        }
-
         private int CountConnectorLanes(Entity splitNode, Entity outerEdge, Entity pocketEdge, out string summary)
         {
             int count = CollectConnectorLanes(splitNode, outerEdge, pocketEdge, m_ExistingConnectorLanes);
             summary = FormatConnectorLanes(m_ExistingConnectorLanes);
             return count;
-        }
-
-        private bool TryGetConnectedEdgesFromLane(Entity node, Lane lane, out Entity sourceEdge, out Entity targetEdge)
-        {
-            sourceEdge = Entity.Null;
-            targetEdge = Entity.Null;
-            if (!EntityManager.TryGetBuffer(node, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
-            {
-                return false;
-            }
-
-            sourceEdge = FindEdgeByPathNode(connectedEdges, lane.m_StartNode);
-            targetEdge = lane.m_StartNode.OwnerEquals(lane.m_EndNode)
-                ? sourceEdge
-                : FindEdgeByPathNode(connectedEdges, lane.m_EndNode);
-            return sourceEdge != Entity.Null && targetEdge != Entity.Null;
-        }
-
-        private static Entity FindEdgeByPathNode(DynamicBuffer<ConnectedEdge> connectedEdges, PathNode node)
-        {
-            int ownerIndex = node.GetOwnerIndex();
-            for (int i = 0; i < connectedEdges.Length; i++)
-            {
-                if (connectedEdges[i].m_Edge.Index == ownerIndex)
-                {
-                    return connectedEdges[i].m_Edge;
-                }
-            }
-
-            return Entity.Null;
         }
 
         private static float3 GetLaneCompositionPosition(LaneEndpoint[] lanes, int laneIndex)
