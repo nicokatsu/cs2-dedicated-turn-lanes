@@ -36,6 +36,7 @@ namespace PocketTurnLanes.Systems.Tool
         private const float NodeMergePreviewIntersectionBoundsMargin = 0.75f;
 
         public override string toolID => $"{Mod.ModId} Intersection Tool";
+        public override bool allowUnderground => true;
 
         private IntersectionOverlaySystem m_OverlaySystem;
         private ToolOutputBarrier m_ToolOutputBarrier;
@@ -81,6 +82,7 @@ namespace PocketTurnLanes.Systems.Tool
         public event Action<bool> ToolEnabledChanged;
 
         public bool IsToolEnabled { get; private set; }
+        public bool Underground { get; set; }
 
         protected override void OnCreate()
         {
@@ -170,6 +172,10 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             EnsureVanillaMutationSystemsDisabled();
+            if (SynchronizeUndergroundMode(ref result))
+            {
+                return result;
+            }
 
             if (m_ApplyReplacementNextFrame)
             {
@@ -347,6 +353,32 @@ namespace PocketTurnLanes.Systems.Tool
             return null;
         }
 
+        public override void SetUnderground(bool isUnderground)
+        {
+            if (Underground == isUnderground)
+            {
+                return;
+            }
+
+            Underground = isUnderground;
+            Mod.log.Info($"[IntersectionTool] Underground mode requested underground={Underground} active={IsToolEnabled} previousRequireUnderground={requireUnderground} collisionMask={GetCurrentCollisionMask()}.");
+        }
+
+        public override void ElevationUp()
+        {
+            SetUnderground(false);
+        }
+
+        public override void ElevationDown()
+        {
+            SetUnderground(true);
+        }
+
+        public override void ElevationScroll()
+        {
+            SetUnderground(!Underground);
+        }
+
         public void EnableTool()
         {
             m_ToolSystem.activeTool = this;
@@ -444,7 +476,7 @@ namespace PocketTurnLanes.Systems.Tool
         {
             base.InitializeRaycast();
 
-            m_ToolRaycastSystem.collisionMask = CollisionMask.OnGround | CollisionMask.Overground | CollisionMask.Underground;
+            m_ToolRaycastSystem.collisionMask = GetCurrentCollisionMask();
             m_ToolRaycastSystem.typeMask = TypeMask.Net;
             m_ToolRaycastSystem.netLayerMask = Layer.All;
             m_ToolRaycastSystem.iconLayerMask = IconLayerMask.None;
@@ -454,6 +486,36 @@ namespace PocketTurnLanes.Systems.Tool
                                                RaycastFlags.SubElements |
                                                RaycastFlags.Cargo |
                                                RaycastFlags.Passenger;
+        }
+
+        private CollisionMask GetCurrentCollisionMask()
+        {
+            return Underground
+                ? CollisionMask.Underground
+                : CollisionMask.OnGround | CollisionMask.Overground;
+        }
+
+        private bool SynchronizeUndergroundMode(ref JobHandle result)
+        {
+            bool previousRequireUnderground = requireUnderground;
+            requireUnderground = Underground;
+            if (previousRequireUnderground == Underground)
+            {
+                return false;
+            }
+
+            Entity previousHover = m_HoveredIntersection;
+            Entity previousPreview = m_PreviewIntersection;
+            int previousPreviewEdges = m_PreviewEdgeCount;
+            bool hadPreviewState = HasPreviewState();
+
+            UpdateHoveredIntersection(Entity.Null);
+            ResetPreviewState();
+            applyMode = ApplyMode.Clear;
+            result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, result);
+
+            Mod.log.Info($"[IntersectionTool] Underground mode synchronized underground={Underground} previousRequireUnderground={previousRequireUnderground} requireUnderground={requireUnderground} collisionMask={GetCurrentCollisionMask()} clearedPreview={hadPreviewState} previousHover={FormatEntity(previousHover)} previousPreview={FormatEntity(previousPreview)} previousPreviewEdges={previousPreviewEdges}.");
+            return true;
         }
 
     }
