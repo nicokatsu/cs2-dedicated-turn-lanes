@@ -15,6 +15,8 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using PathMethod = Game.Pathfind.PathMethod;
+using PathNode = Game.Pathfind.PathNode;
 using NetCarLane = Game.Net.CarLane;
 using NetSubLane = Game.Net.SubLane;
 
@@ -432,14 +434,7 @@ namespace PocketTurnLanes.Systems.Tool
                 return;
             }
 
-            if (EntityManager.TryGetComponent(entity, out NodeGeometry geometry))
-            {
-                m_OverlaySystem.ShowBounds(geometry.m_Bounds);
-            }
-            else
-            {
-                m_OverlaySystem.Clear();
-            }
+            m_OverlaySystem.Clear();
 
             LogIntersection(entity, "hover");
         }
@@ -529,6 +524,13 @@ namespace PocketTurnLanes.Systems.Tool
                     continue;
                 }
 
+                if (!ApproachNeedsPocketLane(nodeEntity, edgeEntity, connectedEdges, out string demandReason))
+                {
+                    skippedCount++;
+                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: no dedicated turn lane demand at node {FormatEntity(nodeEntity)}. {demandReason}");
+                    continue;
+                }
+
                 if (TryBuildSplitDefinitionRequest(
                         nodeEntity,
                         edgeEntity,
@@ -595,6 +597,7 @@ namespace PocketTurnLanes.Systems.Tool
                 m_PreviewValidationPending = true;
                 m_PreviewDirty = false;
                 m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
+                ShowExpandableIntersectionOverlay(nodeEntity);
                 Mod.log.Info($"[IntersectionTool] Created {queuedCount} preview split definitions around node {FormatEntity(nodeEntity)}; skipped {skippedCount} edge(s). Validating visible split nodes before click apply.");
             }
             else
@@ -605,6 +608,17 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             return result;
+        }
+
+        private void ShowExpandableIntersectionOverlay(Entity nodeEntity)
+        {
+            if (EntityManager.TryGetComponent(nodeEntity, out NodeGeometry geometry))
+            {
+                m_OverlaySystem.ShowBounds(geometry.m_Bounds);
+                return;
+            }
+
+            m_OverlaySystem.Clear();
         }
 
         private bool IsRoadEdge(Entity edgeEntity)
@@ -638,6 +652,392 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             return false;
+        }
+
+        private bool ApproachNeedsPocketLane(
+            Entity nodeEntity,
+            Entity edgeEntity,
+            DynamicBuffer<ConnectedEdge> connectedEdges,
+            out string reason)
+        {
+            int roadEdgeCount = CountRoadConnectedEdges(connectedEdges);
+            if (!EntityManager.TryGetBuffer(nodeEntity, true, out DynamicBuffer<NetSubLane> nodeSubLanes))
+            {
+                reason = $"roadEdges={roadEdgeCount}; missing node SubLane buffer, skipping because demand cannot be diagnosed from connector allocation.";
+                return false;
+            }
+
+            Dictionary<int, ApproachLaneUsage> laneUsages = new Dictionary<int, ApproachLaneUsage>();
+            Dictionary<int, HashSet<ApproachMovementKey>> laneMovementKeys = new Dictionary<int, HashSet<ApproachMovementKey>>();
+            StringBuilder connectorSummary = new StringBuilder();
+            int connectorCount = 0;
+            int ignoredConnectorCount = 0;
+
+            for (int i = 0; i < nodeSubLanes.Length; i++)
+            {
+                NetSubLane subLane = nodeSubLanes[i];
+                Entity laneEntity = subLane.m_SubLane;
+                if ((subLane.m_PathMethods & PathMethod.Road) == 0 ||
+                    laneEntity == Entity.Null ||
+                    !EntityManager.Exists(laneEntity) ||
+                    EntityManager.HasComponent<Deleted>(laneEntity) ||
+                    IsMasterConnectorLane(laneEntity) ||
+                    !EntityManager.HasComponent<NetCarLane>(laneEntity) ||
+                    !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
+                    !TryGetConnectedEdgesFromLane(nodeEntity, lane, out Entity sourceEdge, out Entity targetEdge))
+                {
+                    continue;
+                }
+
+                if (sourceEdge != edgeEntity)
+                {
+                    continue;
+                }
+
+                if (targetEdge == edgeEntity || !IsRoadEdge(targetEdge))
+                {
+                    ignoredConnectorCount++;
+                    continue;
+                }
+
+                connectorCount++;
+                int sourceLaneIndex = lane.m_StartNode.GetLaneIndex() & 0xff;
+                int targetLaneIndex = lane.m_EndNode.GetLaneIndex() & 0xff;
+                NetCarLane carLane = EntityManager.GetComponentData<NetCarLane>(laneEntity);
+                ApproachMovement movement = ClassifyCenterMovement(nodeEntity, edgeEntity, targetEdge, carLane.m_Flags);
+                ApproachMovementKey movementKey = new ApproachMovementKey(movement, targetEdge);
+
+                if (!laneUsages.TryGetValue(sourceLaneIndex, out ApproachLaneUsage usage))
+                {
+                    usage = new ApproachLaneUsage
+                    {
+                        LaneIndex = sourceLaneIndex
+                    };
+                }
+
+                usage.Add(movement);
+                laneUsages[sourceLaneIndex] = usage;
+
+                if (!laneMovementKeys.TryGetValue(sourceLaneIndex, out HashSet<ApproachMovementKey> movementKeys))
+                {
+                    movementKeys = new HashSet<ApproachMovementKey>();
+                    laneMovementKeys[sourceLaneIndex] = movementKeys;
+                }
+
+                movementKeys.Add(movementKey);
+
+                if (connectorSummary.Length > 0)
+                {
+                    connectorSummary.Append(",");
+                }
+
+                connectorSummary.Append(sourceLaneIndex);
+                connectorSummary.Append("->");
+                connectorSummary.Append(targetLaneIndex);
+                connectorSummary.Append("/");
+                connectorSummary.Append(movement);
+                connectorSummary.Append("/");
+                connectorSummary.Append(FormatEntity(targetEdge));
+                connectorSummary.Append("/");
+                connectorSummary.Append(FormatEntity(laneEntity));
+            }
+
+            if (connectorCount == 0)
+            {
+                reason = $"roadEdges={roadEdgeCount}; no center connector evidence for source edge, skipping instead of guessing from road or lane counts.";
+                return false;
+            }
+
+            HashSet<ApproachMovementKey> dedicatedTurnKeys = new HashSet<ApproachMovementKey>();
+            HashSet<ApproachMovementKey> mixedTurnKeys = new HashSet<ApproachMovementKey>();
+            HashSet<ApproachMovementKey> allKeys = new HashSet<ApproachMovementKey>();
+            int mixedLaneCount = 0;
+            int ambiguousLaneCount = 0;
+
+            foreach (KeyValuePair<int, HashSet<ApproachMovementKey>> pair in laneMovementKeys)
+            {
+                bool laneMixed = pair.Value.Count > 1;
+                if (laneMixed)
+                {
+                    mixedLaneCount++;
+                }
+
+                foreach (ApproachMovementKey key in pair.Value)
+                {
+                    allKeys.Add(key);
+                    if (key.Movement == ApproachMovement.Ambiguous)
+                    {
+                        ambiguousLaneCount++;
+                    }
+
+                    if (!key.IsTurn)
+                    {
+                        continue;
+                    }
+
+                    if (laneMixed)
+                    {
+                        mixedTurnKeys.Add(key);
+                    }
+                    else
+                    {
+                        dedicatedTurnKeys.Add(key);
+                    }
+                }
+            }
+
+            bool needsLeft = false;
+            bool needsRight = false;
+            List<ApproachMovementKey> unmetTurnKeys = new List<ApproachMovementKey>();
+            foreach (ApproachMovementKey key in mixedTurnKeys)
+            {
+                if (dedicatedTurnKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                unmetTurnKeys.Add(key);
+                if (key.Movement == ApproachMovement.Left)
+                {
+                    needsLeft = true;
+                }
+                else if (key.Movement == ApproachMovement.Right)
+                {
+                    needsRight = true;
+                }
+            }
+
+            bool needsPocket = needsLeft || needsRight;
+            string usageSummary = FormatApproachLaneUsages(laneUsages);
+            string keySummary = FormatApproachMovementKeys(laneMovementKeys);
+            string dedicatedSummary = FormatApproachMovementKeySet(dedicatedTurnKeys);
+            string mixedSummary = FormatApproachMovementKeySet(mixedTurnKeys);
+            string unmetSummary = FormatApproachMovementKeySet(unmetTurnKeys);
+            string diagnostics = $"roadEdges={roadEdgeCount} connectors={connectorCount} ignored={ignoredConnectorCount} lanes={laneUsages.Count} distinctTargets={allKeys.Count} mixedLanes={mixedLaneCount} ambiguousKeys={ambiguousLaneCount} dedicatedTurnKeys=[{dedicatedSummary}] mixedTurnKeys=[{mixedSummary}] unmetTurnKeys=[{unmetSummary}] needsLeft={needsLeft} needsRight={needsRight} usage=[{usageSummary}] targetUsage=[{keySummary}] connectors=[{connectorSummary}]";
+
+            if (!needsPocket)
+            {
+                reason = $"{diagnostics}; existing connector allocation is already turn-dedicated or has no split turn demand.";
+                return false;
+            }
+
+            reason = diagnostics;
+            Mod.log.Info($"[IntersectionTool] Edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} has dedicated turn lane demand at node {FormatEntity(nodeEntity)}. {reason}");
+            return true;
+        }
+
+        private int CountRoadConnectedEdges(DynamicBuffer<ConnectedEdge> connectedEdges)
+        {
+            int count = 0;
+            for (int i = 0; i < connectedEdges.Length; i++)
+            {
+                if (IsRoadEdge(connectedEdges[i].m_Edge))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private bool TryGetConnectedEdgesFromLane(Entity node, Lane lane, out Entity sourceEdge, out Entity targetEdge)
+        {
+            sourceEdge = Entity.Null;
+            targetEdge = Entity.Null;
+            if (!EntityManager.TryGetBuffer(node, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
+            {
+                return false;
+            }
+
+            sourceEdge = FindEdgeByPathNode(connectedEdges, lane.m_StartNode);
+            targetEdge = lane.m_StartNode.OwnerEquals(lane.m_EndNode)
+                ? sourceEdge
+                : FindEdgeByPathNode(connectedEdges, lane.m_EndNode);
+            return sourceEdge != Entity.Null && targetEdge != Entity.Null;
+        }
+
+        private static Entity FindEdgeByPathNode(DynamicBuffer<ConnectedEdge> connectedEdges, PathNode node)
+        {
+            int ownerIndex = node.GetOwnerIndex();
+            for (int i = 0; i < connectedEdges.Length; i++)
+            {
+                if (connectedEdges[i].m_Edge.Index == ownerIndex)
+                {
+                    return connectedEdges[i].m_Edge;
+                }
+            }
+
+            return Entity.Null;
+        }
+
+        private bool IsMasterConnectorLane(Entity laneEntity)
+        {
+            if (EntityManager.HasComponent<MasterLane>(laneEntity))
+            {
+                return true;
+            }
+
+            if (EntityManager.TryGetComponent(laneEntity, out PrefabRef prefabRef) &&
+                EntityManager.TryGetComponent(prefabRef.m_Prefab, out NetLaneData laneData))
+            {
+                return (laneData.m_Flags & LaneFlags.Master) != 0;
+            }
+
+            return false;
+        }
+
+        private ApproachMovement ClassifyCenterMovement(Entity intersectionNode, Entity sourceEdge, Entity targetEdge, CarLaneFlags flags)
+        {
+            bool leftFlag = (flags & CarLaneFlags.TurnLeft) != 0;
+            bool rightFlag = (flags & CarLaneFlags.TurnRight) != 0;
+            if (leftFlag && !rightFlag)
+            {
+                return ApproachMovement.Left;
+            }
+
+            if (rightFlag && !leftFlag)
+            {
+                return ApproachMovement.Right;
+            }
+
+            if (!TryGetEdgeDirectionFromNode(sourceEdge, intersectionNode, out float2 sourceOutward) ||
+                !TryGetEdgeDirectionFromNode(targetEdge, intersectionNode, out float2 targetOutward))
+            {
+                return ApproachMovement.Ambiguous;
+            }
+
+            float2 incoming = -sourceOutward;
+            float cross = Cross(incoming, targetOutward);
+            float dot = math.dot(incoming, targetOutward);
+            if (math.abs(cross) < 0.25f)
+            {
+                return dot > 0f ? ApproachMovement.Straight : ApproachMovement.Ambiguous;
+            }
+
+            return cross > 0f ? ApproachMovement.Left : ApproachMovement.Right;
+        }
+
+        private bool TryGetEdgeDirectionFromNode(Entity edgeEntity, Entity nodeEntity, out float2 direction)
+        {
+            direction = default;
+            if (!EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
+                !EntityManager.TryGetComponent(edgeEntity, out Curve curve))
+            {
+                return false;
+            }
+
+            bool nodeIsStart = edge.m_Start == nodeEntity;
+            bool nodeIsEnd = edge.m_End == nodeEntity;
+            if (!nodeIsStart && !nodeIsEnd)
+            {
+                return false;
+            }
+
+            return TryGetOutwardDirection(edge, curve, nodeEntity, nodeIsStart, out direction);
+        }
+
+        private static string FormatApproachLaneUsages(Dictionary<int, ApproachLaneUsage> laneUsages)
+        {
+            if (laneUsages.Count == 0)
+            {
+                return "<none>";
+            }
+
+            List<ApproachLaneUsage> usages = new List<ApproachLaneUsage>(laneUsages.Values);
+            usages.Sort((a, b) => a.LaneIndex.CompareTo(b.LaneIndex));
+
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < usages.Count; i++)
+            {
+                if (i > 0)
+                {
+                    builder.Append(",");
+                }
+
+                ApproachLaneUsage usage = usages[i];
+                builder.Append("lane");
+                builder.Append(usage.LaneIndex);
+                builder.Append(":S");
+                builder.Append(usage.Straight);
+                builder.Append("/L");
+                builder.Append(usage.Left);
+                builder.Append("/R");
+                builder.Append(usage.Right);
+                builder.Append("/A");
+                builder.Append(usage.Ambiguous);
+            }
+
+            return builder.ToString();
+        }
+
+        private static string FormatApproachMovementKeys(Dictionary<int, HashSet<ApproachMovementKey>> laneMovementKeys)
+        {
+            if (laneMovementKeys.Count == 0)
+            {
+                return "<none>";
+            }
+
+            List<int> laneIndexes = new List<int>(laneMovementKeys.Keys);
+            laneIndexes.Sort();
+
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < laneIndexes.Count; i++)
+            {
+                if (i > 0)
+                {
+                    builder.Append(",");
+                }
+
+                int laneIndex = laneIndexes[i];
+                builder.Append("lane");
+                builder.Append(laneIndex);
+                builder.Append(":");
+                builder.Append(FormatApproachMovementKeySet(laneMovementKeys[laneIndex]));
+            }
+
+            return builder.ToString();
+        }
+
+        private static string FormatApproachMovementKeySet(IEnumerable<ApproachMovementKey> keys)
+        {
+            if (keys == null)
+            {
+                return "<none>";
+            }
+
+            List<ApproachMovementKey> sortedKeys = new List<ApproachMovementKey>(keys);
+            if (sortedKeys.Count == 0)
+            {
+                return "<none>";
+            }
+
+            sortedKeys.Sort((a, b) =>
+            {
+                int movementCompare = a.Movement.CompareTo(b.Movement);
+                if (movementCompare != 0)
+                {
+                    return movementCompare;
+                }
+
+                int indexCompare = a.TargetEdge.Index.CompareTo(b.TargetEdge.Index);
+                return indexCompare != 0 ? indexCompare : a.TargetEdge.Version.CompareTo(b.TargetEdge.Version);
+            });
+
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < sortedKeys.Count; i++)
+            {
+                if (i > 0)
+                {
+                    builder.Append("|");
+                }
+
+                ApproachMovementKey key = sortedKeys[i];
+                builder.Append(key.Movement);
+                builder.Append("->");
+                builder.Append(FormatEntity(key.TargetEdge));
+            }
+
+            return builder.ToString();
         }
 
         private bool TryGetSourceEdgeFromNodeLane(Lane nodeLane, DynamicBuffer<ConnectedEdge> connectedEdges, out Entity sourceEdge)
@@ -1650,6 +2050,7 @@ namespace PocketTurnLanes.Systems.Tool
             if (queuedCount == 0)
             {
                 applyMode = ApplyMode.None;
+                m_OverlaySystem.Clear();
                 ResetPreviewState();
                 Mod.log.Warn("[IntersectionTool] Preview retry had no split definitions left to queue.");
                 return result;
@@ -1662,6 +2063,7 @@ namespace PocketTurnLanes.Systems.Tool
             m_PreviewValidationPending = true;
             m_PreviewDirty = false;
             m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
+            ShowExpandableIntersectionOverlay(previewNode);
             Mod.log.Info($"[IntersectionTool] Rebuilt preview split definitions for retry pass node={FormatEntity(previewNode)} definitions={queuedCount}, visible={visibleCount}, retrying={retryCount}, exhausted={exhaustedCount}.");
             return result;
         }
@@ -1719,6 +2121,7 @@ namespace PocketTurnLanes.Systems.Tool
 
         private void MarkNoSplitPreviewReady(Entity nodeEntity)
         {
+            m_OverlaySystem.Clear();
             m_PreviewIntersection = nodeEntity;
             m_PreviewEdge = Entity.Null;
             m_PreviewEdgeCount = 0;
@@ -2645,6 +3048,121 @@ namespace PocketTurnLanes.Systems.Tool
                                                RaycastFlags.SubElements |
                                                RaycastFlags.Cargo |
                                                RaycastFlags.Passenger;
+        }
+
+        private enum ApproachMovement
+        {
+            Ambiguous,
+            Straight,
+            Left,
+            Right
+        }
+
+        private readonly struct ApproachMovementKey : IEquatable<ApproachMovementKey>
+        {
+            public readonly ApproachMovement Movement;
+            public readonly Entity TargetEdge;
+
+            public ApproachMovementKey(ApproachMovement movement, Entity targetEdge)
+            {
+                Movement = movement;
+                TargetEdge = targetEdge;
+            }
+
+            public bool IsTurn => Movement == ApproachMovement.Left || Movement == ApproachMovement.Right;
+
+            public bool Equals(ApproachMovementKey other)
+            {
+                return Movement == other.Movement && TargetEdge == other.TargetEdge;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is ApproachMovementKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = (int)Movement;
+                    hash = (hash * 397) ^ TargetEdge.Index;
+                    hash = (hash * 397) ^ TargetEdge.Version;
+                    return hash;
+                }
+            }
+        }
+
+        private struct ApproachLaneUsage
+        {
+            public int LaneIndex;
+            public int Straight;
+            public int Left;
+            public int Right;
+            public int Ambiguous;
+
+            public int KnownMovementCount
+            {
+                get
+                {
+                    int count = 0;
+                    if (Straight > 0)
+                    {
+                        count++;
+                    }
+
+                    if (Left > 0)
+                    {
+                        count++;
+                    }
+
+                    if (Right > 0)
+                    {
+                        count++;
+                    }
+
+                    return count;
+                }
+            }
+
+            public void Add(ApproachMovement movement)
+            {
+                switch (movement)
+                {
+                    case ApproachMovement.Straight:
+                        Straight++;
+                        break;
+                    case ApproachMovement.Left:
+                        Left++;
+                        break;
+                    case ApproachMovement.Right:
+                        Right++;
+                        break;
+                    default:
+                        Ambiguous++;
+                        break;
+                }
+            }
+
+            public bool IsDedicated(ApproachMovement movement)
+            {
+                if (Ambiguous > 0 || KnownMovementCount != 1)
+                {
+                    return false;
+                }
+
+                switch (movement)
+                {
+                    case ApproachMovement.Left:
+                        return Left > 0;
+                    case ApproachMovement.Right:
+                        return Right > 0;
+                    case ApproachMovement.Straight:
+                        return Straight > 0;
+                    default:
+                        return false;
+                }
+            }
         }
 
         private struct SplitDefinitionRequest
