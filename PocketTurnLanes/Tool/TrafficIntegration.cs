@@ -157,11 +157,27 @@ namespace PocketTurnLanes.Tool
 
         private static bool IsTrafficModId(string modId)
         {
-            return !string.IsNullOrEmpty(modId) &&
-                   (modId.Equals("Traffic", StringComparison.OrdinalIgnoreCase) ||
-                    modId.StartsWith("Traffic,", StringComparison.OrdinalIgnoreCase) ||
-                    modId.IndexOf("Traffic, Version", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    modId.IndexOf("80095", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (string.IsNullOrWhiteSpace(modId))
+            {
+                return false;
+            }
+
+            string value = modId.Trim();
+            if (value.Equals("Traffic", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("80095", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            try
+            {
+                AssemblyName assemblyName = new AssemblyName(value);
+                return assemblyName.Name.Equals("Traffic", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }
