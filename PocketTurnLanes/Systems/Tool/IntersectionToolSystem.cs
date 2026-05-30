@@ -1355,6 +1355,12 @@ namespace PocketTurnLanes.Systems.Tool
                 return;
             }
 
+            if ((flags & LaneFlags.BicyclesOnly) != 0)
+            {
+                counts.BicycleOnly++;
+                return;
+            }
+
             if ((flags & LaneFlags.Invert) != 0)
             {
                 counts.Backward++;
@@ -3216,12 +3222,15 @@ namespace PocketTurnLanes.Systems.Tool
         {
             public int Forward;
             public int Backward;
+            public int BicycleOnly;
 
             public int Total => Forward + Backward;
 
             public override string ToString()
             {
-                return $"{Forward}/{Backward}";
+                return BicycleOnly > 0
+                    ? $"{Forward}/{Backward};bikeOnly={BicycleOnly}"
+                    : $"{Forward}/{Backward}";
             }
         }
 
