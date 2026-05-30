@@ -10,22 +10,6 @@ namespace PocketTurnLanes.Systems.Overlay
     public partial class IntersectionOverlaySystem : GameSystemBase
     {
         private static readonly Color HoverColor = new Color(0.1f, 0.75f, 1f, 0.35f);
-        private static readonly Color PreviewSegmentColor = new Color(1f, 0.78f, 0.08f, 0.45f);
-
-        public struct PreviewSegment
-        {
-            public float3 Start;
-            public float3 End;
-            public float Width;
-
-            public PreviewSegment(float3 start, float3 end, float width)
-            {
-                Start = start;
-                End = end;
-                Width = width;
-            }
-        }
-
         private readonly List<Vector3> m_Vertices = new List<Vector3>(64);
         private readonly List<Color> m_Colors = new List<Color>(64);
         private readonly List<int> m_Indices = new List<int>(192);
@@ -86,18 +70,6 @@ namespace PocketTurnLanes.Systems.Overlay
             Build();
         }
 
-        public void ShowBoundsAndSegments(Bounds3 bounds, IReadOnlyList<PreviewSegment> segments)
-        {
-            Clear();
-            AddBounds(bounds, HoverColor, 0.75f);
-            for (int i = 0; i < segments.Count; i++)
-            {
-                AddSegment(segments[i], PreviewSegmentColor);
-            }
-
-            Build();
-        }
-
         public void Clear()
         {
             m_Mesh?.Clear();
@@ -133,35 +105,6 @@ namespace PocketTurnLanes.Systems.Overlay
                 m_Indices.Add(startIndex + i + 1);
                 m_Indices.Add(startIndex + (i == 35 ? 1 : i + 2));
             }
-        }
-
-        private void AddSegment(PreviewSegment segment, Color color)
-        {
-            float3 delta = segment.End - segment.Start;
-            float2 direction = delta.xz;
-            float lengthSq = math.lengthsq(direction);
-            if (lengthSq <= 0.01f)
-            {
-                return;
-            }
-
-            direction *= math.rsqrt(lengthSq);
-            float halfWidth = math.max(1f, segment.Width * 0.5f);
-            float2 side = new float2(-direction.y, direction.x) * halfWidth;
-            float3 up = new float3(0f, 0.2f, 0f);
-
-            int startIndex = m_Vertices.Count;
-            AddVertex(segment.Start + new float3(side.x, 0f, side.y) + up, color);
-            AddVertex(segment.Start - new float3(side.x, 0f, side.y) + up, color);
-            AddVertex(segment.End - new float3(side.x, 0f, side.y) + up, color);
-            AddVertex(segment.End + new float3(side.x, 0f, side.y) + up, color);
-
-            m_Indices.Add(startIndex);
-            m_Indices.Add(startIndex + 1);
-            m_Indices.Add(startIndex + 2);
-            m_Indices.Add(startIndex);
-            m_Indices.Add(startIndex + 2);
-            m_Indices.Add(startIndex + 3);
         }
 
         private void AddVertex(float3 position, Color color)
