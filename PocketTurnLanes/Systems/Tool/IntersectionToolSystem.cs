@@ -45,6 +45,7 @@ namespace PocketTurnLanes.Systems.Tool
         private ToolOutputBarrier m_ToolOutputBarrier;
         private ValidationSystem m_ValidationSystem;
         private NodeReductionSystem m_NodeReductionSystem;
+        private SplitLaneConnectionFixSystem m_SplitLaneConnectionFixSystem;
         private EntityQuery m_DefinitionQuery;
         private EntityQuery m_ReplacementPreviewDefinitionQuery;
         private EntityQuery m_TempSplitNodeQuery;
@@ -85,6 +86,9 @@ namespace PocketTurnLanes.Systems.Tool
             m_ToolOutputBarrier = World.GetOrCreateSystemManaged<ToolOutputBarrier>();
             m_ValidationSystem = World.GetOrCreateSystemManaged<ValidationSystem>();
             m_NodeReductionSystem = World.GetOrCreateSystemManaged<NodeReductionSystem>();
+            m_SplitLaneConnectionFixSystem = Mod.TrafficLaneConnectionFixEnabled
+                ? World.GetOrCreateSystemManaged<SplitLaneConnectionFixSystem>()
+                : null;
             m_DefinitionQuery = GetDefinitionQuery();
             m_ReplacementPreviewDefinitionQuery = GetEntityQuery(
                 ComponentType.ReadOnly<CreationDefinition>(),
@@ -2066,6 +2070,7 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     verifiedCount++;
                     Mod.log.Info($"[IntersectionTool] Pocket lane replacement verified edge={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes}.");
+                    QueueSplitLaneConnectionFix(candidate, candidate.PocketEdge);
                     continue;
                 }
 
@@ -2073,6 +2078,7 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     replacedEntityCount++;
                     Mod.log.Info($"[IntersectionTool] Pocket lane replacement verified via replacement entity original={FormatEntity(candidate.PocketEdge)} result={FormatEntity(resultEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")}.");
+                    QueueSplitLaneConnectionFix(candidate, resultEdge);
                     continue;
                 }
 
@@ -2082,6 +2088,23 @@ namespace PocketTurnLanes.Systems.Tool
 
             Mod.log.Info($"[IntersectionTool] Pocket lane replacement verification complete verified={verifiedCount}, replacedEntity={replacedEntityCount}, missing={missingCount}.");
             m_AppliedReplacementCandidates.Clear();
+        }
+
+        private void QueueSplitLaneConnectionFix(ReplacementCandidate candidate, Entity finalPocketEdge)
+        {
+            if (m_SplitLaneConnectionFixSystem == null)
+            {
+                Mod.log.Warn($"[IntersectionTool] Cannot queue split lane connection fix pocket={FormatEntity(finalPocketEdge)} splitNode={FormatEntity(candidate.SplitNode)}: fix system is not available.");
+                return;
+            }
+
+            m_SplitLaneConnectionFixSystem.Queue(
+                candidate.Node,
+                candidate.SplitNode,
+                candidate.OriginalEdge,
+                finalPocketEdge,
+                candidate.SourcePrefab,
+                candidate.TargetPrefab);
         }
 
         private bool TryQueueFailedSplitRetries(ref JobHandle result)
@@ -2269,6 +2292,17 @@ namespace PocketTurnLanes.Systems.Tool
                 pocketPrefabRef.m_Prefab == splitCandidate.TargetPrefab)
             {
                 Mod.log.Info($"[IntersectionTool] Pocket lane replacement already present after split original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m.");
+                if (m_SplitLaneConnectionFixSystem != null)
+                {
+                    m_SplitLaneConnectionFixSystem.Queue(
+                        splitCandidate.Node,
+                        splitNode,
+                        splitCandidate.Edge,
+                        pocketEdge,
+                        splitCandidate.SourcePrefab,
+                        splitCandidate.TargetPrefab);
+                }
+
                 return false;
             }
 

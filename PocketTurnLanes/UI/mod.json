@@ -5,5 +5,5 @@
   "version": "1.0.0",
   "description": "Adds an intersection tool that previews eligible incoming roads and applies generated dedicated turn lane segments with compatible road prefabs.",
   "isCodeMod": true,
-  "dependencies": []
+  "dependencies": ["80095"]
 }
