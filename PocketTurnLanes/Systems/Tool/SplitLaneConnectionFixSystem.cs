@@ -635,6 +635,7 @@ namespace PocketTurnLanes.Systems.Tool
                     CarriagewayAndGroup = new int2(compositionLane.m_Carriageway, compositionLane.m_Group),
                     Lateral = order,
                     Endpoint = isSourceEndpoint ? "E" : "S",
+                    PathMethods = subLane.m_PathMethods,
                     LaneFlags = compositionLane.m_Flags,
                     CarFlags = carLane.m_Flags,
                     RoadTypes = carLaneData.m_RoadTypes
@@ -1169,6 +1170,7 @@ namespace PocketTurnLanes.Systems.Tool
                     TargetEdge = target.Edge,
                     SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
                     TargetLaneIndex = assignedTargets[sourceIndex],
+                    Method = GetMappingMethod(sourceLanes[sourceIndex], target),
                     IsBranch = false
                 });
             }
@@ -1186,6 +1188,7 @@ namespace PocketTurnLanes.Systems.Tool
                 TargetEdge = branchTarget.Edge,
                 SourceLaneIndex = branchSourceLaneIndex,
                 TargetLaneIndex = extraTargetLaneIndex,
+                Method = GetMappingMethod(branchSource, branchTarget),
                 IsBranch = true
             });
 
@@ -1315,6 +1318,7 @@ namespace PocketTurnLanes.Systems.Tool
                     TargetEdge = target.Edge,
                     SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
                     TargetLaneIndex = target.LaneIndex,
+                    Method = GetMappingMethod(sourceLanes[sourceIndex], target),
                     IsBranch = false
                 };
             }
@@ -1326,6 +1330,21 @@ namespace PocketTurnLanes.Systems.Tool
                     ? $"reverse-existing-connectors+fallback({existingAssignments}/{sourceLanes.Count})"
                     : "reverse-lateral-fallback";
             return true;
+        }
+
+        private static PathMethod GetMappingMethod(LaneEndpoint source, LaneEndpoint target)
+        {
+            PathMethod method = PathMethod.Road;
+            bool sourceHasTrack = (source.PathMethods & PathMethod.Track) != 0 &&
+                                  (source.LaneFlags & LaneFlags.Track) != 0;
+            bool targetHasTrack = (target.PathMethods & PathMethod.Track) != 0 &&
+                                  (target.LaneFlags & LaneFlags.Track) != 0;
+            if (sourceHasTrack && targetHasTrack)
+            {
+                method |= PathMethod.Track;
+            }
+
+            return method;
         }
 
         private static TurnDirection DetermineTurn(List<LaneEndpoint> selectedTargets, int extraTargetIndex)
@@ -1443,7 +1462,7 @@ namespace PocketTurnLanes.Systems.Tool
                         new int4(
                             sourceEndpoint.CarriagewayAndGroup,
                             targetEndpoint.CarriagewayAndGroup),
-                        PathMethod.Road,
+                        mapping.Method,
                         false));
                     writtenConnections++;
                 }
@@ -2192,7 +2211,7 @@ namespace PocketTurnLanes.Systems.Tool
                 return "<none>";
             }
 
-            return string.Join(",", lanes.Select(lane => $"{lane.Endpoint}{lane.LaneIndex}|C{lane.OppositeLaneIndex}@{lane.Lateral:0.##}/{FormatEntity(lane.LaneEntity)} lanePos={FormatFloat3(lane.LanePosition)} cg={lane.CarriagewayAndGroup} laneFlags=[{lane.LaneFlags}] carFlags=[{lane.CarFlags}] roadTypes=[{lane.RoadTypes}]"));
+            return string.Join(",", lanes.Select(lane => $"{lane.Endpoint}{lane.LaneIndex}|C{lane.OppositeLaneIndex}@{lane.Lateral:0.##}/{FormatEntity(lane.LaneEntity)} lanePos={FormatFloat3(lane.LanePosition)} cg={lane.CarriagewayAndGroup} methods=[{lane.PathMethods}] laneFlags=[{lane.LaneFlags}] carFlags=[{lane.CarFlags}] roadTypes=[{lane.RoadTypes}]"));
         }
 
         private static string FormatFloat3(float3 value)
@@ -2212,7 +2231,7 @@ namespace PocketTurnLanes.Systems.Tool
 
         private static string FormatMapping(LaneMapping mapping)
         {
-            return $"{FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}->{FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}{(mapping.IsBranch ? "*" : string.Empty)}";
+            return $"{FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}->{FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}[{mapping.Method}]{(mapping.IsBranch ? "*" : string.Empty)}";
         }
 
         private static string FormatConnectorLanes(IReadOnlyList<ConnectorLane> connectors)
@@ -2298,6 +2317,7 @@ namespace PocketTurnLanes.Systems.Tool
             public int2 CarriagewayAndGroup;
             public float Lateral;
             public string Endpoint;
+            public PathMethod PathMethods;
             public LaneFlags LaneFlags;
             public CarLaneFlags CarFlags;
             public RoadTypes RoadTypes;
@@ -2318,6 +2338,7 @@ namespace PocketTurnLanes.Systems.Tool
             public Entity TargetEdge;
             public int SourceLaneIndex;
             public int TargetLaneIndex;
+            public PathMethod Method;
             public bool IsBranch;
         }
 
