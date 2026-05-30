@@ -160,6 +160,8 @@ namespace PocketTurnLanes.Systems.Tool
                 return result;
             }
 
+            EnsureVanillaMutationSystemsDisabled();
+
             if (m_ApplyReplacementNextFrame)
             {
                 if (UnityEngine.Time.frameCount <= m_PreviewCreatedFrame)
@@ -1772,7 +1774,12 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            if (!TryFindPreviewOuterEdge(candidate, splitNode, pocketEdge, out Entity outerEdge, out float outerLengthError))
+            if (!TryFindPreviewOuterEdge(
+                candidate,
+                splitNode,
+                pocketEdge,
+                out Entity outerEdge,
+                out float outerLengthError))
             {
                 Mod.log.Warn($"[IntersectionTool] Cannot preview pocket lane replacement original={FormatEntity(candidate.Edge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)}: preview outer edge was not found.");
                 return false;
@@ -1823,7 +1830,7 @@ namespace PocketTurnLanes.Systems.Tool
             result = outerDefinitionJobHandle;
             m_HasReplacementPreviewDefinitions = true;
 
-            Mod.log.Info($"[IntersectionTool] Created pocket lane replacement definition preview original={FormatEntity(candidate.Edge)} pocket={FormatEntity(pocketEdge)} outer={FormatEntity(outerEdge)} splitNode={FormatEntity(splitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} pocketFlags={definitionRequest.Flags} outerFlags={outerDefinitionRequest.Flags} pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={lengthError:0.##}m outerLengthError={outerLengthError:0.##}m.");
+            Mod.log.Info($"[IntersectionTool] Created pocket lane replacement definition preview original={FormatEntity(candidate.Edge)} pocket={FormatEntity(pocketEdge)} outer={FormatEntity(outerEdge)} splitNode={FormatEntity(splitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} pocketFlags={definitionRequest.Flags} outerFlags={outerDefinitionRequest.Flags} collisionValidation=vanilla-disabled pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={lengthError:0.##}m outerLengthError={outerLengthError:0.##}m.");
             return true;
         }
 
@@ -2035,6 +2042,19 @@ namespace PocketTurnLanes.Systems.Tool
             {
                 m_NodeReductionSystem.Enabled = enabled;
             }
+        }
+
+        private void EnsureVanillaMutationSystemsDisabled()
+        {
+            bool validationWasEnabled = m_ValidationSystem != null && m_ValidationSystem.Enabled;
+            bool nodeReductionWasEnabled = m_NodeReductionSystem != null && m_NodeReductionSystem.Enabled;
+            if (!validationWasEnabled && !nodeReductionWasEnabled)
+            {
+                return;
+            }
+
+            SetVanillaMutationSystemsEnabled(false);
+            Mod.log.Warn($"[IntersectionTool] Vanilla mutation systems were enabled while the tool was active; disabled again to keep split/replacement previews isolated validationWasEnabled={validationWasEnabled} nodeReductionWasEnabled={nodeReductionWasEnabled}.");
         }
 
         private void CaptureAppliedCandidates()
@@ -2588,6 +2608,8 @@ namespace PocketTurnLanes.Systems.Tool
             {
                 UpdateHoveredIntersection(Entity.Null);
                 SetToolEnabled(false);
+                SetVanillaMutationSystemsEnabled(true);
+                Mod.log.Info($"[IntersectionTool] Disabled because active tool changed to {system?.toolID ?? "<null>"}; restored vanilla mutation systems.");
             }
         }
 
