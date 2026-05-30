@@ -42,6 +42,7 @@ namespace PocketTurnLanes
             if (TrafficLaneConnectionFixEnabled)
             {
                 updateSystem.World.GetOrCreateSystemManaged<SplitLaneConnectionFixSystem>();
+                updateSystem.World.GetOrCreateSystemManaged<SplitLaneConnectionCleanupSystem>();
             }
 
             updateSystem.UpdateAt<IntersectionToolSystem>(SystemUpdatePhase.ToolUpdate);
@@ -64,39 +65,71 @@ namespace PocketTurnLanes
 
             Type trafficLaneSystemType = FindType("Traffic.Systems.TrafficLaneSystem");
             Type syncCustomLaneConnectionsSystemType = FindType("Traffic.Systems.LaneConnections.SyncCustomLaneConnectionsSystem");
+            Type modificationDataSyncSystemType = FindType("Traffic.Systems.ModificationDataSyncSystem");
+
+            log.Info($"[SplitLaneConnectionFix] Traffic type lookup TrafficLaneSystem={FormatType(trafficLaneSystemType)} SyncCustomLaneConnectionsSystem={FormatType(syncCustomLaneConnectionsSystemType)} ModificationDataSyncSystem={FormatType(modificationDataSyncSystemType)}.");
 
             bool registeredBeforeLaneSystem = TryRegisterUpdateOrder(
                 updateSystem,
+                typeof(SplitLaneConnectionFixSystem),
                 nameof(UpdateSystem.UpdateBefore),
                 trafficLaneSystemType,
                 SystemUpdatePhase.Modification4,
                 out string beforeError);
-            bool registeredAfterSync = TryRegisterUpdateOrder(
+            string afterError = "notAttemptedBecauseBeforeTrafficLaneSystemFailed";
+            bool registeredAfterSync = registeredBeforeLaneSystem && TryRegisterUpdateOrder(
                 updateSystem,
+                typeof(SplitLaneConnectionFixSystem),
                 nameof(UpdateSystem.UpdateAfter),
                 syncCustomLaneConnectionsSystemType,
                 SystemUpdatePhase.Modification4,
-                out string afterError);
+                out afterError);
+
+            RegisterSplitLaneConnectionCleanup(updateSystem, modificationDataSyncSystemType);
 
             if (registeredBeforeLaneSystem && registeredAfterSync)
             {
-                log.Info($"[SplitLaneConnectionFix] Scheduled in {SystemUpdatePhase.Modification4} after Traffic SyncCustomLaneConnectionsSystem and before TrafficLaneSystem so lane visuals refresh in the same lane-generation pass.");
+                log.Info($"[SplitLaneConnectionFix] Pre-lane writer scheduled in {SystemUpdatePhase.Modification4} after Traffic SyncCustomLaneConnectionsSystem and before TrafficLaneSystem so lane visuals refresh in the same lane-generation pass.");
                 return;
             }
 
             if (registeredBeforeLaneSystem)
             {
-                log.Warn($"[SplitLaneConnectionFix] Scheduled before TrafficLaneSystem in {SystemUpdatePhase.Modification4}, but could not constrain after SyncCustomLaneConnectionsSystem. afterError={afterError}");
+                log.Warn($"[SplitLaneConnectionFix] Pre-lane writer scheduled before TrafficLaneSystem in {SystemUpdatePhase.Modification4}, but could not constrain after SyncCustomLaneConnectionsSystem. afterError={afterError}");
                 return;
             }
 
-            updateSystem.UpdateAt<SplitLaneConnectionFixSystem>(SystemUpdatePhase.Modification4);
-            log.Warn($"[SplitLaneConnectionFix] Traffic is enabled but ordered Traffic systems were not found; scheduled at {SystemUpdatePhase.Modification4} as a fallback. beforeError={beforeError} afterError={afterError}");
+            updateSystem.UpdateAt<SplitLaneConnectionFixSystem>(SystemUpdatePhase.Modification3);
+            log.Warn($"[SplitLaneConnectionFix] Traffic is enabled but TrafficLaneSystem ordering was not available; pre-lane writer scheduled at {SystemUpdatePhase.Modification3} fallback so Updated markers are present before TrafficLaneSystem. beforeError={beforeError} afterError={afterError}");
         }
 
-        private static bool TryRegisterUpdateOrder(UpdateSystem updateSystem, string methodName, Type otherSystemType, SystemUpdatePhase phase, out string error)
+        private static void RegisterSplitLaneConnectionCleanup(UpdateSystem updateSystem, Type modificationDataSyncSystemType)
+        {
+            if (TryRegisterUpdateOrder(
+                    updateSystem,
+                    typeof(SplitLaneConnectionCleanupSystem),
+                    nameof(UpdateSystem.UpdateAfter),
+                    modificationDataSyncSystemType,
+                    SystemUpdatePhase.Modification4B,
+                    out string cleanupAfterError))
+            {
+                log.Info($"[SplitLaneConnectionFix] Post-lane cleanup scheduled in {SystemUpdatePhase.Modification4B} after Traffic ModificationDataSyncSystem; direct connector cleanup runs after TrafficLaneSystem has generated lanes.");
+                return;
+            }
+
+            updateSystem.UpdateAt<SplitLaneConnectionCleanupSystem>(SystemUpdatePhase.Modification4B);
+            log.Warn($"[SplitLaneConnectionFix] Post-lane cleanup scheduled at {SystemUpdatePhase.Modification4B} fallback. cleanupAfterError={cleanupAfterError}");
+        }
+
+        private static bool TryRegisterUpdateOrder(UpdateSystem updateSystem, Type systemType, string methodName, Type otherSystemType, SystemUpdatePhase phase, out string error)
         {
             error = string.Empty;
+            if (systemType == null)
+            {
+                error = "systemTypeNotFound";
+                return false;
+            }
+
             if (otherSystemType == null)
             {
                 error = "targetTypeNotFound";
@@ -120,7 +153,7 @@ namespace PocketTurnLanes
                     return false;
                 }
 
-                method.MakeGenericMethod(typeof(SplitLaneConnectionFixSystem), otherSystemType)
+                method.MakeGenericMethod(systemType, otherSystemType)
                     .Invoke(updateSystem, new object[] { phase });
                 return true;
             }
@@ -143,6 +176,13 @@ namespace PocketTurnLanes
             }
 
             return null;
+        }
+
+        private static string FormatType(Type type)
+        {
+            return type == null
+                ? "missing"
+                : $"{type.FullName}, assembly={type.Assembly.GetName().Name}";
         }
 
         private static bool IsTrafficModEnabled()

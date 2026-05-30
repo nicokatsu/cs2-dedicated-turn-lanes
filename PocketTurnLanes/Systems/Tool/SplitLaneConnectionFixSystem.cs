@@ -42,12 +42,18 @@ namespace PocketTurnLanes.Systems.Tool
         private TrafficApi m_TrafficApi;
         private bool m_TrafficUnavailableLogged;
         private int m_TrafficRuntimeWaitFrames;
+        private EntityQuery m_LaneRefreshOwnerQuery;
 
         protected override void OnCreate()
         {
             base.OnCreate();
             m_CityConfigurationSystem = World.GetOrCreateSystemManaged<CityConfigurationSystem>();
-            Mod.log.Info("[SplitLaneConnectionFix] Created. Traffic lane connection repair runs only after final apply verification.");
+            m_LaneRefreshOwnerQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<SubLane>() },
+                Any = new[] { ComponentType.ReadOnly<Updated>(), ComponentType.ReadOnly<Deleted>() }
+            });
+            Mod.log.Info("[SplitLaneConnectionFix] Created. Traffic lane connection writer runs only after final apply verification and before TrafficLaneSystem when ordered registration is available.");
         }
 
         protected override void OnUpdate()
@@ -107,54 +113,6 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     if (request.TrafficWritten)
                     {
-                        if (UnityEngine.Time.frameCount <= request.TrafficWriteFrame)
-                        {
-                            m_Requests[i] = request;
-                            continue;
-                        }
-
-                        if (VerifyConnectorLanes(request))
-                        {
-                            request.StableVerificationFrames++;
-                            if (request.StableVerificationFrames >= RequiredStableVerificationFrames)
-                            {
-                                Mod.log.Info($"[SplitLaneConnectionFix] Completed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} leftHandTraffic={m_CityConfigurationSystem.leftHandTraffic} verificationAttempts={request.VerificationAttempts} stableFrames={request.StableVerificationFrames}/{RequiredStableVerificationFrames}.");
-                                m_Requests.RemoveAt(i);
-                                continue;
-                            }
-
-                            Mod.log.Info($"[SplitLaneConnectionFix] Connector verification stable splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} stableFrames={request.StableVerificationFrames}/{RequiredStableVerificationFrames}.");
-                            m_Requests[i] = request;
-                            continue;
-                        }
-
-                        request.StableVerificationFrames = 0;
-                        if (!TryRebuildConnectorLanes(ref request, out DirectRebuildStats retryStats))
-                        {
-                            request.VerificationAttempts++;
-                            Mod.log.Warn($"[SplitLaneConnectionFix] Direct connector rebuild retry failed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)} reason={retryStats.Reason} attempt={request.VerificationAttempts}/{MaxVerificationRetries}.");
-                            if (request.VerificationAttempts > MaxVerificationRetries)
-                            {
-                                Mod.log.Warn($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; direct connector rebuild could not be re-applied.");
-                                m_Requests.RemoveAt(i);
-                                continue;
-                            }
-
-                            m_Requests[i] = request;
-                            continue;
-                        }
-
-                        if (request.VerificationAttempts > MaxVerificationRetries)
-                        {
-                            Mod.log.Warn($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; direct connector rebuild was applied but verification never stabilized.");
-                            m_Requests.RemoveAt(i);
-                            continue;
-                        }
-
-                        request.VerificationAttempts++;
-                        request.TrafficWriteFrame = UnityEngine.Time.frameCount;
-                        request.StableVerificationFrames = 0;
-                        Mod.log.Info($"[SplitLaneConnectionFix] Direct connector rebuild pending verification splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)} kept={retryStats.Kept} cloned={retryStats.Cloned} deleted={retryStats.Deleted} deletedUturn={retryStats.DeletedUturn} updated={retryStats.Updated} attempt={request.VerificationAttempts}/{MaxVerificationRetries}.");
                         m_Requests[i] = request;
                         continue;
                     }
@@ -181,17 +139,10 @@ namespace PocketTurnLanes.Systems.Tool
                         continue;
                     }
 
-                    if (!TryRebuildConnectorLanes(ref request, out DirectRebuildStats stats))
-                    {
-                        Mod.log.Warn($"[SplitLaneConnectionFix] Direct connector rebuild failed after Traffic write splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} reason={stats.Reason} mappings={FormatMappings(request.Mappings)}.");
-                        m_Requests.RemoveAt(i);
-                        continue;
-                    }
-
                     request.TrafficWritten = true;
                     request.TrafficWriteFrame = UnityEngine.Time.frameCount;
                     request.StableVerificationFrames = 0;
-                    Mod.log.Info($"[SplitLaneConnectionFix] Wrote Traffic lane mapping and directly rebuilt connectors splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} sourceOrder={FormatLaneOrder(request.SourceLanes)} targetOrder={FormatLaneOrder(request.TargetLanes)} reverseSourceOrder={FormatLaneOrder(request.ReverseSourceLanes)} reverseTargetOrder={FormatLaneOrder(request.ReverseTargetLanes)} extraLane={request.ExtraTargetLaneIndex} turn={request.Turn} branchSource={request.BranchSourceLaneIndex} kept={stats.Kept} cloned={stats.Cloned} deleted={stats.Deleted} deletedUturn={stats.DeletedUturn} updated={stats.Updated} leftHandTraffic={m_CityConfigurationSystem.leftHandTraffic}.");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Wrote Traffic lane mapping; direct connector cleanup deferred until post-lane phase splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} sourceOrder={FormatLaneOrder(request.SourceLanes)} targetOrder={FormatLaneOrder(request.TargetLanes)} reverseSourceOrder={FormatLaneOrder(request.ReverseSourceLanes)} reverseTargetOrder={FormatLaneOrder(request.ReverseTargetLanes)} extraLane={request.ExtraTargetLaneIndex} turn={request.Turn} branchSource={request.BranchSourceLaneIndex} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()} leftHandTraffic={m_CityConfigurationSystem.leftHandTraffic}.");
                     m_Requests[i] = request;
                 }
                 catch (Exception ex)
@@ -199,6 +150,92 @@ namespace PocketTurnLanes.Systems.Tool
                     Mod.log.Warn(ex, $"[SplitLaneConnectionFix] Unhandled exception while repairing splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
                     m_Requests.RemoveAt(i);
                 }
+            }
+        }
+
+        internal void ProcessPostLaneGenerationCleanup()
+        {
+            if (m_Requests.Count == 0)
+            {
+                return;
+            }
+
+            EntityManager.CompleteAllTrackedJobs();
+
+            int pendingTrafficWrite = 0;
+            int processed = 0;
+            for (int i = m_Requests.Count - 1; i >= 0; i--)
+            {
+                Request request = m_Requests[i];
+                if (!request.TrafficWritten)
+                {
+                    pendingTrafficWrite++;
+                    continue;
+                }
+
+                if (UnityEngine.Time.frameCount <= request.TrafficWriteFrame)
+                {
+                    m_Requests[i] = request;
+                    continue;
+                }
+
+                processed++;
+                try
+                {
+                    if (VerifyConnectorLanes(request))
+                    {
+                        request.StableVerificationFrames++;
+                        if (request.StableVerificationFrames >= RequiredStableVerificationFrames)
+                        {
+                            Mod.log.Info($"[SplitLaneConnectionFix] Completed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} leftHandTraffic={m_CityConfigurationSystem.leftHandTraffic} verificationAttempts={request.VerificationAttempts} stableFrames={request.StableVerificationFrames}/{RequiredStableVerificationFrames}.");
+                            m_Requests.RemoveAt(i);
+                            continue;
+                        }
+
+                        Mod.log.Info($"[SplitLaneConnectionFix] Post-lane connector verification stable splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} stableFrames={request.StableVerificationFrames}/{RequiredStableVerificationFrames}.");
+                        m_Requests[i] = request;
+                        continue;
+                    }
+
+                    request.StableVerificationFrames = 0;
+                    if (!TryRebuildConnectorLanes(ref request, out DirectRebuildStats retryStats))
+                    {
+                        request.VerificationAttempts++;
+                        Mod.log.Warn($"[SplitLaneConnectionFix] Post-lane direct connector rebuild retry failed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)} reason={retryStats.Reason} attempt={request.VerificationAttempts}/{MaxVerificationRetries} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
+                        if (request.VerificationAttempts > MaxVerificationRetries)
+                        {
+                            Mod.log.Warn($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; post-lane direct connector rebuild could not be re-applied.");
+                            m_Requests.RemoveAt(i);
+                            continue;
+                        }
+
+                        m_Requests[i] = request;
+                        continue;
+                    }
+
+                    if (request.VerificationAttempts > MaxVerificationRetries)
+                    {
+                        Mod.log.Warn($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; post-lane direct connector rebuild was applied but verification never stabilized.");
+                        m_Requests.RemoveAt(i);
+                        continue;
+                    }
+
+                    request.VerificationAttempts++;
+                    request.TrafficWriteFrame = UnityEngine.Time.frameCount;
+                    request.StableVerificationFrames = 0;
+                    Mod.log.Info($"[SplitLaneConnectionFix] Post-lane direct connector rebuild pending verification splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)} kept={retryStats.Kept} cloned={retryStats.Cloned} deleted={retryStats.Deleted} deletedUturn={retryStats.DeletedUturn} updated={retryStats.Updated} attempt={request.VerificationAttempts}/{MaxVerificationRetries} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
+                    m_Requests[i] = request;
+                }
+                catch (Exception ex)
+                {
+                    Mod.log.Warn(ex, $"[SplitLaneConnectionFix] Unhandled exception during post-lane cleanup splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
+                    m_Requests.RemoveAt(i);
+                }
+            }
+
+            if (processed > 0 || pendingTrafficWrite > 0)
+            {
+                Mod.log.Info($"[SplitLaneConnectionFix] Post-lane cleanup pass frame={UnityEngine.Time.frameCount} processed={processed} pendingTrafficWrite={pendingTrafficWrite} remaining={m_Requests.Count} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
             }
         }
 
@@ -247,10 +284,10 @@ namespace PocketTurnLanes.Systems.Tool
                 QueuedFrame = UnityEngine.Time.frameCount
             });
 
-            MarkUpdatedIfExists(splitNode);
-            MarkUpdatedIfExists(pocketEdge);
-            MarkUpdatedIfExists(originalEdge);
-            Mod.log.Info($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} intersection={FormatEntity(intersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} frame={UnityEngine.Time.frameCount}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
+            bool splitUpdated = MarkUpdatedIfExists(splitNode, out bool splitAlreadyUpdated);
+            bool pocketUpdated = MarkUpdatedIfExists(pocketEdge, out bool pocketAlreadyUpdated);
+            bool originalUpdated = MarkUpdatedIfExists(originalEdge, out bool originalAlreadyUpdated);
+            Mod.log.Info($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} intersection={FormatEntity(intersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} frame={UnityEngine.Time.frameCount} preMarkedUpdated=split:{FormatUpdateMarker(splitUpdated, splitAlreadyUpdated)},pocket:{FormatUpdateMarker(pocketUpdated, pocketAlreadyUpdated)},original:{FormatUpdateMarker(originalUpdated, originalAlreadyUpdated)}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
         }
 
         private bool TryPrepareMappings(ref Request request)
@@ -2014,8 +2051,10 @@ namespace PocketTurnLanes.Systems.Tool
 
         private void MarkForLaneRebuild(Request request)
         {
-            int updatedNodes = MarkUpdatedIfExists(request.SplitNode) ? 1 : 0;
+            int updatedNodes = MarkUpdatedIfExists(request.SplitNode, out bool splitAlreadyUpdated) ? 1 : 0;
+            int alreadyUpdatedNodes = splitAlreadyUpdated ? 1 : 0;
             int updatedEdges = 0;
+            int alreadyUpdatedEdges = 0;
             int scannedEdges = 0;
 
             if (EntityManager.TryGetBuffer(request.SplitNode, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
@@ -2031,9 +2070,13 @@ namespace PocketTurnLanes.Systems.Tool
                         continue;
                     }
 
-                    if (MarkUpdatedIfExists(edgeEntity))
+                    if (MarkUpdatedIfExists(edgeEntity, out bool edgeAlreadyUpdated))
                     {
                         updatedEdges++;
+                    }
+                    else if (edgeAlreadyUpdated)
+                    {
+                        alreadyUpdatedEdges++;
                     }
 
                     if (EntityManager.TryGetComponent(edgeEntity, out NetEdge edge))
@@ -2043,40 +2086,65 @@ namespace PocketTurnLanes.Systems.Tool
                             : edge.m_End == request.SplitNode
                                 ? edge.m_Start
                                 : Entity.Null;
-                        if (MarkUpdatedIfExists(otherNode))
+                        if (MarkUpdatedIfExists(otherNode, out bool otherNodeAlreadyUpdated))
                         {
                             updatedNodes++;
+                        }
+                        else if (otherNodeAlreadyUpdated)
+                        {
+                            alreadyUpdatedNodes++;
                         }
                     }
                 }
             }
 
-            if (MarkUpdatedIfExists(request.PocketEdge))
+            if (MarkUpdatedIfExists(request.PocketEdge, out bool pocketAlreadyUpdated))
             {
                 updatedEdges++;
             }
+            else if (pocketAlreadyUpdated)
+            {
+                alreadyUpdatedEdges++;
+            }
 
-            if (MarkUpdatedIfExists(request.OuterEdge))
+            if (MarkUpdatedIfExists(request.OuterEdge, out bool outerAlreadyUpdated))
             {
                 updatedEdges++;
             }
+            else if (outerAlreadyUpdated)
+            {
+                alreadyUpdatedEdges++;
+            }
 
-            if (MarkUpdatedIfExists(request.OriginalEdge))
+            if (MarkUpdatedIfExists(request.OriginalEdge, out bool originalAlreadyUpdated))
             {
                 updatedEdges++;
             }
+            else if (originalAlreadyUpdated)
+            {
+                alreadyUpdatedEdges++;
+            }
 
-            Mod.log.Info($"[SplitLaneConnectionFix] Marked lane rebuild neighborhood splitNode={FormatEntity(request.SplitNode)} scannedConnectedEdges={scannedEdges} updatedNodes={updatedNodes} updatedEdges={updatedEdges} pocketEdge={FormatEntity(request.PocketEdge)} outerEdge={FormatEntity(request.OuterEdge)} originalEdge={FormatEntity(request.OriginalEdge)}.");
+            Mod.log.Info($"[SplitLaneConnectionFix] Marked lane rebuild neighborhood splitNode={FormatEntity(request.SplitNode)} scannedConnectedEdges={scannedEdges} addedUpdatedNodes={updatedNodes} alreadyUpdatedNodes={alreadyUpdatedNodes} addedUpdatedEdges={updatedEdges} alreadyUpdatedEdges={alreadyUpdatedEdges} pocketEdge={FormatEntity(request.PocketEdge)} outerEdge={FormatEntity(request.OuterEdge)} originalEdge={FormatEntity(request.OriginalEdge)} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
         }
 
         private bool MarkUpdatedIfExists(Entity entity)
         {
+            return MarkUpdatedIfExists(entity, out _);
+        }
+
+        private bool MarkUpdatedIfExists(Entity entity, out bool alreadyUpdated)
+        {
+            alreadyUpdated = false;
             if (entity != Entity.Null &&
-                EntityManager.Exists(entity) &&
-                !EntityManager.HasComponent<Updated>(entity))
+                EntityManager.Exists(entity))
             {
-                EntityManager.AddComponent<Updated>(entity);
-                return true;
+                alreadyUpdated = EntityManager.HasComponent<Updated>(entity);
+                if (!alreadyUpdated)
+                {
+                    EntityManager.AddComponent<Updated>(entity);
+                    return true;
+                }
             }
 
             return false;
@@ -2105,6 +2173,16 @@ namespace PocketTurnLanes.Systems.Tool
         private static string FormatEntity(Entity entity)
         {
             return $"{entity.Index}:{entity.Version}";
+        }
+
+        private static string FormatUpdateMarker(bool added, bool alreadyUpdated)
+        {
+            if (added)
+            {
+                return "added";
+            }
+
+            return alreadyUpdated ? "already" : "missing";
         }
 
         private static string FormatLaneOrder(IReadOnlyList<LaneEndpoint> lanes)
