@@ -42,6 +42,7 @@ namespace PocketTurnLanes.Systems.Tool
         private const float PocketEdgeLengthTolerance = 4f;
         private const float MergedEdgeLengthTolerance = 12f;
         private const float NodeMergePreviewEdgeExitDistance = 6f;
+        private const float NodeMergePreviewIntersectionBoundsMargin = 0.75f;
 
         public override string toolID => $"{Mod.ModId} Intersection Tool";
 
@@ -452,19 +453,45 @@ namespace PocketTurnLanes.Systems.Tool
                     continue;
                 }
 
-                float distance = math.distance(node.m_Position.xz, hit.m_Position.xz);
-                float exitDistance = originalEdge == candidate.ShortEdge
-                    ? math.min(MaxNodePickDistance, math.max(NodeMergePreviewEdgeExitDistance, candidate.ShortEdgeLength * 0.6f))
-                    : NodeMergePreviewEdgeExitDistance;
-                if (distance <= exitDistance)
+                if (IsRaycastInsideNodeMergePreviewIntersection(candidate.Node, hit, out string boundsDetail))
                 {
                     return false;
                 }
 
-                Mod.log.Info($"[IntersectionTool] Raycast moved onto road-node merge fallback edge away from intersection; clearing hover preview edge={FormatEntity(edgeEntity)} originalEdge={FormatEntity(originalEdge)} node={FormatEntity(candidate.Node)} shortEdge={FormatEntity(candidate.ShortEdge)} continuation={FormatEntity(candidate.ContinuationEdge)} hitDistance={distance:0.##}m threshold={exitDistance:0.##}m baseThreshold={NodeMergePreviewEdgeExitDistance:0.##}m shortLength={candidate.ShortEdgeLength:0.##}m.");
+                Mod.log.Info($"[IntersectionTool] Raycast moved onto road-node merge fallback preview edge outside the intersection; clearing hover preview edge={FormatEntity(edgeEntity)} originalEdge={FormatEntity(originalEdge)} node={FormatEntity(candidate.Node)} shortEdge={FormatEntity(candidate.ShortEdge)} continuation={FormatEntity(candidate.ContinuationEdge)} {boundsDetail}.");
                 return true;
             }
 
+            return false;
+        }
+
+        private bool IsRaycastInsideNodeMergePreviewIntersection(
+            Entity nodeEntity,
+            RaycastHit hit,
+            out string detail)
+        {
+            if (EntityManager.TryGetComponent(nodeEntity, out NodeGeometry geometry))
+            {
+                float3 min = geometry.m_Bounds.min;
+                float3 max = geometry.m_Bounds.max;
+                bool inside =
+                    hit.m_Position.x >= min.x - NodeMergePreviewIntersectionBoundsMargin &&
+                    hit.m_Position.x <= max.x + NodeMergePreviewIntersectionBoundsMargin &&
+                    hit.m_Position.z >= min.z - NodeMergePreviewIntersectionBoundsMargin &&
+                    hit.m_Position.z <= max.z + NodeMergePreviewIntersectionBoundsMargin;
+                detail = $"hit=({hit.m_Position.x:0.##},{hit.m_Position.z:0.##}) boundsMin=({min.x:0.##},{min.z:0.##}) boundsMax=({max.x:0.##},{max.z:0.##}) margin={NodeMergePreviewIntersectionBoundsMargin:0.##}m insideBounds={inside}";
+                return inside;
+            }
+
+            if (EntityManager.TryGetComponent(nodeEntity, out Node node))
+            {
+                float distance = math.distance(node.m_Position.xz, hit.m_Position.xz);
+                bool inside = distance <= NodeMergePreviewEdgeExitDistance;
+                detail = $"hitDistance={distance:0.##}m fallbackThreshold={NodeMergePreviewEdgeExitDistance:0.##}m insideFallback={inside}";
+                return inside;
+            }
+
+            detail = "missing NodeGeometry and Node";
             return false;
         }
 
