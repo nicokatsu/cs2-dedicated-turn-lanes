@@ -12,6 +12,7 @@ using PocketTurnLanes.Tool;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using static PocketTurnLanes.Tool.RoadLaneCountMatcher;
 
 namespace PocketTurnLanes.Systems.Tool
 {
@@ -2155,12 +2156,6 @@ namespace PocketTurnLanes.Systems.Tool
             return true;
         }
 
-        private static bool CountsEqual(RoadLaneCounts first, RoadLaneCounts second)
-        {
-            return first.Forward == second.Forward &&
-                   first.Backward == second.Backward;
-        }
-
         private static bool LooksLikeRoadBuilderRoadPrefabName(string prefabName)
         {
             return !string.IsNullOrEmpty(prefabName) &&
@@ -2190,16 +2185,6 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             sampleCount++;
-        }
-
-        private static bool CountsMatchForOrientation(
-            RoadLaneCounts candidateCounts,
-            RoadLaneCounts desiredCounts,
-            bool invert)
-        {
-            return invert
-                ? CountsEqual(candidateCounts, desiredCounts.Swapped())
-                : CountsEqual(candidateCounts, desiredCounts);
         }
 
         private static CompositionFlags.Side GetTramTrackSideFlags()

@@ -8,6 +8,7 @@ using Game.Notifications;
 using Game.Prefabs;
 using Game.Tools;
 using PocketTurnLanes.Systems.Overlay;
+using PocketTurnLanes.Tool;
 using Unity.Entities;
 using Unity.Jobs;
 
@@ -492,7 +493,7 @@ namespace PocketTurnLanes.Systems.Tool
 
         private static string FormatEntity(Entity entity)
         {
-            return $"{entity.Index}:{entity.Version}";
+            return DiagnosticFormat.Entity(entity);
         }
 
         private void ToolChanged(ToolBaseSystem system)

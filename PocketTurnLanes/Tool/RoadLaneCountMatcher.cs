@@ -46,5 +46,21 @@ namespace PocketTurnLanes.Tool
             invert = false;
             return false;
         }
+
+        public static bool CountsEqual(RoadLaneCounts first, RoadLaneCounts second)
+        {
+            return first.Forward == second.Forward &&
+                   first.Backward == second.Backward;
+        }
+
+        public static bool CountsMatchForOrientation(
+            RoadLaneCounts candidateCounts,
+            RoadLaneCounts desiredCounts,
+            bool invert)
+        {
+            return invert
+                ? CountsEqual(candidateCounts, desiredCounts.Swapped())
+                : CountsEqual(candidateCounts, desiredCounts);
+        }
     }
 }

@@ -3050,7 +3050,7 @@ namespace PocketTurnLanes.Systems.Tool
 
         private static string FormatEntity(Entity entity)
         {
-            return $"{entity.Index}:{entity.Version}";
+            return DiagnosticFormat.Entity(entity);
         }
 
         private static string FormatUpdateMarker(bool added, bool alreadyUpdated)
@@ -3075,7 +3075,7 @@ namespace PocketTurnLanes.Systems.Tool
 
         private static string FormatFloat3(float3 value)
         {
-            return $"({value.x:0.##},{value.y:0.##},{value.z:0.##})";
+            return DiagnosticFormat.Float3(value);
         }
 
         private static string FormatMappings(IReadOnlyList<LaneMapping> mappings)
