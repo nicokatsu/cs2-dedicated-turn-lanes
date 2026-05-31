@@ -24,31 +24,51 @@ namespace PocketTurnLanes.Tool
 
         public static bool IsTrafficModEnabled()
         {
+            return DetectTrafficMod().DetectedOnLoad;
+        }
+
+        public static TrafficIntegrationStatus DetectTrafficMod()
+        {
             TryGetEnabledMods(out string[] enabledMods, out string enabledModsError);
             string[] enabledModMatches = enabledMods.Where(IsTrafficModId).ToArray();
             bool assemblyLoaded = TryFindTrafficAssembly(out string assemblyDetail);
             int foundRuntimeTypes = CountTrafficRuntimeTypes(out string runtimeTypeDetail);
             bool enabled = enabledModMatches.Length > 0 || assemblyLoaded || foundRuntimeTypes > 0;
+            TrafficIntegrationStatus status = new TrafficIntegrationStatus
+            {
+                DetectionCompleted = true,
+                DetectedOnLoad = enabled,
+                RuntimeReady = false,
+                LastRuntimeError = enabled ? "Traffic API has not been initialized yet" : "Traffic was not detected during OnLoad",
+                EnabledModMatches = FormatList(enabledModMatches),
+                EnabledModsCount = enabledMods.Length,
+                EnabledModsError = enabledModsError,
+                LoadedAssembly = assemblyDetail,
+                RuntimeTypesFound = foundRuntimeTypes,
+                RuntimeTypesExpected = TrafficRuntimeTypeNames.Length,
+                RuntimeTypes = runtimeTypeDetail
+            };
 
-            Mod.log.Info($"[SplitLaneConnectionFix] Traffic enabled check result={enabled} enabledModMatches={FormatList(enabledModMatches)} enabledModsCount={enabledMods.Length} enabledMods={FormatList(enabledMods)} enabledModsError={enabledModsError} loadedAssembly={assemblyDetail} runtimeTypesFound={foundRuntimeTypes}/{TrafficRuntimeTypeNames.Length} runtimeTypes={runtimeTypeDetail}");
-            return enabled;
+            Mod.LogEssential($"[SplitLaneConnectionFix] Traffic enabled check result={enabled} enabledModMatches={status.EnabledModMatches} runtimeTypesFound={foundRuntimeTypes}/{TrafficRuntimeTypeNames.Length} loadedAssembly={assemblyLoaded}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic enabled check detail enabledModsCount={enabledMods.Length} enabledMods={FormatList(enabledMods)} enabledModsError={enabledModsError} loadedAssembly={assemblyDetail} runtimeTypes={runtimeTypeDetail}");
+            return status;
         }
 
         public static bool ShouldEnableLaneConnectionRepair(bool trafficDetected)
         {
             if (trafficDetected)
             {
-                Mod.log.Info("[SplitLaneConnectionFix] Traffic lane connection repair systems enabled because Traffic was detected during OnLoad.");
+                Mod.LogEssential("[SplitLaneConnectionFix] Traffic lane connection repair systems enabled because Traffic was detected during OnLoad.");
                 return true;
             }
 
             if (TrafficDependencyDeclared)
             {
-                Mod.log.Info($"[SplitLaneConnectionFix] Traffic was not positively detected during OnLoad; registering split-node lane connection repair systems in guarded fallback mode because dependency {TrafficWorkshopId} is declared. Runtime reflection will wait briefly and skip queued repairs if Traffic remains unavailable.");
+                Mod.LogEssential($"[SplitLaneConnectionFix] Traffic was not positively detected during OnLoad; registering split-node lane connection repair systems in guarded fallback mode because dependency {TrafficWorkshopId} is declared. Runtime reflection will wait briefly and skip queued repairs if Traffic remains unavailable.");
                 return true;
             }
 
-            Mod.log.Info("[SplitLaneConnectionFix] Traffic was not positively detected during OnLoad and no Traffic dependency is declared; split-node lane connection repair systems will stay disabled.");
+            Mod.LogEssential("[SplitLaneConnectionFix] Traffic was not positively detected during OnLoad and no Traffic dependency is declared; split-node lane connection repair systems will stay disabled.");
             return false;
         }
 
@@ -56,7 +76,7 @@ namespace PocketTurnLanes.Tool
         {
             if (!repairEnabled)
             {
-                Mod.log.Info("[SplitLaneConnectionFix] Split-node lane connection repair system will not be registered.");
+                Mod.LogEssential("[SplitLaneConnectionFix] Split-node lane connection repair system will not be registered.");
                 return;
             }
 
@@ -64,7 +84,7 @@ namespace PocketTurnLanes.Tool
             Type syncCustomLaneConnectionsSystemType = FindType("Traffic.Systems.LaneConnections.SyncCustomLaneConnectionsSystem");
             Type modificationDataSyncSystemType = FindType("Traffic.Systems.ModificationDataSyncSystem");
 
-            Mod.log.Info($"[SplitLaneConnectionFix] Traffic type lookup trafficDetectedOnLoad={trafficDetected} TrafficLaneSystem={FormatType(trafficLaneSystemType)} SyncCustomLaneConnectionsSystem={FormatType(syncCustomLaneConnectionsSystemType)} ModificationDataSyncSystem={FormatType(modificationDataSyncSystemType)}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic type lookup trafficDetectedOnLoad={trafficDetected} TrafficLaneSystem={FormatType(trafficLaneSystemType)} SyncCustomLaneConnectionsSystem={FormatType(syncCustomLaneConnectionsSystemType)} ModificationDataSyncSystem={FormatType(modificationDataSyncSystemType)}.");
 
             bool registeredBeforeLaneSystem = TryRegisterUpdateOrder(
                 updateSystem,
@@ -86,18 +106,18 @@ namespace PocketTurnLanes.Tool
 
             if (registeredBeforeLaneSystem && registeredAfterSync)
             {
-                Mod.log.Info($"[SplitLaneConnectionFix] Pre-lane writer scheduled in {SystemUpdatePhase.Modification4} after Traffic SyncCustomLaneConnectionsSystem and before TrafficLaneSystem so lane visuals refresh in the same lane-generation pass.");
+                Mod.LogEssential($"[SplitLaneConnectionFix] Pre-lane writer scheduled in {SystemUpdatePhase.Modification4} after Traffic SyncCustomLaneConnectionsSystem and before TrafficLaneSystem so lane visuals refresh in the same lane-generation pass.");
                 return;
             }
 
             if (registeredBeforeLaneSystem)
             {
-                Mod.log.Info($"[SplitLaneConnectionFix] Pre-lane writer scheduled before TrafficLaneSystem in {SystemUpdatePhase.Modification4}, but could not constrain after SyncCustomLaneConnectionsSystem. afterError={afterError}");
+                Mod.LogEssential($"[SplitLaneConnectionFix] Pre-lane writer scheduled before TrafficLaneSystem in {SystemUpdatePhase.Modification4}, but could not constrain after SyncCustomLaneConnectionsSystem. afterError={afterError}");
                 return;
             }
 
             updateSystem.UpdateAt<SplitLaneConnectionFixSystem>(SystemUpdatePhase.Modification3);
-            Mod.log.Info($"[SplitLaneConnectionFix] TrafficLaneSystem ordering was not available; pre-lane writer scheduled at {SystemUpdatePhase.Modification3} fallback so Updated markers are present before TrafficLaneSystem when Traffic is loaded. trafficDetectedOnLoad={trafficDetected} beforeError={beforeError} afterError={afterError}");
+            Mod.LogEssential($"[SplitLaneConnectionFix] TrafficLaneSystem ordering was not available; pre-lane writer scheduled at {SystemUpdatePhase.Modification3} fallback so Updated markers are present before TrafficLaneSystem when Traffic is loaded. trafficDetectedOnLoad={trafficDetected} beforeError={beforeError} afterError={afterError}");
         }
 
         private static void RegisterSplitLaneConnectionCleanup(UpdateSystem updateSystem, Type modificationDataSyncSystemType)
@@ -110,12 +130,12 @@ namespace PocketTurnLanes.Tool
                     SystemUpdatePhase.Modification4B,
                     out string cleanupAfterError))
             {
-                Mod.log.Info($"[SplitLaneConnectionFix] Post-lane cleanup scheduled in {SystemUpdatePhase.Modification4B} after Traffic ModificationDataSyncSystem; direct connector cleanup runs after TrafficLaneSystem has generated lanes.");
+                Mod.LogEssential($"[SplitLaneConnectionFix] Post-lane cleanup scheduled in {SystemUpdatePhase.Modification4B} after Traffic ModificationDataSyncSystem; direct connector cleanup runs after TrafficLaneSystem has generated lanes.");
                 return;
             }
 
             updateSystem.UpdateAt<SplitLaneConnectionCleanupSystem>(SystemUpdatePhase.Modification4B);
-            Mod.log.Info($"[SplitLaneConnectionFix] Post-lane cleanup scheduled at {SystemUpdatePhase.Modification4B} fallback. cleanupAfterError={cleanupAfterError}");
+            Mod.LogEssential($"[SplitLaneConnectionFix] Post-lane cleanup scheduled at {SystemUpdatePhase.Modification4B} fallback. cleanupAfterError={cleanupAfterError}");
         }
 
         private static bool TryRegisterUpdateOrder(UpdateSystem updateSystem, Type systemType, string methodName, Type otherSystemType, SystemUpdatePhase phase, out string error)
@@ -201,7 +221,7 @@ namespace PocketTurnLanes.Tool
             {
                 enabledMods = Array.Empty<string>();
                 error = $"{ex.GetType().Name}:{ex.Message}";
-                Mod.log.Info(ex, "[SplitLaneConnectionFix] Could not inspect enabled mods for Traffic; falling back to loaded Traffic assembly/type evidence.");
+                Mod.LogException(ex, "[SplitLaneConnectionFix] Could not inspect enabled mods for Traffic; falling back to loaded Traffic assembly/type evidence.");
                 return false;
             }
         }

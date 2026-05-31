@@ -10,7 +10,7 @@ namespace PocketTurnLanes.Systems.Tool
         {
             base.OnCreate();
             m_FixSystem = World.GetOrCreateSystemManaged<SplitLaneConnectionFixSystem>();
-            Mod.log.Info("[SplitLaneConnectionFix] Post-lane cleanup system created. It verifies and directly cleans split-node connector lanes after Traffic lane generation.");
+            Mod.LogEssential("[SplitLaneConnectionFix] Post-lane cleanup system created. It verifies and directly cleans split-node connector lanes after Traffic lane generation.");
         }
 
         protected override void OnUpdate()

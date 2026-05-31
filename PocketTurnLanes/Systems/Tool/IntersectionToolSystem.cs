@@ -160,7 +160,7 @@ namespace PocketTurnLanes.Systems.Tool
             {
                 applyMode = ApplyMode.Clear;
                 result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, result);
-                Mod.log.Info("[IntersectionTool] Split apply window closed; cleared split definition entities.");
+                Mod.LogDiagnostic("[IntersectionTool] Split apply window closed; cleared split definition entities.");
                 m_ClearSplitDefinitions = false;
 
                 if (m_VerifyAppliedReplacements)
@@ -213,7 +213,7 @@ namespace PocketTurnLanes.Systems.Tool
                 applyMode = ApplyMode.Apply;
                 m_ClearSplitDefinitions = true;
                 m_ApplyReplacementNextFrame = false;
-                Mod.log.Info($"[IntersectionTool] Applying queued pocket lane replacement definitions count={m_AppliedReplacementCandidates.Count}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Applying queued pocket lane replacement definitions count={m_AppliedReplacementCandidates.Count}.");
                 return result;
             }
 
@@ -248,7 +248,7 @@ namespace PocketTurnLanes.Systems.Tool
                     int waitedFrames = Math.Max(0, UnityEngine.Time.frameCount - m_PreviewCreatedFrame);
                     if (waitedFrames <= MaxReplacementPreviewWaitFrames)
                     {
-                        Mod.log.Info($"[IntersectionTool] Waiting for balanced road-node retry split preview before apply waitedFrames={waitedFrames}/{MaxReplacementPreviewWaitFrames} detail={balancedRetryDetail}.");
+                        Mod.LogDiagnostic($"[IntersectionTool] Waiting for balanced road-node retry split preview before apply waitedFrames={waitedFrames}/{MaxReplacementPreviewWaitFrames} detail={balancedRetryDetail}.");
                         return result;
                     }
 
@@ -260,12 +260,12 @@ namespace PocketTurnLanes.Systems.Tool
                     int waitedFrames = Math.Max(0, UnityEngine.Time.frameCount - m_PreviewCreatedFrame);
                     if (waitedFrames < BalancedRetryMinimumApplyDelayFrames)
                     {
-                        Mod.log.Info($"[IntersectionTool] Balanced road-node retry split preview is ready but waiting one more frame before apply waitedFrames={waitedFrames}/{BalancedRetryMinimumApplyDelayFrames}.");
+                        Mod.LogDiagnostic($"[IntersectionTool] Balanced road-node retry split preview is ready but waiting one more frame before apply waitedFrames={waitedFrames}/{BalancedRetryMinimumApplyDelayFrames}.");
                         return result;
                     }
 
                     AreBalancedRetrySplitNodesReady(out string balancedRetryReadyDetail);
-                    Mod.log.Info($"[IntersectionTool] Balanced road-node retry split preview is ready for apply detail={balancedRetryReadyDetail}.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Balanced road-node retry split preview is ready for apply detail={balancedRetryReadyDetail}.");
                 }
 
                 CaptureAppliedCandidates();
@@ -273,7 +273,7 @@ namespace PocketTurnLanes.Systems.Tool
                 applyMode = ApplyMode.Apply;
                 m_ClearSplitDefinitions = true;
                 m_ApplyRetryNextFrame = false;
-                Mod.log.Info($"[IntersectionTool] Applying retry split preview node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} lastEdge={FormatEntity(m_PreviewEdge)} replacementDefinitions={m_AppliedReplacementCandidates.Count}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Applying retry split preview node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} lastEdge={FormatEntity(m_PreviewEdge)} replacementDefinitions={m_AppliedReplacementCandidates.Count}.");
                 return result;
             }
 
@@ -328,7 +328,7 @@ namespace PocketTurnLanes.Systems.Tool
                 if (applyPressed)
                 {
                     m_ApplyPreviewNextFrame = true;
-                    Mod.log.Info(m_PreviewReady
+                    Mod.LogDiagnostic(m_PreviewReady
                         ? "[IntersectionTool] Click arrived as split preview finished validation; applying on the next tool frame."
                         : "[IntersectionTool] Click arrived while split preview was validating; applying after preview retry finishes.");
                 }
@@ -342,7 +342,7 @@ namespace PocketTurnLanes.Systems.Tool
                 if (applyPressed)
                 {
                     m_ApplyPreviewNextFrame = true;
-                    Mod.log.Info("[IntersectionTool] Click arrived before split preview was ready; applying on the next tool frame.");
+                    Mod.LogDiagnostic("[IntersectionTool] Click arrived before split preview was ready; applying on the next tool frame.");
                 }
 
                 return result;
@@ -369,7 +369,7 @@ namespace PocketTurnLanes.Systems.Tool
                     m_RebuildSplitPreviewForApply = true;
                     m_ApplyPreviewNextFrame = true;
                     m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
-                    Mod.log.Info($"[IntersectionTool] Preparing clean apply definitions node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} replacementPreviewDefinitions={hasReplacementPreviewDefinitions} replacementPreviewDefinitionEntities={replacementPreviewDefinitionCount} roadNodeMergeCandidates={m_PreviewNodeMergeCandidates.Count}; fresh split/merge definitions will be rebuilt before apply after preview definitions are cleared.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Preparing clean apply definitions node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} replacementPreviewDefinitions={hasReplacementPreviewDefinitions} replacementPreviewDefinitionEntities={replacementPreviewDefinitionCount} roadNodeMergeCandidates={m_PreviewNodeMergeCandidates.Count}; fresh split/merge definitions will be rebuilt before apply after preview definitions are cleared.");
                     return result;
                 }
 
@@ -385,12 +385,12 @@ namespace PocketTurnLanes.Systems.Tool
                 applyMode = ApplyMode.Apply;
                 m_ClearSplitDefinitions = true;
                 m_ApplyPreviewNextFrame = false;
-                Mod.log.Info($"[IntersectionTool] Applying prepared split preview node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} lastEdge={FormatEntity(m_PreviewEdge)} replacementDefinitions={m_AppliedReplacementCandidates.Count}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Applying prepared split preview node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} lastEdge={FormatEntity(m_PreviewEdge)} replacementDefinitions={m_AppliedReplacementCandidates.Count}.");
             }
             else if (applyPressed)
             {
                 m_ApplyPreviewNextFrame = false;
-                Mod.log.Info($"[IntersectionTool] Click ignored at node={FormatEntity(m_HoveredIntersection)}: no eligible split preview is ready.");
+                Mod.LogDiagnostic($"[IntersectionTool] Click ignored at node={FormatEntity(m_HoveredIntersection)}: no eligible split preview is ready.");
             }
 
             return result;
@@ -414,7 +414,7 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             Underground = isUnderground;
-            Mod.log.Info($"[IntersectionTool] Underground mode requested underground={Underground} active={IsToolEnabled} previousRequireUnderground={requireUnderground} collisionMask={GetCurrentCollisionMask()}.");
+            Mod.LogDiagnostic($"[IntersectionTool] Underground mode requested underground={Underground} active={IsToolEnabled} previousRequireUnderground={requireUnderground} collisionMask={GetCurrentCollisionMask()}.");
         }
 
         public override void ElevationUp()
@@ -438,7 +438,7 @@ namespace PocketTurnLanes.Systems.Tool
             if (SetToolEnabled(true))
             {
                 SetVanillaMutationSystemsEnabled(false);
-                Mod.log.Info("[IntersectionTool] Enabled. Hover an intersection to log connected road prefab information.");
+                Mod.LogEssential("[IntersectionTool] Enabled. Hover an intersection to log connected road prefab information.");
             }
         }
 
@@ -456,7 +456,7 @@ namespace PocketTurnLanes.Systems.Tool
             if (SetToolEnabled(false) || wasEnabled)
             {
                 SetVanillaMutationSystemsEnabled(true);
-                Mod.log.Info("[IntersectionTool] Disabled.");
+                Mod.LogEssential("[IntersectionTool] Disabled.");
             }
         }
 
@@ -503,7 +503,7 @@ namespace PocketTurnLanes.Systems.Tool
                 UpdateHoveredIntersection(Entity.Null);
                 SetToolEnabled(false);
                 SetVanillaMutationSystemsEnabled(true);
-                Mod.log.Info($"[IntersectionTool] Disabled because active tool changed to {system?.toolID ?? "<null>"}; restored vanilla mutation systems.");
+                Mod.LogEssential($"[IntersectionTool] Disabled because active tool changed to {system?.toolID ?? "<null>"}; restored vanilla mutation systems.");
             }
         }
 
@@ -567,7 +567,7 @@ namespace PocketTurnLanes.Systems.Tool
             applyMode = ApplyMode.Clear;
             result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, result);
 
-            Mod.log.Info($"[IntersectionTool] Underground mode synchronized underground={Underground} previousRequireUnderground={previousRequireUnderground} requireUnderground={requireUnderground} collisionMask={GetCurrentCollisionMask()} clearedPreview={hadPreviewState} previousHover={FormatEntity(previousHover)} previousPreview={FormatEntity(previousPreview)} previousPreviewEdges={previousPreviewEdges}.");
+            Mod.LogDiagnostic($"[IntersectionTool] Underground mode synchronized underground={Underground} previousRequireUnderground={previousRequireUnderground} requireUnderground={requireUnderground} collisionMask={GetCurrentCollisionMask()} clearedPreview={hadPreviewState} previousHover={FormatEntity(previousHover)} previousPreview={FormatEntity(previousPreview)} previousPreviewEdges={previousPreviewEdges}.");
             return true;
         }
 

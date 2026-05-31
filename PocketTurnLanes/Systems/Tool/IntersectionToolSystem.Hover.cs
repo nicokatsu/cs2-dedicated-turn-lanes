@@ -91,7 +91,7 @@ namespace PocketTurnLanes.Systems.Tool
                     return false;
                 }
 
-                Mod.log.Info($"[IntersectionTool] Raycast moved onto road-node merge fallback preview edge outside the intersection; clearing hover preview edge={FormatEntity(edgeEntity)} originalEdge={FormatEntity(originalEdge)} node={FormatEntity(candidate.Node)} shortEdge={FormatEntity(candidate.ShortEdge)} continuation={FormatEntity(candidate.ContinuationEdge)} {boundsDetail}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Raycast moved onto road-node merge fallback preview edge outside the intersection; clearing hover preview edge={FormatEntity(edgeEntity)} originalEdge={FormatEntity(originalEdge)} node={FormatEntity(candidate.Node)} shortEdge={FormatEntity(candidate.ShortEdge)} continuation={FormatEntity(candidate.ContinuationEdge)} {boundsDetail}.");
                 return true;
             }
 
@@ -210,7 +210,7 @@ namespace PocketTurnLanes.Systems.Tool
             if (!EntityManager.TryGetBuffer(nodeEntity, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
             {
                 builder.Append(" connectedEdges=0");
-                Mod.log.Info(builder.ToString());
+                Mod.LogDiagnostic(builder.ToString());
                 return;
             }
 
@@ -235,7 +235,7 @@ namespace PocketTurnLanes.Systems.Tool
                 builder.Append(GetPrefabName(edgeEntity));
             }
 
-            Mod.log.Info(builder.ToString());
+            Mod.LogDiagnostic(builder.ToString());
         }
 
         private JobHandle QueueSplitPreview(Entity nodeEntity, JobHandle inputDeps)
@@ -243,7 +243,7 @@ namespace PocketTurnLanes.Systems.Tool
             if (!EntityManager.TryGetBuffer(nodeEntity, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
             {
                 ResetPreviewState();
-                Mod.log.Info($"[IntersectionTool] Cannot preview split {FormatEntity(nodeEntity)}: no ConnectedEdge buffer.");
+                Mod.LogDiagnostic($"[IntersectionTool] Cannot preview split {FormatEntity(nodeEntity)}: no ConnectedEdge buffer.");
                 return inputDeps;
             }
 
@@ -280,35 +280,35 @@ namespace PocketTurnLanes.Systems.Tool
                 if (IsHighwayRoadEdge(edgeEntity, out string highwayDetail))
                 {
                     skippedCount++;
-                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: highway roads are excluded from selection and replacement matching. {highwayDetail}");
+                    Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: highway roads are excluded from selection and replacement matching. {highwayDetail}");
                     continue;
                 }
 
                 if (!HasAnyMotorRoadLane(edgeEntity, out string motorLaneDetail))
                 {
                     skippedCount++;
-                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: road has no automotive road lanes and is excluded from selection. {motorLaneDetail}");
+                    Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: road has no automotive road lanes and is excluded from selection. {motorLaneDetail}");
                     continue;
                 }
 
                 if (IsBridgeRoadEdge(edgeEntity, out string bridgeDetail))
                 {
                     skippedCount++;
-                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: bridge road prefabs are excluded from selection and replacement matching. {bridgeDetail}");
+                    Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: bridge road prefabs are excluded from selection and replacement matching. {bridgeDetail}");
                     continue;
                 }
 
                 if (!HasIncomingCarLane(nodeEntity, edgeEntity, connectedEdges))
                 {
                     skippedCount++;
-                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: no automotive road lane entering node {FormatEntity(nodeEntity)}.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: no automotive road lane entering node {FormatEntity(nodeEntity)}.");
                     continue;
                 }
 
                 if (!ApproachNeedsPocketLane(nodeEntity, edgeEntity, connectedEdges, out string demandReason))
                 {
                     skippedCount++;
-                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: no dedicated turn lane demand at node {FormatEntity(nodeEntity)}. {demandReason}");
+                    Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: no dedicated turn lane demand at node {FormatEntity(nodeEntity)}. {demandReason}");
                     continue;
                 }
 
@@ -363,7 +363,7 @@ namespace PocketTurnLanes.Systems.Tool
                         TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
                         Attempt = 0
                     });
-                    Mod.log.Info($"[IntersectionTool] Prepared split preview edge={FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} split={splitPosition:0.###} requestedPocket={targetPocketLength:0.##}m target={targetDistance:0.##}m distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m replacement={GetPrefabNameFromPrefab(prefabMatch.Prefab)} orientation={(prefabMatch.Invert ? "reversed" : "direct")} lanes={prefabMatch.OriginalCounts}->{prefabMatch.TargetCounts} frame={UnityEngine.Time.frameCount}.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Prepared split preview edge={FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} split={splitPosition:0.###} requestedPocket={targetPocketLength:0.##}m target={targetDistance:0.##}m distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m replacement={GetPrefabNameFromPrefab(prefabMatch.Prefab)} orientation={(prefabMatch.Invert ? "reversed" : "direct")} lanes={prefabMatch.OriginalCounts}->{prefabMatch.TargetCounts} frame={UnityEngine.Time.frameCount}.");
                     result = createDefinitionJobHandle;
                     lastQueuedEdge = edgeEntity;
                 }
@@ -391,7 +391,7 @@ namespace PocketTurnLanes.Systems.Tool
                     m_PreviewNodeMergeCandidates.Add(mergeCandidate);
                     nodeMergeApplyCandidateCount++;
                     lastQueuedEdge = edgeEntity;
-                    Mod.log.Info($"[IntersectionTool] Road-node merge fallback candidate found; apply candidate is queued shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} continuation={FormatEntity(mergeCandidate.ContinuationEdge)} farNode={FormatEntity(mergeCandidate.FarNode)} mode={mergeCandidate.Mode} laneRepair={mergeCandidate.LaneRepairMode} sourcePrefab={GetPrefabNameFromPrefab(mergeCandidate.SourcePrefab)} mergePrefab={GetPrefabNameFromPrefab(mergeCandidate.MergeRequest.Prefab)} targetPrefab={GetPrefabNameFromPrefab(mergeCandidate.TargetPrefab)} previewOrientation={(mergeCandidate.InvertTarget ? "reversed" : "direct")} postMergeOrientation={(mergeCandidate.PostMergeInvertTarget ? "reversed" : "direct")} shortLength={mergeCandidate.ShortEdgeLength:0.##}m continuationLength={mergeCandidate.ContinuationEdgeLength:0.##}m mergedLength={mergeCandidate.MergedLength:0.##}m nearMargin={mergeCandidate.ExpectedIntersectionDistance:0.##}m farMargin={mergeCandidate.ExpectedFarIntersectionDistance:0.##}m usable={mergeCandidate.ExpectedUsableLength:0.##}m expectedSplit={mergeCandidate.ExpectedSplitDistance:0.##}m expectedPocket={mergeCandidate.ExpectedPocketDistance:0.##}m lanes={mergeCandidate.OriginalForwardLanes}/{mergeCandidate.OriginalBackwardLanes}->{mergeCandidate.TargetForwardLanes}/{mergeCandidate.TargetBackwardLanes} frame={UnityEngine.Time.frameCount} singleShortEdgeReplacementPreview=pending-sync.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Road-node merge fallback candidate found; apply candidate is queued shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} continuation={FormatEntity(mergeCandidate.ContinuationEdge)} farNode={FormatEntity(mergeCandidate.FarNode)} mode={mergeCandidate.Mode} laneRepair={mergeCandidate.LaneRepairMode} sourcePrefab={GetPrefabNameFromPrefab(mergeCandidate.SourcePrefab)} mergePrefab={GetPrefabNameFromPrefab(mergeCandidate.MergeRequest.Prefab)} targetPrefab={GetPrefabNameFromPrefab(mergeCandidate.TargetPrefab)} previewOrientation={(mergeCandidate.InvertTarget ? "reversed" : "direct")} postMergeOrientation={(mergeCandidate.PostMergeInvertTarget ? "reversed" : "direct")} shortLength={mergeCandidate.ShortEdgeLength:0.##}m continuationLength={mergeCandidate.ContinuationEdgeLength:0.##}m mergedLength={mergeCandidate.MergedLength:0.##}m nearMargin={mergeCandidate.ExpectedIntersectionDistance:0.##}m farMargin={mergeCandidate.ExpectedFarIntersectionDistance:0.##}m usable={mergeCandidate.ExpectedUsableLength:0.##}m expectedSplit={mergeCandidate.ExpectedSplitDistance:0.##}m expectedPocket={mergeCandidate.ExpectedPocketDistance:0.##}m lanes={mergeCandidate.OriginalForwardLanes}/{mergeCandidate.OriginalBackwardLanes}->{mergeCandidate.TargetForwardLanes}/{mergeCandidate.TargetBackwardLanes} frame={UnityEngine.Time.frameCount} singleShortEdgeReplacementPreview=pending-sync.");
                 }
             }
 
@@ -407,7 +407,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
                 else
                 {
-                    Mod.log.Info($"[IntersectionTool] Deferring {nodeMergeApplyCandidateCount} short-edge replacement hover preview definition(s) until normal split preview replacement definitions can be queued in the same tool frame splitDefinitions={splitQueuedCount}.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Deferring {nodeMergeApplyCandidateCount} short-edge replacement hover preview definition(s) until normal split preview replacement definitions can be queued in the same tool frame splitDefinitions={splitQueuedCount}.");
                 }
             }
 
@@ -431,13 +431,13 @@ namespace PocketTurnLanes.Systems.Tool
                     m_OverlaySystem.Clear();
                 }
 
-                Mod.log.Info($"[IntersectionTool] Created preview/apply state around node {FormatEntity(nodeEntity)} splitDefinitions={splitQueuedCount} shortEdgeReplacementPreviewCandidates={shortEdgeReplacementPreviewQueuedCount} shortEdgeReplacementPreviewDefinitions={m_ShortEdgeReplacementPreviewQueuedCount} shortEdgePreviewDegraded={shortEdgePreviewDegradedCount} roadNodeMergeApplyCandidates={nodeMergeApplyCandidateCount}; skipped {skippedCount} edge(s).");
+                Mod.LogDiagnostic($"[IntersectionTool] Created preview/apply state around node {FormatEntity(nodeEntity)} splitDefinitions={splitQueuedCount} shortEdgeReplacementPreviewCandidates={shortEdgeReplacementPreviewQueuedCount} shortEdgeReplacementPreviewDefinitions={m_ShortEdgeReplacementPreviewQueuedCount} shortEdgePreviewDegraded={shortEdgePreviewDegradedCount} roadNodeMergeApplyCandidates={nodeMergeApplyCandidateCount}; skipped {skippedCount} edge(s).");
             }
             else
             {
                 applyMode = ApplyMode.None;
                 MarkNoSplitPreviewReady(nodeEntity);
-                Mod.log.Info($"[IntersectionTool] No entering road edges were eligible to preview around node {FormatEntity(nodeEntity)}.");
+                Mod.LogDiagnostic($"[IntersectionTool] No entering road edges were eligible to preview around node {FormatEntity(nodeEntity)}.");
             }
 
             return result;
@@ -714,7 +714,7 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             reason = diagnostics;
-            Mod.log.Info($"[IntersectionTool] Edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} has dedicated turn lane demand at node {FormatEntity(nodeEntity)}. {reason}");
+            Mod.LogDiagnostic($"[IntersectionTool] Edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} has dedicated turn lane demand at node {FormatEntity(nodeEntity)}. {reason}");
             return true;
         }
 

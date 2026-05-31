@@ -22,6 +22,9 @@
         <Reference Include="Colossal.Logging">
             <Private>false</Private>
         </Reference>
+        <Reference Include="Colossal.Localization">
+            <Private>false</Private>
+        </Reference>
         <Reference Include="Colossal.Mathematics">
             <Private>false</Private>
         </Reference>
@@ -66,6 +69,10 @@
     <ItemGroup>
         <None Include="$(ModPropsFile)" Link="Properties\Mod.props"/>
         <None Include="$(ModTargetsFile)" Link="Properties\Mod.targets"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="L10N\lang\*.json" />
     </ItemGroup>
 
     <Target Name="BuildFrontend" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true'">
