@@ -34,6 +34,18 @@ namespace PocketTurnLanes.Systems.Tool
         private const float MergedEdgeLengthTolerance = 12f;
         private const float NodeMergePreviewEdgeExitDistance = 6f;
         private const float NodeMergePreviewIntersectionBoundsMargin = 0.75f;
+        private const float MinimumMarkedParkingSlotAngleDegrees = 15f;
+        private const int DlcSourceNonDlcCandidatePenalty = 5000;
+        private const int TramUpgradeFallbackPenalty = 20000;
+        private const int IndependentTramTargetPreference = 1000;
+        private const int PublicTransportTramTargetPenalty = 500;
+        private const int OtherTramTargetPenalty = 1000;
+        private const int MissingTramTargetPenalty = 50000;
+        private const int PublicTransportTramUpgradeLaneTypePenalty = 50;
+        private const int OtherTramUpgradeLaneTypePenalty = 100;
+        private const float PublicTransportLayoutOffsetScoreScale = 100f;
+        private const int PublicTransportLayoutMissingDirectionPenalty = 2500;
+        private const int PublicTransportLayoutCountMismatchPenalty = 750;
 
         public override string toolID => $"{Mod.ModId} Intersection Tool";
         public override bool allowUnderground => true;
@@ -113,6 +125,7 @@ namespace PocketTurnLanes.Systems.Tool
                 ComponentType.ReadOnly<PrefabData>(),
                 ComponentType.ReadOnly<RoadData>(),
                 ComponentType.ReadOnly<NetGeometryData>(),
+                ComponentType.Exclude<BridgeData>(),
                 ComponentType.Exclude<Deleted>());
             m_DisplayOverridePropertyInfo = typeof(Game.Input.ProxyAction).GetProperty("displayOverride");
             m_ToolSystem.EventToolChanged += ToolChanged;

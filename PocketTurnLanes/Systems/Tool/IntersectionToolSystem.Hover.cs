@@ -3,6 +3,7 @@ using System.Text;
 using Colossal.Entities;
 using Game.Common;
 using Game.Net;
+using Game.Prefabs;
 using Game.Tools;
 using PocketTurnLanes.Tool;
 using Unity.Entities;
@@ -276,10 +277,24 @@ namespace PocketTurnLanes.Systems.Tool
                     continue;
                 }
 
+                if (!HasAnyMotorRoadLane(edgeEntity, out string motorLaneDetail))
+                {
+                    skippedCount++;
+                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: road has no automotive road lanes and is excluded from selection. {motorLaneDetail}");
+                    continue;
+                }
+
+                if (IsBridgeRoadEdge(edgeEntity, out string bridgeDetail))
+                {
+                    skippedCount++;
+                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: bridge road prefabs are excluded from selection and replacement matching. {bridgeDetail}");
+                    continue;
+                }
+
                 if (!HasIncomingCarLane(nodeEntity, edgeEntity, connectedEdges))
                 {
                     skippedCount++;
-                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: no car lane entering node {FormatEntity(nodeEntity)}.");
+                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: no automotive road lane entering node {FormatEntity(nodeEntity)}.");
                     continue;
                 }
 
@@ -325,6 +340,8 @@ namespace PocketTurnLanes.Systems.Tool
                         SourcePrefab = request.Prefab,
                         TargetPrefab = prefabMatch.Prefab,
                         InvertTarget = prefabMatch.Invert,
+                        HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
+                        TargetUpgrade = prefabMatch.TargetUpgrade,
                         CurvePosition = splitPosition,
                         HitPosition = request.HitPosition,
                         TargetDistance = targetDistance,
@@ -436,6 +453,66 @@ namespace PocketTurnLanes.Systems.Tool
                    EntityManager.HasComponent<Road>(edgeEntity);
         }
 
+        private bool HasAnyMotorRoadLane(Entity edgeEntity, out string detail)
+        {
+            if (!EntityManager.TryGetBuffer(edgeEntity, true, out DynamicBuffer<NetSubLane> edgeSubLanes))
+            {
+                detail = "edgeSubLanes=missing";
+                return false;
+            }
+
+            int subLaneCount = edgeSubLanes.Length;
+            int carLaneComponentCount = 0;
+            int motorRoadLaneCount = 0;
+            int bicycleOnlyCount = 0;
+            int nonRoadMethodCount = 0;
+            int missingPrefabRefCount = 0;
+            int missingCarLaneDataCount = 0;
+            for (int i = 0; i < edgeSubLanes.Length; i++)
+            {
+                Entity laneEntity = edgeSubLanes[i].m_SubLane;
+                if (laneEntity == Entity.Null ||
+                    !EntityManager.Exists(laneEntity) ||
+                    EntityManager.HasComponent<Deleted>(laneEntity) ||
+                    !EntityManager.HasComponent<NetCarLane>(laneEntity))
+                {
+                    continue;
+                }
+
+                carLaneComponentCount++;
+                PathMethod pathMethods = edgeSubLanes[i].m_PathMethods;
+                if ((pathMethods & PathMethod.Road) == 0)
+                {
+                    nonRoadMethodCount++;
+                    continue;
+                }
+
+                if (!EntityManager.TryGetComponent(laneEntity, out PrefabRef prefabRef))
+                {
+                    missingPrefabRefCount++;
+                    continue;
+                }
+
+                if (!EntityManager.TryGetComponent(prefabRef.m_Prefab, out CarLaneData carLaneData))
+                {
+                    missingCarLaneDataCount++;
+                    continue;
+                }
+
+                if ((carLaneData.m_RoadTypes & RoadTypes.Car) != 0)
+                {
+                    motorRoadLaneCount++;
+                }
+                else if ((carLaneData.m_RoadTypes & RoadTypes.Bicycle) != 0)
+                {
+                    bicycleOnlyCount++;
+                }
+            }
+
+            detail = $"edgeSubLanes={subLaneCount} carLaneComponents={carLaneComponentCount} motorRoadLanes={motorRoadLaneCount} bicycleOnlyCarLanes={bicycleOnlyCount} nonRoadMethod={nonRoadMethodCount} missingPrefabRef={missingPrefabRefCount} missingCarLaneData={missingCarLaneDataCount}";
+            return motorRoadLaneCount > 0;
+        }
+
         private bool HasIncomingCarLane(Entity nodeEntity, Entity edgeEntity, DynamicBuffer<ConnectedEdge> connectedEdges)
         {
             if (!EntityManager.TryGetBuffer(nodeEntity, true, out DynamicBuffer<NetSubLane> nodeSubLanes))
@@ -446,7 +523,7 @@ namespace PocketTurnLanes.Systems.Tool
             for (int i = 0; i < nodeSubLanes.Length; i++)
             {
                 Entity nodeLaneEntity = nodeSubLanes[i].m_SubLane;
-                if (!EntityManager.HasComponent<NetCarLane>(nodeLaneEntity) ||
+                if (!IsMotorRoadLane(nodeLaneEntity, nodeSubLanes[i].m_PathMethods, out _) ||
                     !EntityManager.TryGetComponent(nodeLaneEntity, out Lane nodeLane))
                 {
                     continue;
@@ -484,12 +561,11 @@ namespace PocketTurnLanes.Systems.Tool
             {
                 NetSubLane subLane = nodeSubLanes[i];
                 Entity laneEntity = subLane.m_SubLane;
-                if ((subLane.m_PathMethods & PathMethod.Road) == 0 ||
-                    laneEntity == Entity.Null ||
+                if (laneEntity == Entity.Null ||
                     !EntityManager.Exists(laneEntity) ||
                     EntityManager.HasComponent<Deleted>(laneEntity) ||
                     NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
-                    !EntityManager.HasComponent<NetCarLane>(laneEntity) ||
+                    !IsMotorRoadLane(laneEntity, subLane.m_PathMethods, out _) ||
                     !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
                     !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, nodeEntity, lane, out Entity sourceEdge, out Entity targetEdge))
                 {
@@ -795,7 +871,7 @@ namespace PocketTurnLanes.Systems.Tool
                 for (int j = 0; j < edgeSubLanes.Length; j++)
                 {
                     Entity edgeLaneEntity = edgeSubLanes[j].m_SubLane;
-                    if (!EntityManager.HasComponent<NetCarLane>(edgeLaneEntity) ||
+                    if (!IsMotorRoadLane(edgeLaneEntity, edgeSubLanes[j].m_PathMethods, out _) ||
                         !EntityManager.TryGetComponent(edgeLaneEntity, out Lane edgeLane))
                     {
                         continue;
@@ -811,6 +887,45 @@ namespace PocketTurnLanes.Systems.Tool
 
             sourceEdge = Entity.Null;
             return false;
+        }
+
+        private bool IsMotorRoadLane(Entity laneEntity, PathMethod pathMethods, out string detail)
+        {
+            if (laneEntity == Entity.Null ||
+                !EntityManager.Exists(laneEntity) ||
+                EntityManager.HasComponent<Deleted>(laneEntity))
+            {
+                detail = "lane=missing-or-deleted";
+                return false;
+            }
+
+            if ((pathMethods & PathMethod.Road) == 0)
+            {
+                detail = $"pathMethods={pathMethods} missingRoadMethod";
+                return false;
+            }
+
+            if (!EntityManager.HasComponent<NetCarLane>(laneEntity))
+            {
+                detail = "netCarLane=missing";
+                return false;
+            }
+
+            if (!EntityManager.TryGetComponent(laneEntity, out PrefabRef prefabRef))
+            {
+                detail = "prefabRef=missing";
+                return false;
+            }
+
+            if (!EntityManager.TryGetComponent(prefabRef.m_Prefab, out CarLaneData carLaneData))
+            {
+                detail = $"lanePrefab={FormatEntity(prefabRef.m_Prefab)} carLaneData=missing";
+                return false;
+            }
+
+            bool isMotorRoadLane = (carLaneData.m_RoadTypes & RoadTypes.Car) != 0;
+            detail = $"lanePrefab={FormatEntity(prefabRef.m_Prefab)} roadTypes={carLaneData.m_RoadTypes} pathMethods={pathMethods} isMotorRoadLane={isMotorRoadLane}";
+            return isMotorRoadLane;
         }
     }
 }

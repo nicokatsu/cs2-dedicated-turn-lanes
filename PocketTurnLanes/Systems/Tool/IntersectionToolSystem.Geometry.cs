@@ -202,6 +202,8 @@ namespace PocketTurnLanes.Systems.Tool
                 SourcePrefab = prefabRef.m_Prefab,
                 TargetPrefab = prefabMatch.Prefab,
                 InvertTarget = prefabMatch.Invert,
+                HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
+                TargetUpgrade = prefabMatch.TargetUpgrade,
                 ShortEdgeLength = curve.m_Length,
                 ContinuationEdgeLength = continuationCurve.m_Length,
                 MergedLength = mergedLength,

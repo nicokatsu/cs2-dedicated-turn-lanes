@@ -171,6 +171,8 @@ namespace PocketTurnLanes.Systems.Tool
                     SourcePrefab = candidate.SourcePrefab,
                     TargetPrefab = candidate.TargetPrefab,
                     InvertTarget = candidate.InvertTarget,
+                    HasTargetUpgrade = candidate.HasTargetUpgrade,
+                    TargetUpgrade = candidate.TargetUpgrade,
                     CurvePosition = splitPosition,
                     HitPosition = request.HitPosition,
                     TargetDistance = targetDistance,
@@ -352,6 +354,8 @@ namespace PocketTurnLanes.Systems.Tool
                     SourcePrefab = candidate.SourcePrefab,
                     TargetPrefab = candidate.TargetPrefab,
                     InvertTarget = candidate.InvertTarget,
+                    HasTargetUpgrade = candidate.HasTargetUpgrade,
+                    TargetUpgrade = candidate.TargetUpgrade,
                     CurvePosition = splitPosition,
                     HitPosition = request.HitPosition,
                     TargetDistance = targetDistance,
@@ -587,6 +591,8 @@ namespace PocketTurnLanes.Systems.Tool
                 SourcePrefab = candidate.SourcePrefab,
                 TargetPrefab = candidate.TargetPrefab,
                 InvertTarget = candidate.InvertTarget,
+                HasTargetUpgrade = candidate.HasTargetUpgrade,
+                TargetUpgrade = candidate.TargetUpgrade,
                 HitPosition = candidate.ExpectedHitPosition,
                 OriginalForwardLanes = candidate.OriginalForwardLanes,
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
@@ -1047,6 +1053,8 @@ namespace PocketTurnLanes.Systems.Tool
                 SourcePrefab = candidate.SourcePrefab,
                 TargetPrefab = candidate.TargetPrefab,
                 InvertTarget = candidate.InvertTarget,
+                HasTargetUpgrade = candidate.HasTargetUpgrade,
+                TargetUpgrade = candidate.TargetUpgrade,
                 HitPosition = candidate.HitPosition,
                 OriginalForwardLanes = candidate.OriginalForwardLanes,
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
@@ -1086,7 +1094,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             m_HasReplacementPreviewDefinitions = true;
 
-            Mod.log.Info($"[IntersectionTool] Created pocket lane replacement definition preview original={FormatEntity(candidate.Edge)} pocket={FormatEntity(pocketEdge)} outer={FormatEntity(outerEdge)} splitNode={FormatEntity(splitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} pocketFlags={definitionRequest.Flags} outerFlags={outerDefinitionRequest.Flags} collisionValidation=vanilla-disabled pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={lengthError:0.##}m outerLengthError={outerLengthError:0.##}m.");
+            Mod.log.Info($"[IntersectionTool] Created pocket lane replacement definition preview original={FormatEntity(candidate.Edge)} pocket={FormatEntity(pocketEdge)} outer={FormatEntity(outerEdge)} splitNode={FormatEntity(splitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} targetUpgrade={(candidate.HasTargetUpgrade ? candidate.TargetUpgrade.m_Flags.ToString() : "none")} pocketFlags={definitionRequest.Flags} outerFlags={outerDefinitionRequest.Flags} collisionValidation=vanilla-disabled pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={lengthError:0.##}m outerLengthError={outerLengthError:0.##}m.");
             return true;
         }
 

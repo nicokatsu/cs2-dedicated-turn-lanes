@@ -169,6 +169,8 @@ namespace PocketTurnLanes.Systems.Tool
             public Entity SourcePrefab;
             public Entity TargetPrefab;
             public bool InvertTarget;
+            public bool HasTargetUpgrade;
+            public Upgraded TargetUpgrade;
             public float CurvePosition;
             public float3 HitPosition;
             public float TargetDistance;
@@ -192,6 +194,8 @@ namespace PocketTurnLanes.Systems.Tool
             public Entity SourcePrefab;
             public Entity TargetPrefab;
             public bool InvertTarget;
+            public bool HasTargetUpgrade;
+            public Upgraded TargetUpgrade;
             public float ShortEdgeLength;
             public float ContinuationEdgeLength;
             public float MergedLength;
@@ -220,6 +224,8 @@ namespace PocketTurnLanes.Systems.Tool
             public int FixedIndex;
             public int RandomSeed;
             public bool PreviewOnly;
+            public bool HasUpgraded;
+            public Upgraded Upgraded;
         }
 
         private struct ReplacementPreviewDefinition : IComponentData
@@ -233,6 +239,30 @@ namespace PocketTurnLanes.Systems.Tool
             public RoadLaneCounts OriginalCounts;
             public RoadLaneCounts TargetCounts;
             public RoadLaneCounts CandidateCounts;
+            public RoadLaneCounts OriginalEffectiveCounts;
+            public RoadLaneCounts TargetEffectiveCounts;
+            public RoadLaneCounts SourceIndependentTramCounts;
+            public RoadLaneCounts TargetIndependentTramCounts;
+            public RoadLaneCounts SourcePublicTransportTramCounts;
+            public RoadLaneCounts TargetPublicTransportTramCounts;
+            public RoadLaneCounts SourceTramTrackCounts;
+            public RoadLaneCounts TargetTramTrackCounts;
+            public bool TargetHasIndependentTram;
+            public bool TargetHasPublicTransportTram;
+            public bool TargetUsesTramUpgradeFallback;
+            public bool HasTargetUpgrade;
+            public Upgraded TargetUpgrade;
+            public string TramMatchDetail;
+            public string SourceTramTrackLayout;
+            public string TargetTramTrackLayout;
+            public string SourceBusLaneLayout;
+            public string TargetBusLaneLayout;
+            public string LayoutScoreDetail;
+            public int LayoutScore;
+            public int TramLayoutScore;
+            public int BusLayoutScore;
+            public bool TargetIsDlc;
+            public string TargetContentDetail;
             public int Score;
         }
 
@@ -245,6 +275,8 @@ namespace PocketTurnLanes.Systems.Tool
             public Entity SourcePrefab;
             public Entity TargetPrefab;
             public bool InvertTarget;
+            public bool HasTargetUpgrade;
+            public Upgraded TargetUpgrade;
             public float3 HitPosition;
             public int OriginalForwardLanes;
             public int OriginalBackwardLanes;
@@ -449,6 +481,11 @@ namespace PocketTurnLanes.Systems.Tool
                 if (Request.PreviewOnly)
                 {
                     ECB.AddComponent<ReplacementPreviewDefinition>(definitionEntity);
+                }
+
+                if (Request.HasUpgraded)
+                {
+                    ECB.AddComponent(definitionEntity, Request.Upgraded);
                 }
 
                 ECB.AddComponent<Updated>(definitionEntity);

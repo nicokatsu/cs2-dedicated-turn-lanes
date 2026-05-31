@@ -196,6 +196,8 @@ namespace PocketTurnLanes.Systems.Tool
                     SourcePrefab = candidate.SourcePrefab,
                     TargetPrefab = candidate.TargetPrefab,
                     InvertTarget = candidate.InvertTarget,
+                    HasTargetUpgrade = candidate.HasTargetUpgrade,
+                    TargetUpgrade = candidate.TargetUpgrade,
                     CurvePosition = splitPosition,
                     HitPosition = request.HitPosition,
                     TargetDistance = targetDistance,
@@ -322,6 +324,8 @@ namespace PocketTurnLanes.Systems.Tool
                     SourcePrefab = mergeCandidate.SourcePrefab,
                     TargetPrefab = mergeCandidate.TargetPrefab,
                     InvertTarget = mergeCandidate.InvertTarget,
+                    HasTargetUpgrade = mergeCandidate.HasTargetUpgrade,
+                    TargetUpgrade = mergeCandidate.TargetUpgrade,
                     CurvePosition = splitPosition,
                     HitPosition = request.HitPosition,
                     TargetDistance = targetDistance,
@@ -551,6 +555,8 @@ namespace PocketTurnLanes.Systems.Tool
                 SourcePrefab = splitCandidate.SourcePrefab,
                 TargetPrefab = splitCandidate.TargetPrefab,
                 InvertTarget = splitCandidate.InvertTarget,
+                HasTargetUpgrade = splitCandidate.HasTargetUpgrade,
+                TargetUpgrade = splitCandidate.TargetUpgrade,
                 HitPosition = splitCandidate.HitPosition,
                 OriginalForwardLanes = splitCandidate.OriginalForwardLanes,
                 OriginalBackwardLanes = splitCandidate.OriginalBackwardLanes,
@@ -573,7 +579,7 @@ namespace PocketTurnLanes.Systems.Tool
             result = createDefinitionJobHandle;
             m_QueuedReplacementCandidates.Add(replacementCandidate);
 
-            Mod.log.Info($"[IntersectionTool] Queued pocket lane replacement original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} sourcePrefab={GetPrefabNameFromPrefab(splitCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} lanes={splitCandidate.OriginalForwardLanes}/{splitCandidate.OriginalBackwardLanes}->{splitCandidate.TargetForwardLanes}/{splitCandidate.TargetBackwardLanes} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m reusedOriginal={(pocketEdge == splitCandidate.Edge ? "yes" : "no")}.");
+            Mod.log.Info($"[IntersectionTool] Queued pocket lane replacement original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} sourcePrefab={GetPrefabNameFromPrefab(splitCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} targetUpgrade={(splitCandidate.HasTargetUpgrade ? splitCandidate.TargetUpgrade.m_Flags.ToString() : "none")} lanes={splitCandidate.OriginalForwardLanes}/{splitCandidate.OriginalBackwardLanes}->{splitCandidate.TargetForwardLanes}/{splitCandidate.TargetBackwardLanes} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m reusedOriginal={(pocketEdge == splitCandidate.Edge ? "yes" : "no")}.");
             return true;
         }
 
@@ -727,7 +733,9 @@ namespace PocketTurnLanes.Systems.Tool
                 EndNode = endNode,
                 Flags = flags,
                 FixedIndex = fixedIndex,
-                RandomSeed = randomSeed
+                RandomSeed = randomSeed,
+                HasUpgraded = candidate.HasTargetUpgrade,
+                Upgraded = candidate.TargetUpgrade
             };
             return true;
         }
