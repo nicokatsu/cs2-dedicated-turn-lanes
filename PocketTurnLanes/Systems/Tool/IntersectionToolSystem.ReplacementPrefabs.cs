@@ -1,5 +1,11 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using Colossal.Entities;
+using Game.Common;
 using Game.Net;
 using Game.Prefabs;
 using PocketTurnLanes.Tool;
@@ -74,9 +80,26 @@ namespace PocketTurnLanes.Systems.Tool
             int publicTransportTramCandidateCount = 0;
             int tramUpgradeCandidateCount = 0;
             int tramUpgradeRejectedCount = 0;
+            int busUpgradeCandidateCount = 0;
+            int busUpgradeRejectedCount = 0;
             int layoutScoredCount = 0;
+            int busLayoutCandidateCount = 0;
+            int sourcePrefabLaneMatchCount = 0;
+            int roadBuilderDiscardedCount = 0;
             string tramUpgradeRejectSample = "<none>";
+            string busUpgradeRejectSample = "<none>";
+            int busUpgradeRejectSampleCount = 0;
+            string widthCandidateSample = "<none>";
+            int widthCandidateSampleCount = 0;
+            string roadBuilderCandidateSample = "<none>";
+            int roadBuilderCandidateSampleCount = 0;
+            string roadBuilderBusUpgradeSample = "<none>";
+            int roadBuilderBusUpgradeSampleCount = 0;
+            string roadBuilderDiscardedSample = "<none>";
+            int roadBuilderDiscardedSampleCount = 0;
+            string bestBusLayoutCandidateDetail = "<none>";
             int bestScore = int.MaxValue;
+            int bestBusLayoutCandidateScore = int.MaxValue;
             ReplacementPrefabMatch bestMatch = default;
             bool sourceHasTramTracks = !sourceProfile.TramTrackCounts.IsEmpty;
             bool sourceHasIndependentTram = !sourceProfile.IndependentTramCounts.IsEmpty;
@@ -93,9 +116,29 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     Entity candidatePrefab = prefabEntities[i];
                     scannedCount++;
+                    bool candidateIsSourcePrefab = candidatePrefab == sourcePrefabRef.m_Prefab;
+                    string candidateName = GetPrefabNameFromPrefab(candidatePrefab);
+                    GetRoadBuilderComponentProfile(
+                        candidatePrefab,
+                        out bool candidateHasRoadBuilderComponent,
+                        out bool candidateIsDiscardedRoadBuilderPrefab,
+                        out string candidateRoadBuilderComponentDetail);
+                    bool candidateLooksLikeRoadBuilder =
+                        candidateHasRoadBuilderComponent ||
+                        LooksLikeRoadBuilderRoadPrefabName(candidateName);
 
-                    if (candidatePrefab == sourcePrefabRef.m_Prefab ||
-                        !EntityManager.TryGetComponent(candidatePrefab, out NetGeometryData candidateGeometry))
+                    if (candidateIsDiscardedRoadBuilderPrefab)
+                    {
+                        roadBuilderDiscardedCount++;
+                        AppendLogSample(
+                            ref roadBuilderDiscardedSample,
+                            ref roadBuilderDiscardedSampleCount,
+                            $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} {candidateRoadBuilderComponentDetail}",
+                            8);
+                        continue;
+                    }
+
+                    if (!EntityManager.TryGetComponent(candidatePrefab, out NetGeometryData candidateGeometry))
                     {
                         continue;
                     }
@@ -111,7 +154,41 @@ namespace PocketTurnLanes.Systems.Tool
                             out RoadLaneProfile candidateProfile))
                     {
                         missingLaneCount++;
+                        if (sourceHasTramTracks || sourceProfile.BusLaneLayout.HasAny)
+                        {
+                            AppendLogSample(
+                                ref widthCandidateSample,
+                                ref widthCandidateSampleCount,
+                                $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} status=missingLaneData deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
+                                24);
+                            if (candidateLooksLikeRoadBuilder)
+                            {
+                                AppendLogSample(
+                                    ref roadBuilderCandidateSample,
+                                    ref roadBuilderCandidateSampleCount,
+                                    $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} status=missingLaneData deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
+                                    16);
+                            }
+                        }
+
                         continue;
+                    }
+
+                    if (sourceHasTramTracks || sourceProfile.BusLaneLayout.HasAny)
+                    {
+                        AppendLogSample(
+                            ref widthCandidateSample,
+                            ref widthCandidateSampleCount,
+                            $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultRoad={candidateProfile.RoadCounts} defaultBus={candidateProfile.BusLaneLayout} defaultTram={candidateProfile.TramTrackCounts} profileSource={candidateProfile.Source} markedParking={candidateProfile.HasMarkedParking} deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
+                            24);
+                        if (candidateLooksLikeRoadBuilder)
+                        {
+                            AppendLogSample(
+                                ref roadBuilderCandidateSample,
+                                ref roadBuilderCandidateSampleCount,
+                                $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultRoad={candidateProfile.RoadCounts} defaultBus={candidateProfile.BusLaneLayout} defaultTram={candidateProfile.TramTrackCounts} profileSource={candidateProfile.Source} markedParking={candidateProfile.HasMarkedParking} deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
+                                16);
+                        }
                     }
 
                     if (candidateProfile.HasMarkedParking)
@@ -279,12 +356,77 @@ namespace PocketTurnLanes.Systems.Tool
                             tramMatchDetail = $"mode=missing-tram-fallback sourceTramTracks={sourceProfile.TramTrackCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail} rejectedUpgrade={tramUpgradeDetail}";
                         }
                     }
-                    else if (!RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert))
+                    else
                     {
-                        continue;
+                        bool defaultLaneMatch = RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert);
+                        bool shouldScanBusUpgrade = sourceProfile.BusLaneLayout.HasAny &&
+                                                    (!defaultLaneMatch || !candidateProfile.BusLaneLayout.HasAny);
+                        string busUpgradeDetail = "busUpgrade=not-scanned";
+                        bool hasBusUpgradeMatch = false;
+                        bool busUpgradeInvert = false;
+                        Upgraded busTargetUpgrade = default;
+                        RoadLaneProfile busTargetProfile = default;
+
+                        if (shouldScanBusUpgrade)
+                        {
+                            hasBusUpgradeMatch = TryFindMatchingBusUpgrade(
+                                candidatePrefab,
+                                sourceProfile,
+                                desiredCounts,
+                                out busUpgradeInvert,
+                                out busTargetUpgrade,
+                                out busTargetProfile,
+                                out busUpgradeDetail);
+                        }
+
+                        if (hasBusUpgradeMatch)
+                        {
+                            busUpgradeCandidateCount++;
+                            invert = busUpgradeInvert;
+                            hasTargetUpgrade = true;
+                            targetUpgrade = busTargetUpgrade;
+                            targetLayoutProfile = busTargetProfile;
+                            targetIndependentTramCounts = targetLayoutProfile.IndependentTramCounts;
+                            targetPublicTransportTramCounts = targetLayoutProfile.PublicTransportTramCounts;
+                            targetTramTrackCounts = targetLayoutProfile.TramTrackCounts;
+                            targetHasIndependentTram = !targetIndependentTramCounts.IsEmpty;
+                            targetHasPublicTransportTram = !targetPublicTransportTramCounts.IsEmpty;
+                            tramMatchDetail = $"mode=bus-upgrade-preserve sourceBusLayout={sourceProfile.BusLaneLayout} targetUpgrade={targetUpgrade.m_Flags} {busUpgradeDetail}";
+                        }
+                        else
+                        {
+                            if (shouldScanBusUpgrade)
+                            {
+                                busUpgradeRejectedCount++;
+                                AppendLogSample(
+                                    ref busUpgradeRejectSample,
+                                    ref busUpgradeRejectSampleCount,
+                                    $"candidate={candidateName} candidateEntity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} candidateSource={candidateProfile.Source} defaultLaneMatch={defaultLaneMatch} {busUpgradeDetail}",
+                                    6);
+                            }
+
+                            if (candidateLooksLikeRoadBuilder)
+                            {
+                                AppendLogSample(
+                                    ref roadBuilderBusUpgradeSample,
+                                    ref roadBuilderBusUpgradeSampleCount,
+                                    $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultLaneMatch={defaultLaneMatch} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} {busUpgradeDetail}",
+                                    16);
+                            }
+
+                            if (!defaultLaneMatch)
+                            {
+                                continue;
+                            }
+                        }
                     }
 
                     laneMatchCount++;
+                    if (candidateIsSourcePrefab)
+                    {
+                        sourcePrefabLaneMatchCount++;
+                    }
+
                     EntityManager.TryGetComponent(candidatePrefab, out RoadData candidateRoadData);
                     EntityManager.TryGetComponent(candidatePrefab, out NetData candidateNetData);
                     int score = GetReplacementPrefabScore(
@@ -311,6 +453,17 @@ namespace PocketTurnLanes.Systems.Tool
                         sourceProfile.BusLaneLayout.HasAny)
                     {
                         layoutScoredCount++;
+                    }
+
+                    if (sourceProfile.BusLaneLayout.HasAny &&
+                        orientedTargetBusLayout.HasAny)
+                    {
+                        busLayoutCandidateCount++;
+                        if (score < bestBusLayoutCandidateScore)
+                        {
+                            bestBusLayoutCandidateScore = score;
+                            bestBusLayoutCandidateDetail = $"candidate={candidateName} orientation={(invert ? "reversed" : "direct")} score={score} candidateRoad={candidateProfile.RoadCounts} targetSource={targetLayoutProfile.Source} targetBus={orientedTargetBusLayout} targetBusDetail={targetLayoutProfile.BusLaneDetail} targetPublicTransportTram={targetPublicTransportTramCounts} targetUpgrade={(hasTargetUpgrade ? targetUpgrade.m_Flags.ToString() : "none")}";
+                        }
                     }
 
                     if (targetUsesTramUpgradeFallback)
@@ -372,10 +525,13 @@ namespace PocketTurnLanes.Systems.Tool
                             TargetTramTrackLayout = orientedTargetTramLayout.ToString(),
                             SourceBusLaneLayout = sourceProfile.BusLaneLayout.ToString(),
                             TargetBusLaneLayout = orientedTargetBusLayout.ToString(),
+                            SourceBusLaneDetail = sourceProfile.BusLaneDetail,
+                            TargetBusLaneDetail = targetLayoutProfile.BusLaneDetail,
                             LayoutScoreDetail = layoutScoreDetail,
                             LayoutScore = layoutScore,
                             TramLayoutScore = tramLayoutScore,
                             BusLayoutScore = busLayoutScore,
+                            TargetIsSourcePrefab = candidateIsSourcePrefab,
                             TargetIsDlc = candidateIsDlc,
                             TargetContentDetail = candidateContentDetail,
                             Score = score
@@ -386,12 +542,12 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (!found)
             {
-                Mod.log.Warn($"[IntersectionTool] No pocket lane replacement prefab found sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourcePublicTransportTramDetail={sourceProfile.PublicTransportTramDetail} sourceTramTracks={sourceProfile.TramTrackCounts} sourceTramTrackLayout={sourceProfile.TramTrackLayout} sourceTramDetail={sourceProfile.TramTrackDetail} sourceHasUpgraded={sourceHasUpgraded} sourceTramUpgradeFlags={sourceTramUpgradeFlags} sourceBusLayout={sourceProfile.BusLaneLayout} sourceBusDetail={sourceProfile.BusLaneDetail} originalLanes={originalCounts} desiredLanes={desiredCounts} originalEffectiveLanes={originalEffectiveCounts} desiredEffectiveLanes={desiredEffectiveCounts} width={sourceGeometry.m_DefaultWidth:0.##}m scanned={scannedCount} bridgeQueryExcluded=True dlcBlocked={dlcBlockedCount} widthMatches={widthMatchCount} parkingExcluded={parkingExcludedCount} independentTramCandidates={independentTramCandidateCount} publicTransportTramCandidates={publicTransportTramCandidateCount} tramUpgradeCandidates={tramUpgradeCandidateCount} tramUpgradeRejected={tramUpgradeRejectedCount} tramUpgradeRejectSample={tramUpgradeRejectSample} layoutScored={layoutScoredCount} laneMatches=0 missingLaneData={missingLaneCount}.");
+                Mod.log.Warn($"[IntersectionTool] No pocket lane replacement prefab found sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourcePublicTransportTramDetail={sourceProfile.PublicTransportTramDetail} sourceTramTracks={sourceProfile.TramTrackCounts} sourceTramTrackLayout={sourceProfile.TramTrackLayout} sourceTramDetail={sourceProfile.TramTrackDetail} sourceHasUpgraded={sourceHasUpgraded} sourceTramUpgradeFlags={sourceTramUpgradeFlags} sourceBusLayout={sourceProfile.BusLaneLayout} sourceBusDetail={sourceProfile.BusLaneDetail} originalLanes={originalCounts} desiredLanes={desiredCounts} originalEffectiveLanes={originalEffectiveCounts} desiredEffectiveLanes={desiredEffectiveCounts} width={sourceGeometry.m_DefaultWidth:0.##}m scanned={scannedCount} bridgeQueryExcluded=True dlcBlocked={dlcBlockedCount} widthMatches={widthMatchCount} widthCandidateSample={widthCandidateSample} roadBuilderCandidateSample={roadBuilderCandidateSample} roadBuilderDiscarded={roadBuilderDiscardedCount} roadBuilderDiscardedSample={roadBuilderDiscardedSample} parkingExcluded={parkingExcludedCount} independentTramCandidates={independentTramCandidateCount} publicTransportTramCandidates={publicTransportTramCandidateCount} tramUpgradeCandidates={tramUpgradeCandidateCount} tramUpgradeRejected={tramUpgradeRejectedCount} tramUpgradeRejectSample={tramUpgradeRejectSample} busUpgradeCandidates={busUpgradeCandidateCount} busUpgradeRejected={busUpgradeRejectedCount} busUpgradeRejectSample={busUpgradeRejectSample} roadBuilderBusUpgradeSample={roadBuilderBusUpgradeSample} layoutScored={layoutScoredCount} busLayoutCandidates={busLayoutCandidateCount} bestBusLayoutCandidate={bestBusLayoutCandidateDetail} sourcePrefabLaneMatches={sourcePrefabLaneMatchCount} laneMatches=0 missingLaneData={missingLaneCount}.");
                 return false;
             }
 
             match = bestMatch;
-            Mod.log.Info($"[IntersectionTool] Replacement prefab selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} targetPrefab={GetPrefabNameFromPrefab(match.Prefab)} targetDlc={match.TargetIsDlc} targetContent={match.TargetContentDetail} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={match.SourceIndependentTramCounts} targetIndependentTram={match.TargetIndependentTramCounts} sourcePublicTransportTram={match.SourcePublicTransportTramCounts} targetPublicTransportTram={match.TargetPublicTransportTramCounts} sourceTramTracks={match.SourceTramTrackCounts} targetTramTracks={match.TargetTramTrackCounts} targetHasIndependentTram={match.TargetHasIndependentTram} targetHasPublicTransportTram={match.TargetHasPublicTransportTram} tramUpgradeFallback={match.TargetUsesTramUpgradeFallback} targetUpgrade={(match.HasTargetUpgrade ? match.TargetUpgrade.m_Flags.ToString() : "none")} tramMatch={match.TramMatchDetail} sourceTramTrackLayout={match.SourceTramTrackLayout} targetTramTrackLayout={match.TargetTramTrackLayout} sourceBusLayout={match.SourceBusLaneLayout} targetBusLayout={match.TargetBusLaneLayout} layoutScore={match.LayoutScore} tramLayoutScore={match.TramLayoutScore} busLayoutScore={match.BusLayoutScore} layoutDetail={match.LayoutScoreDetail} width={sourceGeometry.m_DefaultWidth:0.##}m originalLanes={match.OriginalCounts} desiredLanes={match.TargetCounts} originalEffectiveLanes={match.OriginalEffectiveCounts} desiredEffectiveLanes={match.TargetEffectiveCounts} candidateLanes={match.CandidateCounts} scanned={scannedCount} bridgeQueryExcluded=True dlcBlocked={dlcBlockedCount} widthMatches={widthMatchCount} parkingExcluded={parkingExcludedCount} independentTramCandidates={independentTramCandidateCount} publicTransportTramCandidates={publicTransportTramCandidateCount} tramUpgradeCandidates={tramUpgradeCandidateCount} tramUpgradeRejected={tramUpgradeRejectedCount} layoutScored={layoutScoredCount} laneMatches={laneMatchCount} missingLaneData={missingLaneCount} score={match.Score}.");
+            Mod.log.Info($"[IntersectionTool] Replacement prefab selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} targetPrefab={GetPrefabNameFromPrefab(match.Prefab)} targetIsSourcePrefab={match.TargetIsSourcePrefab} targetDlc={match.TargetIsDlc} targetContent={match.TargetContentDetail} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={match.SourceIndependentTramCounts} targetIndependentTram={match.TargetIndependentTramCounts} sourcePublicTransportTram={match.SourcePublicTransportTramCounts} targetPublicTransportTram={match.TargetPublicTransportTramCounts} sourceTramTracks={match.SourceTramTrackCounts} targetTramTracks={match.TargetTramTrackCounts} targetHasIndependentTram={match.TargetHasIndependentTram} targetHasPublicTransportTram={match.TargetHasPublicTransportTram} tramUpgradeFallback={match.TargetUsesTramUpgradeFallback} targetUpgrade={(match.HasTargetUpgrade ? match.TargetUpgrade.m_Flags.ToString() : "none")} tramMatch={match.TramMatchDetail} sourceTramTrackLayout={match.SourceTramTrackLayout} targetTramTrackLayout={match.TargetTramTrackLayout} sourceBusLayout={match.SourceBusLaneLayout} sourceBusDetail={match.SourceBusLaneDetail} targetBusLayout={match.TargetBusLaneLayout} targetBusDetail={match.TargetBusLaneDetail} layoutScore={match.LayoutScore} tramLayoutScore={match.TramLayoutScore} busLayoutScore={match.BusLayoutScore} layoutDetail={match.LayoutScoreDetail} width={sourceGeometry.m_DefaultWidth:0.##}m originalLanes={match.OriginalCounts} desiredLanes={match.TargetCounts} originalEffectiveLanes={match.OriginalEffectiveCounts} desiredEffectiveLanes={match.TargetEffectiveCounts} candidateLanes={match.CandidateCounts} scanned={scannedCount} bridgeQueryExcluded=True dlcBlocked={dlcBlockedCount} widthMatches={widthMatchCount} widthCandidateSample={widthCandidateSample} roadBuilderCandidateSample={roadBuilderCandidateSample} roadBuilderDiscarded={roadBuilderDiscardedCount} roadBuilderDiscardedSample={roadBuilderDiscardedSample} parkingExcluded={parkingExcludedCount} independentTramCandidates={independentTramCandidateCount} publicTransportTramCandidates={publicTransportTramCandidateCount} tramUpgradeCandidates={tramUpgradeCandidateCount} tramUpgradeRejected={tramUpgradeRejectedCount} busUpgradeCandidates={busUpgradeCandidateCount} busUpgradeRejected={busUpgradeRejectedCount} busUpgradeRejectSample={busUpgradeRejectSample} roadBuilderBusUpgradeSample={roadBuilderBusUpgradeSample} layoutScored={layoutScoredCount} busLayoutCandidates={busLayoutCandidateCount} bestBusLayoutCandidate={bestBusLayoutCandidateDetail} sourcePrefabLaneMatches={sourcePrefabLaneMatchCount} laneMatches={laneMatchCount} missingLaneData={missingLaneCount} score={match.Score}.");
             return true;
         }
 
@@ -465,6 +621,20 @@ namespace PocketTurnLanes.Systems.Tool
             public string Source;
         }
 
+        private struct RoadBuilderLaneConfig
+        {
+            public string GroupPrefabName;
+            public string SectionPrefabName;
+            public Dictionary<string, string> GroupOptions;
+            public bool Invert;
+            public float Width;
+            public bool IsBus;
+            public bool IsTram;
+            public bool IsIndependentTram;
+            public bool IsPublicTransportTram;
+            public string Semantic;
+        }
+
         private static RoadLaneProfile CreateEmptyRoadLaneProfile(string source)
         {
             return new RoadLaneProfile
@@ -476,6 +646,260 @@ namespace PocketTurnLanes.Systems.Tool
                 BusLaneDetail = "<none>",
                 Source = source
             };
+        }
+
+        private void ApplyRoadBuilderConfigSemantics(Entity prefabEntity, ref RoadLaneProfile profile)
+        {
+            if (!TryBuildRoadBuilderConfigLaneProfile(prefabEntity, out RoadLaneProfile configProfile, out string detail))
+            {
+                return;
+            }
+
+            bool changed = false;
+            if (configProfile.BusLaneLayout.HasAny)
+            {
+                profile.BusLaneLayout = configProfile.BusLaneLayout;
+                profile.BusLaneDetail = configProfile.BusLaneDetail;
+                changed = true;
+            }
+
+            if (!configProfile.TramTrackCounts.IsEmpty)
+            {
+                profile.TramTrackCounts = configProfile.TramTrackCounts;
+                profile.TramTrackLayout = configProfile.TramTrackLayout;
+                profile.TramTrackDetail = configProfile.TramTrackDetail;
+                profile.IndependentTramCounts = configProfile.IndependentTramCounts;
+                profile.IndependentTramLayout = configProfile.IndependentTramLayout;
+                profile.IndependentTramDetail = configProfile.IndependentTramDetail;
+                profile.PublicTransportTramCounts = configProfile.PublicTransportTramCounts;
+                profile.PublicTransportTramLayout = configProfile.PublicTransportTramLayout;
+                profile.PublicTransportTramDetail = configProfile.PublicTransportTramDetail;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                profile.Source = $"{profile.Source}+RoadBuilderConfig";
+                if (profile.BusLaneDetail != "<none>")
+                {
+                    profile.BusLaneDetail = $"{profile.BusLaneDetail} {detail}";
+                }
+
+                if (profile.TramTrackDetail != "<none>")
+                {
+                    profile.TramTrackDetail = $"{profile.TramTrackDetail} {detail}";
+                }
+            }
+        }
+
+        private bool TryBuildRoadBuilderConfigLaneProfile(
+            Entity prefabEntity,
+            out RoadLaneProfile profile,
+            out string detail)
+        {
+            profile = CreateEmptyRoadLaneProfile("RoadBuilderConfig");
+            detail = "roadBuilderConfig=none";
+
+            if (!TryGetRoadBuilderConfigLanes(prefabEntity, out List<RoadBuilderLaneConfig> lanes, out detail))
+            {
+                return false;
+            }
+
+            float totalWidth = 0f;
+            for (int i = 0; i < lanes.Count; i++)
+            {
+                totalWidth += math.max(0f, lanes[i].Width);
+            }
+
+            if (totalWidth <= 0.01f)
+            {
+                detail = $"roadBuilderConfig=invalid-width lanes={lanes.Count}";
+                return false;
+            }
+
+            int busLanes = 0;
+            int tramLanes = 0;
+            int independentTramLanes = 0;
+            int publicTransportTramLanes = 0;
+            string semanticSample = "<none>";
+            int semanticSampleCount = 0;
+            float offset = -totalWidth * 0.5f;
+
+            for (int i = 0; i < lanes.Count; i++)
+            {
+                RoadBuilderLaneConfig lane = lanes[i];
+                float laneWidth = math.max(0f, lane.Width);
+                float centerOffset = offset + laneWidth * 0.5f;
+                offset += laneWidth;
+
+                if (!lane.IsBus && !lane.IsTram)
+                {
+                    continue;
+                }
+
+                // RoadBuilder writes LaneConfig.Invert into NetSectionInfo.m_Invert; for these lane groups that maps
+                // to the runtime forward lane side, opposite to a raw LaneFlags.Invert interpretation.
+                bool forward = lane.Invert;
+                if (lane.IsBus)
+                {
+                    busLanes++;
+                    AddRoadBuilderDirectionalOffset(forward, centerOffset, ref profile.BusLaneLayout);
+                    if (profile.BusLaneDetail == "<none>")
+                    {
+                        profile.BusLaneDetail = "roadBuilderConfig";
+                    }
+                }
+
+                if (lane.IsTram)
+                {
+                    tramLanes++;
+                    AddRoadBuilderDirectionalLane(forward, ref profile.TramTrackCounts);
+                    AddRoadBuilderDirectionalOffset(forward, centerOffset, ref profile.TramTrackLayout);
+                    if (profile.TramTrackDetail == "<none>")
+                    {
+                        profile.TramTrackDetail = "roadBuilderConfig";
+                    }
+                }
+
+                if (lane.IsIndependentTram)
+                {
+                    independentTramLanes++;
+                    AddRoadBuilderDirectionalLane(forward, ref profile.IndependentTramCounts);
+                    AddRoadBuilderDirectionalOffset(forward, centerOffset, ref profile.IndependentTramLayout);
+                    if (profile.IndependentTramDetail == "<none>")
+                    {
+                        profile.IndependentTramDetail = "roadBuilderConfig";
+                    }
+                }
+
+                if (lane.IsPublicTransportTram)
+                {
+                    publicTransportTramLanes++;
+                    AddRoadBuilderDirectionalLane(forward, ref profile.PublicTransportTramCounts);
+                    AddRoadBuilderDirectionalOffset(forward, centerOffset, ref profile.PublicTransportTramLayout);
+                    if (profile.PublicTransportTramDetail == "<none>")
+                    {
+                        profile.PublicTransportTramDetail = "roadBuilderConfig";
+                    }
+                }
+
+                AppendLogSample(
+                    ref semanticSample,
+                    ref semanticSampleCount,
+                    $"{i}:{lane.Semantic}/{(forward ? "F" : "B")}@{centerOffset:0.##}m width={laneWidth:0.##}m group={ShortRoadBuilderPrefabName(lane.GroupPrefabName)} section={ShortRoadBuilderPrefabName(lane.SectionPrefabName)} transport={GetRoadBuilderOption(lane.GroupOptions, "Transport Option")}",
+                    16);
+            }
+
+            detail = $"roadBuilderConfig=matched prefab={GetPrefabNameFromPrefab(prefabEntity)} lanes={lanes.Count} totalWidth={totalWidth:0.##}m busLanes={busLanes} tramLanes={tramLanes} independentTramLanes={independentTramLanes} publicTransportTramLanes={publicTransportTramLanes} busLayout={profile.BusLaneLayout} tramLayout={profile.TramTrackLayout} semanticSample={semanticSample}";
+            return profile.BusLaneLayout.HasAny || !profile.TramTrackCounts.IsEmpty;
+        }
+
+        private bool TryGetRoadBuilderConfigLanes(
+            Entity prefabEntity,
+            out List<RoadBuilderLaneConfig> lanes,
+            out string detail)
+        {
+            lanes = null;
+            detail = "roadBuilderConfig=none";
+
+            if (!m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase))
+            {
+                detail = $"roadBuilderConfig=missing-prefab prefabEntity={FormatEntity(prefabEntity)}";
+                return false;
+            }
+
+            object config = TryGetPropertyValue(prefabBase, "Config");
+            if (config == null ||
+                config.GetType().FullName?.StartsWith("RoadBuilder.Domain.Configurations.", StringComparison.Ordinal) != true)
+            {
+                detail = $"roadBuilderConfig=not-roadbuilder prefabType={prefabBase.GetType().FullName}";
+                return false;
+            }
+
+            object rawLanes = TryGetPropertyValue(config, "Lanes");
+            if (!(rawLanes is IEnumerable enumerable))
+            {
+                detail = $"roadBuilderConfig=missing-lanes configType={config.GetType().FullName}";
+                return false;
+            }
+
+            lanes = new List<RoadBuilderLaneConfig>();
+            foreach (object laneObject in enumerable)
+            {
+                if (laneObject == null)
+                {
+                    continue;
+                }
+
+                RoadBuilderLaneConfig lane = new RoadBuilderLaneConfig
+                {
+                    GroupPrefabName = TryGetPropertyValue(laneObject, "GroupPrefabName") as string ?? string.Empty,
+                    SectionPrefabName = TryGetPropertyValue(laneObject, "SectionPrefabName") as string ?? string.Empty,
+                    GroupOptions = ReadRoadBuilderGroupOptions(TryGetPropertyValue(laneObject, "GroupOptions")),
+                    Invert = TryGetPropertyValue(laneObject, "Invert") is bool invert && invert
+                };
+                lane.Width = GetRoadBuilderLaneWidth(lane);
+                ClassifyRoadBuilderLane(ref lane);
+                lanes.Add(lane);
+            }
+
+            detail = $"roadBuilderConfig=loaded prefab={prefabBase.name} lanes={lanes.Count} configType={config.GetType().FullName}";
+            return lanes.Count > 0;
+        }
+
+        private void GetRoadBuilderComponentProfile(
+            Entity prefabEntity,
+            out bool hasRoadBuilderComponent,
+            out bool isDiscarded,
+            out string detail)
+        {
+            hasRoadBuilderComponent = false;
+            isDiscarded = false;
+            detail = "roadBuilderComponents=none";
+
+            if (prefabEntity == Entity.Null || !EntityManager.Exists(prefabEntity))
+            {
+                detail = "roadBuilderComponents=missing-prefab";
+                return;
+            }
+
+            string componentSample = "<none>";
+            int componentSampleCount = 0;
+            NativeArray<ComponentType> componentTypes = default;
+            try
+            {
+                componentTypes = EntityManager.GetComponentTypes(prefabEntity, Allocator.Temp);
+                for (int i = 0; i < componentTypes.Length; i++)
+                {
+                    string typeName = GetComponentTypeName(componentTypes[i]);
+                    if (typeName.IndexOf("RoadBuilder", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+
+                    hasRoadBuilderComponent = true;
+                    AppendLogSample(ref componentSample, ref componentSampleCount, typeName, 8);
+                    if (typeName.EndsWith(".DiscardedRoadBuilderPrefab", StringComparison.Ordinal) ||
+                        typeName.EndsWith(".RoadBuilderToBeDeletedComponent", StringComparison.Ordinal))
+                    {
+                        isDiscarded = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                detail = $"roadBuilderComponents=error {ex.GetType().Name}:{ex.Message}";
+                return;
+            }
+            finally
+            {
+                if (componentTypes.IsCreated)
+                {
+                    componentTypes.Dispose();
+                }
+            }
+
+            detail = $"roadBuilderComponents={(hasRoadBuilderComponent ? "matched" : "none")} discarded={isDiscarded} sample={componentSample}";
         }
 
         private struct DirectionalLaneOffsetProfile
@@ -531,6 +955,7 @@ namespace PocketTurnLanes.Systems.Tool
                     out profile))
             {
                 profile.Source = $"Composition:{FormatEntity(composition.m_Edge)}";
+                ApplyRoadBuilderConfigSemantics(fallbackPrefab, ref profile);
                 return true;
             }
 
@@ -585,6 +1010,7 @@ namespace PocketTurnLanes.Systems.Tool
                 if (profile.RoadCounts.Total > 0)
                 {
                     profile.Source = "DefaultNetLane";
+                    ApplyRoadBuilderConfigSemantics(prefabEntity, ref profile);
                     return true;
                 }
             }
@@ -592,12 +1018,14 @@ namespace PocketTurnLanes.Systems.Tool
             if (TryGetCompositionLaneProfile(prefabEntity, default, out profile))
             {
                 profile.Source = "NetGeometryComposition:default";
+                ApplyRoadBuilderConfigSemantics(prefabEntity, ref profile);
                 return true;
             }
 
             if (TryCalculateDefaultRoadLaneProfile(prefabEntity, out profile))
             {
                 profile.Source = "NetGeometrySection:calculated";
+                ApplyRoadBuilderConfigSemantics(prefabEntity, ref profile);
                 return true;
             }
 
@@ -641,7 +1069,20 @@ namespace PocketTurnLanes.Systems.Tool
             Entity prefabEntity,
             out RoadLaneProfile profile)
         {
-            profile = CreateEmptyRoadLaneProfile("NetGeometrySection:calculated");
+            return TryCalculateRoadLaneProfile(
+                prefabEntity,
+                default,
+                "NetGeometrySection:calculated",
+                out profile);
+        }
+
+        private bool TryCalculateRoadLaneProfile(
+            Entity prefabEntity,
+            CompositionFlags compositionFlags,
+            string source,
+            out RoadLaneProfile profile)
+        {
+            profile = CreateEmptyRoadLaneProfile(source);
 
             if (!EntityManager.TryGetBuffer(prefabEntity, true, out DynamicBuffer<NetGeometrySection> sections))
             {
@@ -656,7 +1097,7 @@ namespace PocketTurnLanes.Systems.Tool
                 NetCompositionHelpers.GetCompositionPieces(
                     pieces,
                     sections.AsNativeArray(),
-                    default,
+                    compositionFlags,
                     GetBufferLookup<NetSubSection>(true),
                     GetBufferLookup<NetSectionPiece>(true));
                 NetCompositionHelpers.AddCompositionLanes(
@@ -673,12 +1114,13 @@ namespace PocketTurnLanes.Systems.Tool
                     AccumulateLaneProfile(lanes[i].m_Flags, lanes[i].m_Lane, lanes[i].m_Position.x, ref profile);
                 }
 
+                profile.Source = source;
                 return profile.RoadCounts.Total > 0;
             }
             catch (Exception ex)
             {
-                Mod.log.Warn(ex, $"[IntersectionTool] Failed to calculate default road lanes for prefab={GetPrefabNameFromPrefab(prefabEntity)} entity={FormatEntity(prefabEntity)}.");
-                profile = CreateEmptyRoadLaneProfile("NetGeometrySection:calculated");
+                Mod.log.Warn(ex, $"[IntersectionTool] Failed to calculate road lanes for prefab={GetPrefabNameFromPrefab(prefabEntity)} entity={FormatEntity(prefabEntity)} compositionFlags={compositionFlags} source={source}.");
+                profile = CreateEmptyRoadLaneProfile(source);
                 return false;
             }
             finally
@@ -701,53 +1143,82 @@ namespace PocketTurnLanes.Systems.Tool
             float lateralOffset,
             ref RoadLaneProfile profile)
         {
-            RoadLaneCountMatcher.CountRoadLane(flags, ref profile.RoadCounts);
+            LaneFlags effectiveFlags = GetEffectiveLaneFlags(flags, lanePrefab);
+            string flagMergeDetail = FormatEffectiveLaneFlags(flags, effectiveFlags);
+
+            RoadLaneCountMatcher.CountRoadLane(effectiveFlags, ref profile.RoadCounts);
 
             if (!profile.HasMarkedParking &&
-                IsMarkedParkingLane(flags, lanePrefab, out string detail))
+                IsMarkedParkingLane(effectiveFlags, lanePrefab, out string detail))
             {
                 profile.HasMarkedParking = true;
-                profile.MarkedParkingDetail = detail;
+                profile.MarkedParkingDetail = detail + flagMergeDetail;
             }
 
-            if (IsTramTrackLane(flags, lanePrefab, out string tramDetail))
+            if (IsTramTrackLane(effectiveFlags, lanePrefab, out string tramDetail))
             {
-                AddDirectionalLane(flags, ref profile.TramTrackCounts);
-                AddDirectionalOffset(flags, lateralOffset, ref profile.TramTrackLayout);
+                AddDirectionalLane(effectiveFlags, ref profile.TramTrackCounts);
+                AddDirectionalOffset(effectiveFlags, lateralOffset, ref profile.TramTrackLayout);
                 if (profile.TramTrackDetail == "<none>")
                 {
-                    profile.TramTrackDetail = tramDetail;
+                    profile.TramTrackDetail = tramDetail + flagMergeDetail;
                 }
 
-                if (IsIndependentTramTrackLane(flags))
+                if (IsIndependentTramTrackLane(effectiveFlags))
                 {
-                    AddDirectionalLane(flags, ref profile.IndependentTramCounts);
-                    AddDirectionalOffset(flags, lateralOffset, ref profile.IndependentTramLayout);
+                    AddDirectionalLane(effectiveFlags, ref profile.IndependentTramCounts);
+                    AddDirectionalOffset(effectiveFlags, lateralOffset, ref profile.IndependentTramLayout);
                     if (profile.IndependentTramDetail == "<none>")
                     {
-                        profile.IndependentTramDetail = tramDetail;
+                        profile.IndependentTramDetail = tramDetail + flagMergeDetail;
                     }
                 }
 
-                if (IsPublicTransportTramTrackLane(flags, lanePrefab, out string publicTransportTramDetail))
+                if (IsPublicTransportTramTrackLane(effectiveFlags, lanePrefab, out string publicTransportTramDetail))
                 {
-                    AddDirectionalLane(flags, ref profile.PublicTransportTramCounts);
-                    AddDirectionalOffset(flags, lateralOffset, ref profile.PublicTransportTramLayout);
+                    AddDirectionalLane(effectiveFlags, ref profile.PublicTransportTramCounts);
+                    AddDirectionalOffset(effectiveFlags, lateralOffset, ref profile.PublicTransportTramLayout);
                     if (profile.PublicTransportTramDetail == "<none>")
                     {
-                        profile.PublicTransportTramDetail = publicTransportTramDetail;
+                        profile.PublicTransportTramDetail = publicTransportTramDetail + flagMergeDetail;
                     }
                 }
             }
 
-            if (IsBusRoadLane(flags, lanePrefab, out string busDetail))
+            if (IsBusRoadLane(effectiveFlags, lanePrefab, out string busDetail))
             {
-                AddDirectionalOffset(flags, lateralOffset, ref profile.BusLaneLayout);
+                AddDirectionalOffset(effectiveFlags, lateralOffset, ref profile.BusLaneLayout);
                 if (profile.BusLaneDetail == "<none>")
                 {
-                    profile.BusLaneDetail = busDetail;
+                    profile.BusLaneDetail = busDetail + flagMergeDetail;
                 }
             }
+        }
+
+        private LaneFlags GetEffectiveLaneFlags(LaneFlags flags, Entity lanePrefab)
+        {
+            if (lanePrefab == Entity.Null ||
+                !EntityManager.TryGetComponent(lanePrefab, out NetLaneData laneData))
+            {
+                return flags;
+            }
+
+            const LaneFlags semanticLaneFlags =
+                LaneFlags.Road |
+                LaneFlags.Parking |
+                LaneFlags.Track |
+                LaneFlags.Pedestrian |
+                LaneFlags.PublicOnly |
+                LaneFlags.BicyclesOnly |
+                LaneFlags.Twoway;
+            return flags | (laneData.m_Flags & semanticLaneFlags);
+        }
+
+        private static string FormatEffectiveLaneFlags(LaneFlags rawFlags, LaneFlags effectiveFlags)
+        {
+            return rawFlags == effectiveFlags
+                ? string.Empty
+                : $" rawFlags={rawFlags} effectiveFlags={effectiveFlags}";
         }
 
         private static void AddDirectionalLane(LaneFlags flags, ref RoadLaneCounts counts)
@@ -788,6 +1259,268 @@ namespace PocketTurnLanes.Systems.Tool
             {
                 profile.ForwardCount++;
                 profile.ForwardOffsetSum += lateralOffset;
+            }
+        }
+
+        private static void AddRoadBuilderDirectionalLane(bool forward, ref RoadLaneCounts counts)
+        {
+            if (forward)
+            {
+                counts.Forward++;
+            }
+            else
+            {
+                counts.Backward++;
+            }
+        }
+
+        private static void AddRoadBuilderDirectionalOffset(
+            bool forward,
+            float lateralOffset,
+            ref DirectionalLaneOffsetProfile profile)
+        {
+            if (forward)
+            {
+                profile.ForwardCount++;
+                profile.ForwardOffsetSum += lateralOffset;
+            }
+            else
+            {
+                profile.BackwardCount++;
+                profile.BackwardOffsetSum += lateralOffset;
+            }
+        }
+
+        private static object TryGetPropertyValue(object instance, string propertyName)
+        {
+            if (instance == null)
+            {
+                return null;
+            }
+
+            PropertyInfo property = instance.GetType().GetProperty(
+                propertyName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return property == null ? null : property.GetValue(instance);
+        }
+
+        private static Dictionary<string, string> ReadRoadBuilderGroupOptions(object rawOptions)
+        {
+            Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (rawOptions == null)
+            {
+                return result;
+            }
+
+            if (rawOptions is IDictionary dictionary)
+            {
+                foreach (DictionaryEntry entry in dictionary)
+                {
+                    string key = entry.Key?.ToString() ?? string.Empty;
+                    if (!string.IsNullOrEmpty(key))
+                    {
+                        result[key] = entry.Value?.ToString() ?? string.Empty;
+                    }
+                }
+
+                return result;
+            }
+
+            if (rawOptions is IEnumerable enumerable)
+            {
+                foreach (object item in enumerable)
+                {
+                    if (item == null)
+                    {
+                        continue;
+                    }
+
+                    string key = TryGetPropertyValue(item, "Key")?.ToString() ?? string.Empty;
+                    if (!string.IsNullOrEmpty(key))
+                    {
+                        result[key] = TryGetPropertyValue(item, "Value")?.ToString() ?? string.Empty;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static string GetRoadBuilderOption(Dictionary<string, string> options, string optionName)
+        {
+            if (options == null)
+            {
+                return string.Empty;
+            }
+
+            return options.TryGetValue(optionName, out string value) ? value ?? string.Empty : string.Empty;
+        }
+
+        private static float GetRoadBuilderLaneWidth(RoadBuilderLaneConfig lane)
+        {
+            if (TryGetRoadBuilderOptionMeters(lane.GroupOptions, "Lane Width", out float laneWidth) ||
+                TryGetRoadBuilderOptionMeters(lane.GroupOptions, "Median Width", out laneWidth) ||
+                TryGetRoadBuilderOptionMeters(lane.GroupOptions, "Width", out laneWidth) ||
+                TryGetRoadBuilderOptionMeters(lane.GroupOptions, "Shoulder Width", out laneWidth) ||
+                TryGetRoadBuilderOptionMeters(lane.GroupOptions, "Parking Width", out laneWidth))
+            {
+                return laneWidth;
+            }
+
+            if (TryExtractMeterValue(lane.SectionPrefabName, out laneWidth))
+            {
+                return laneWidth;
+            }
+
+            if (RoadBuilderPrefabNameContains(lane.GroupPrefabName, "MedianGroupPrefab"))
+            {
+                return 1f;
+            }
+
+            if (RoadBuilderPrefabNameContains(lane.GroupPrefabName, "SidewalkGroupPrefab"))
+            {
+                return 3f;
+            }
+
+            if (RoadBuilderPrefabNameContains(lane.GroupPrefabName, "TramGroupPrefab") ||
+                RoadBuilderPrefabNameContains(lane.GroupPrefabName, "BusGroupPrefab") ||
+                RoadBuilderPrefabNameContains(lane.GroupPrefabName, "CarGroupPrefab") ||
+                RoadBuilderPrefabNameContains(lane.GroupPrefabName, "HarborCarGroupPrefab"))
+            {
+                return 3f;
+            }
+
+            return 0f;
+        }
+
+        private static bool TryGetRoadBuilderOptionMeters(
+            Dictionary<string, string> options,
+            string optionName,
+            out float meters)
+        {
+            meters = 0f;
+            return options != null &&
+                   options.TryGetValue(optionName, out string rawValue) &&
+                   TryParseMeters(rawValue, out meters);
+        }
+
+        private static bool TryExtractMeterValue(string text, out float meters)
+        {
+            meters = 0f;
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+
+            Match match = Regex.Match(text, @"(?<!\d)(\d+(?:[\.,]\d+)?)\s*m\b", RegexOptions.IgnoreCase);
+            return match.Success && TryParseMeters(match.Groups[1].Value, out meters);
+        }
+
+        private static bool TryParseMeters(string rawValue, out float meters)
+        {
+            meters = 0f;
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return false;
+            }
+
+            string value = rawValue.Trim();
+            if (value.EndsWith("m", StringComparison.OrdinalIgnoreCase))
+            {
+                value = value.Substring(0, value.Length - 1);
+            }
+
+            value = value.Replace(',', '.');
+            return float.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out meters);
+        }
+
+        private static void ClassifyRoadBuilderLane(ref RoadBuilderLaneConfig lane)
+        {
+            string transportOption = GetRoadBuilderOption(lane.GroupOptions, "Transport Option");
+            bool carGroup = RoadBuilderPrefabNameContains(lane.GroupPrefabName, "CarGroupPrefab") ||
+                            RoadBuilderPrefabNameContains(lane.GroupPrefabName, "HarborCarGroupPrefab");
+            bool busGroup = RoadBuilderPrefabNameContains(lane.GroupPrefabName, "BusGroupPrefab");
+            bool tramGroup = RoadBuilderPrefabNameContains(lane.GroupPrefabName, "TramGroupPrefab");
+            bool sectionPublicTransport = StringContainsOrdinalIgnoreCase(lane.SectionPrefabName, "Public Transport Lane");
+            bool sectionTransportOption = StringContainsOrdinalIgnoreCase(lane.SectionPrefabName, "Transport Option");
+            bool sectionTramOption = StringContainsOrdinalIgnoreCase(lane.SectionPrefabName, "Tram Option") ||
+                                     StringContainsOrdinalIgnoreCase(lane.SectionPrefabName, "Transport Tram");
+            bool sectionTramTrack = StringContainsOrdinalIgnoreCase(lane.SectionPrefabName, "Tram Track");
+            bool transportIsBus = string.Equals(transportOption, "Transport", StringComparison.OrdinalIgnoreCase);
+            bool transportIsTram = string.Equals(transportOption, "Tram", StringComparison.OrdinalIgnoreCase);
+
+            lane.IsBus = busGroup ||
+                         sectionPublicTransport ||
+                         (carGroup && (transportIsBus || transportIsTram)) ||
+                         sectionTransportOption;
+            lane.IsIndependentTram = tramGroup ||
+                                     (sectionTramTrack && !sectionPublicTransport && !sectionTransportOption);
+            lane.IsPublicTransportTram = !lane.IsIndependentTram &&
+                                         (transportIsTram || sectionTramOption) &&
+                                         (lane.IsBus || carGroup || busGroup || sectionPublicTransport || sectionTransportOption);
+            lane.IsTram = lane.IsIndependentTram || lane.IsPublicTransportTram;
+
+            if (lane.IsIndependentTram)
+            {
+                lane.Semantic = "tram-independent";
+            }
+            else if (lane.IsPublicTransportTram && lane.IsBus)
+            {
+                lane.Semantic = "pt-tram";
+            }
+            else if (lane.IsBus)
+            {
+                lane.Semantic = "pt";
+            }
+            else if (lane.IsPublicTransportTram)
+            {
+                lane.Semantic = "tram-pt";
+            }
+            else
+            {
+                lane.Semantic = "none";
+            }
+        }
+
+        private static bool RoadBuilderPrefabNameContains(string prefabName, string suffix)
+        {
+            return !string.IsNullOrEmpty(prefabName) &&
+                   prefabName.IndexOf(suffix, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool StringContainsOrdinalIgnoreCase(string value, string pattern)
+        {
+            return !string.IsNullOrEmpty(value) &&
+                   value.IndexOf(pattern, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string ShortRoadBuilderPrefabName(string prefabName)
+        {
+            if (string.IsNullOrEmpty(prefabName))
+            {
+                return "<none>";
+            }
+
+            int lastDot = prefabName.LastIndexOf('.');
+            return lastDot >= 0 && lastDot < prefabName.Length - 1
+                ? prefabName.Substring(lastDot + 1)
+                : prefabName;
+        }
+
+        private static string GetComponentTypeName(ComponentType componentType)
+        {
+            try
+            {
+                Type managedType = componentType.GetManagedType();
+                return managedType?.FullName ?? componentType.ToString();
+            }
+            catch
+            {
+                return componentType.ToString();
             }
         }
 
@@ -843,11 +1576,11 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            bool supportsCars = (carLaneData.m_RoadTypes & RoadTypes.Car) != 0;
             bool publicOnly = (flags & LaneFlags.PublicOnly) != 0;
             bool hasNonBusFallback = carLaneData.m_NotBusLanePrefab != Entity.Null;
-            detail = $"lane={FormatEntity(lanePrefab)} flags={flags} trackTypes={trackLaneData.m_TrackTypes} roadTypes={carLaneData.m_RoadTypes} publicOnly={publicOnly} notBusFallback={FormatEntity(carLaneData.m_NotBusLanePrefab)}";
-            return supportsCars && (publicOnly || hasNonBusFallback);
+            bool supportsCars = (carLaneData.m_RoadTypes & RoadTypes.Car) != 0;
+            detail = $"lane={FormatEntity(lanePrefab)} flags={flags} trackTypes={trackLaneData.m_TrackTypes} roadTypes={carLaneData.m_RoadTypes} supportsCars={supportsCars} publicOnly={publicOnly} notBusFallback={FormatEntity(carLaneData.m_NotBusLanePrefab)}";
+            return publicOnly || hasNonBusFallback;
         }
 
         private bool IsBusRoadLane(LaneFlags flags, Entity lanePrefab, out string detail)
@@ -866,11 +1599,11 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            bool supportsCars = (carLaneData.m_RoadTypes & RoadTypes.Car) != 0;
             bool publicOnly = (flags & LaneFlags.PublicOnly) != 0;
             bool hasNonBusFallback = carLaneData.m_NotBusLanePrefab != Entity.Null;
-            detail = $"lane={FormatEntity(lanePrefab)} flags={flags} roadTypes={carLaneData.m_RoadTypes} publicOnly={publicOnly} notBusFallback={FormatEntity(carLaneData.m_NotBusLanePrefab)}";
-            return supportsCars && (publicOnly || hasNonBusFallback);
+            bool supportsCars = (carLaneData.m_RoadTypes & RoadTypes.Car) != 0;
+            detail = $"lane={FormatEntity(lanePrefab)} flags={flags} roadTypes={carLaneData.m_RoadTypes} supportsCars={supportsCars} publicOnly={publicOnly} notBusFallback={FormatEntity(carLaneData.m_NotBusLanePrefab)}";
+            return publicOnly || hasNonBusFallback;
         }
 
         private bool IsMarkedParkingLane(LaneFlags flags, Entity lanePrefab, out string detail)
@@ -1033,6 +1766,180 @@ namespace PocketTurnLanes.Systems.Tool
             return true;
         }
 
+        private bool TryFindMatchingBusUpgrade(
+            Entity prefabEntity,
+            RoadLaneProfile sourceProfile,
+            RoadLaneCounts desiredRoadCounts,
+            out bool invertTarget,
+            out Upgraded targetUpgrade,
+            out RoadLaneProfile targetProfile,
+            out string detail)
+        {
+            invertTarget = false;
+            targetUpgrade = default;
+            targetProfile = CreateEmptyRoadLaneProfile("BusUpgrade:missing");
+            detail = "busUpgrade=not-scanned";
+
+            if (prefabEntity == Entity.Null || !sourceProfile.BusLaneLayout.HasAny)
+            {
+                detail = $"busUpgrade=skipped prefab={GetPrefabNameFromPrefab(prefabEntity)} sourceBusLayout={sourceProfile.BusLaneLayout}";
+                return false;
+            }
+
+            if (!EntityManager.TryGetBuffer(prefabEntity, true, out DynamicBuffer<NetGeometryComposition> compositions))
+            {
+                detail = $"busUpgrade=missing-compositions prefab={GetPrefabNameFromPrefab(prefabEntity)}";
+                return false;
+            }
+
+            int scanned = 0;
+            int nonDefaultMasks = 0;
+            int laneProfiles = 0;
+            int calculatedProfiles = 0;
+            int directProfiles = 0;
+            int parkingProfiles = 0;
+            int busProfiles = 0;
+            int publicTransportTramProfiles = 0;
+            int laneMatches = 0;
+            int bestScore = int.MaxValue;
+            CompositionFlags bestUpgradeFlags = default;
+            RoadLaneProfile bestProfile = default;
+            bool bestInvert = false;
+
+            for (int i = 0; i < compositions.Length; i++)
+            {
+                scanned++;
+                NetGeometryComposition composition = compositions[i];
+                if (composition.m_Mask == default(CompositionFlags))
+                {
+                    continue;
+                }
+
+                nonDefaultMasks++;
+                bool calculatedProfile = TryCalculateRoadLaneProfile(
+                    prefabEntity,
+                    composition.m_Mask,
+                    $"NetGeometrySection:upgrade:{composition.m_Mask}",
+                    out RoadLaneProfile calculatedRoadProfile);
+                bool directProfile = TryGetCompositionRoadLaneProfile(composition.m_Composition, out RoadLaneProfile directRoadProfile);
+                if (directProfile)
+                {
+                    directRoadProfile.Source = $"NetGeometryComposition:upgrade:{composition.m_Mask}";
+                }
+
+                if (!calculatedProfile && !directProfile)
+                {
+                    continue;
+                }
+
+                if (calculatedProfile)
+                {
+                    laneProfiles++;
+                    calculatedProfiles++;
+                    TryAcceptBusUpgradeProfile(
+                        calculatedRoadProfile,
+                        desiredRoadCounts,
+                        sourceProfile,
+                        composition.m_Mask,
+                        ref parkingProfiles,
+                        ref busProfiles,
+                        ref publicTransportTramProfiles,
+                        ref laneMatches,
+                        ref bestScore,
+                        ref bestUpgradeFlags,
+                        ref bestProfile,
+                        ref bestInvert);
+                }
+
+                if (directProfile)
+                {
+                    laneProfiles++;
+                    directProfiles++;
+                    TryAcceptBusUpgradeProfile(
+                        directRoadProfile,
+                        desiredRoadCounts,
+                        sourceProfile,
+                        composition.m_Mask,
+                        ref parkingProfiles,
+                        ref busProfiles,
+                        ref publicTransportTramProfiles,
+                        ref laneMatches,
+                        ref bestScore,
+                        ref bestUpgradeFlags,
+                        ref bestProfile,
+                        ref bestInvert);
+                }
+            }
+
+            if (bestUpgradeFlags == default(CompositionFlags))
+            {
+                detail = $"busUpgrade=no-match prefab={GetPrefabNameFromPrefab(prefabEntity)} scannedCompositions={scanned} nonDefaultMasks={nonDefaultMasks} laneProfiles={laneProfiles} calculatedProfiles={calculatedProfiles} directProfiles={directProfiles} parkingProfiles={parkingProfiles} busProfiles={busProfiles} publicTransportTramProfiles={publicTransportTramProfiles} laneMatches={laneMatches} desiredRoad={desiredRoadCounts} sourceBusLayout={sourceProfile.BusLaneLayout}";
+                return false;
+            }
+
+            invertTarget = bestInvert;
+            CompositionFlags targetFlags = invertTarget
+                ? NetCompositionHelpers.InvertCompositionFlags(bestUpgradeFlags)
+                : bestUpgradeFlags;
+            targetUpgrade = new Upgraded { m_Flags = targetFlags };
+            targetProfile = bestProfile;
+            targetProfile.Source = $"BusUpgrade:{targetFlags}";
+            detail = $"busUpgrade=matched prefab={GetPrefabNameFromPrefab(prefabEntity)} upgradeFlags={targetFlags} rawUpgradeFlags={bestUpgradeFlags} upgradedRoad={bestProfile.RoadCounts} upgradedBusLayout={bestProfile.BusLaneLayout} upgradedBusDetail={bestProfile.BusLaneDetail} upgradedTramTracks={bestProfile.TramTrackCounts} upgradedPublicTransportTram={bestProfile.PublicTransportTramCounts} scannedCompositions={scanned} nonDefaultMasks={nonDefaultMasks} laneProfiles={laneProfiles} calculatedProfiles={calculatedProfiles} directProfiles={directProfiles} parkingProfiles={parkingProfiles} busProfiles={busProfiles} publicTransportTramProfiles={publicTransportTramProfiles} laneMatches={laneMatches} layoutScore={bestScore} invertTarget={invertTarget}";
+            return true;
+        }
+
+        private bool TryAcceptBusUpgradeProfile(
+            RoadLaneProfile profile,
+            RoadLaneCounts desiredRoadCounts,
+            RoadLaneProfile sourceProfile,
+            CompositionFlags compositionMask,
+            ref int parkingProfiles,
+            ref int busProfiles,
+            ref int publicTransportTramProfiles,
+            ref int laneMatches,
+            ref int bestScore,
+            ref CompositionFlags bestUpgradeFlags,
+            ref RoadLaneProfile bestProfile,
+            ref bool bestInvert)
+        {
+            if (profile.HasMarkedParking)
+            {
+                parkingProfiles++;
+                return false;
+            }
+
+            if (!profile.BusLaneLayout.HasAny)
+            {
+                return false;
+            }
+
+            busProfiles++;
+            if (!profile.TramTrackCounts.IsEmpty)
+            {
+                publicTransportTramProfiles++;
+            }
+
+            if (!RoadLaneCountMatcher.TryMatch(profile.RoadCounts, desiredRoadCounts, out bool candidateInvert))
+            {
+                return false;
+            }
+
+            laneMatches++;
+            DirectionalLaneOffsetProfile orientedBusLayout = profile.BusLaneLayout.Oriented(candidateInvert);
+            int score = GetDirectionalLayoutOffsetScore(sourceProfile.BusLaneLayout, orientedBusLayout) +
+                        (candidateInvert ? 1000 : 0);
+            if (score >= bestScore)
+            {
+                return false;
+            }
+
+            bestScore = score;
+            bestUpgradeFlags = compositionMask;
+            bestProfile = profile;
+            bestInvert = candidateInvert;
+            return true;
+        }
+
         private static bool TryBuildSourceTramUpgradeFallbackProfile(
             RoadLaneProfile candidateDefaultProfile,
             RoadLaneProfile sourceProfile,
@@ -1075,6 +1982,37 @@ namespace PocketTurnLanes.Systems.Tool
         {
             return first.Forward == second.Forward &&
                    first.Backward == second.Backward;
+        }
+
+        private static bool LooksLikeRoadBuilderRoadPrefabName(string prefabName)
+        {
+            return !string.IsNullOrEmpty(prefabName) &&
+                   prefabName.Length > 2 &&
+                   prefabName[0] == 'r' &&
+                   prefabName.IndexOf("-765611", StringComparison.Ordinal) > 0;
+        }
+
+        private static void AppendLogSample(
+            ref string samples,
+            ref int sampleCount,
+            string sample,
+            int maxSamples)
+        {
+            if (sampleCount >= maxSamples)
+            {
+                return;
+            }
+
+            if (samples == "<none>")
+            {
+                samples = sample;
+            }
+            else
+            {
+                samples += " || " + sample;
+            }
+
+            sampleCount++;
         }
 
         private static bool CountsMatchForOrientation(

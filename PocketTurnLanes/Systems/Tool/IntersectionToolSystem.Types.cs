@@ -257,10 +257,13 @@ namespace PocketTurnLanes.Systems.Tool
             public string TargetTramTrackLayout;
             public string SourceBusLaneLayout;
             public string TargetBusLaneLayout;
+            public string SourceBusLaneDetail;
+            public string TargetBusLaneDetail;
             public string LayoutScoreDetail;
             public int LayoutScore;
             public int TramLayoutScore;
             public int BusLayoutScore;
+            public bool TargetIsSourcePrefab;
             public bool TargetIsDlc;
             public string TargetContentDetail;
             public int Score;

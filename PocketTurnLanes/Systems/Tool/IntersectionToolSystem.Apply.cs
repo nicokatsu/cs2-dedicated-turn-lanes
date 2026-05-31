@@ -4,6 +4,7 @@ using Game.Common;
 using Game.Net;
 using Game.Prefabs;
 using Game.Tools;
+using PocketTurnLanes.Tool;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -72,13 +73,10 @@ namespace PocketTurnLanes.Systems.Tool
             for (int i = 0; i < m_AppliedReplacementCandidates.Count; i++)
             {
                 ReplacementCandidate candidate = m_AppliedReplacementCandidates[i];
-                if (EntityManager.Exists(candidate.PocketEdge) &&
-                    !EntityManager.HasComponent<Deleted>(candidate.PocketEdge) &&
-                    EntityManager.TryGetComponent(candidate.PocketEdge, out PrefabRef prefabRef) &&
-                    prefabRef.m_Prefab == candidate.TargetPrefab)
+                if (IsReplacementTargetVisible(candidate, candidate.PocketEdge, out string visibleDetail))
                 {
                     verifiedCount++;
-                    Mod.log.Info($"[IntersectionTool] Pocket lane replacement verified edge={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes}.");
+                    Mod.log.Info($"[IntersectionTool] Pocket lane replacement verified edge={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} detail={visibleDetail}.");
                     QueueSplitLaneConnectionFix(candidate, candidate.PocketEdge);
                     continue;
                 }
@@ -114,6 +112,48 @@ namespace PocketTurnLanes.Systems.Tool
                 finalPocketEdge,
                 candidate.SourcePrefab,
                 candidate.TargetPrefab);
+        }
+
+        private bool IsReplacementTargetVisible(
+            ReplacementCandidate candidate,
+            Entity edgeEntity,
+            out string detail)
+        {
+            detail = "missing";
+            if (edgeEntity == Entity.Null ||
+                !EntityManager.Exists(edgeEntity) ||
+                EntityManager.HasComponent<Deleted>(edgeEntity) ||
+                !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef) ||
+                prefabRef.m_Prefab != candidate.TargetPrefab)
+            {
+                return false;
+            }
+
+            if (candidate.TargetPrefab != candidate.SourcePrefab)
+            {
+                detail = "prefab-match";
+                return true;
+            }
+
+            if (!TryGetRoadLaneProfile(edgeEntity, candidate.TargetPrefab, out RoadLaneProfile profile))
+            {
+                detail = "same-prefab profile=missing";
+                return false;
+            }
+
+            RoadLaneCounts targetCounts = new RoadLaneCounts
+            {
+                Forward = candidate.TargetForwardLanes,
+                Backward = candidate.TargetBackwardLanes
+            };
+            if (!RoadLaneCountMatcher.TryMatch(profile.RoadCounts, targetCounts, out bool invert))
+            {
+                detail = $"same-prefab profile={profile.Source} road={profile.RoadCounts} target={targetCounts} bus={profile.BusLaneLayout} tram={profile.TramTrackLayout}";
+                return false;
+            }
+
+            detail = $"same-prefab profile={profile.Source} road={profile.RoadCounts} target={targetCounts} matchedOrientation={(invert ? "reversed" : "direct")} bus={profile.BusLaneLayout} tram={profile.TramTrackLayout}";
+            return true;
         }
 
         private bool TryQueueFailedSplitRetries(ref JobHandle result)
@@ -529,7 +569,8 @@ namespace PocketTurnLanes.Systems.Tool
             foundPocketEdge = true;
 
             if (EntityManager.TryGetComponent(pocketEdge, out PrefabRef pocketPrefabRef) &&
-                pocketPrefabRef.m_Prefab == splitCandidate.TargetPrefab)
+                pocketPrefabRef.m_Prefab == splitCandidate.TargetPrefab &&
+                splitCandidate.TargetPrefab != splitCandidate.SourcePrefab)
             {
                 Mod.log.Info($"[IntersectionTool] Pocket lane replacement already present after split original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m.");
                 if (m_SplitLaneConnectionFixSystem != null)
@@ -544,6 +585,10 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 return false;
+            }
+            else if (splitCandidate.TargetPrefab == splitCandidate.SourcePrefab)
+            {
+                Mod.log.Info($"[IntersectionTool] Pocket lane replacement uses the source prefab; queueing a replacement definition to refresh runtime composition original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} prefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} lanes={splitCandidate.OriginalForwardLanes}/{splitCandidate.OriginalBackwardLanes}->{splitCandidate.TargetForwardLanes}/{splitCandidate.TargetBackwardLanes}.");
             }
 
             ReplacementCandidate replacementCandidate = new ReplacementCandidate
@@ -839,8 +884,7 @@ namespace PocketTurnLanes.Systems.Tool
                     !EntityManager.Exists(edgeEntity) ||
                     EntityManager.HasComponent<Deleted>(edgeEntity) ||
                     !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
-                    !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef) ||
-                    prefabRef.m_Prefab != candidate.TargetPrefab)
+                    !IsReplacementTargetVisible(candidate, edgeEntity, out _))
                 {
                     continue;
                 }
