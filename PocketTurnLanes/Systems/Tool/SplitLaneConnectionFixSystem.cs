@@ -45,6 +45,12 @@ namespace PocketTurnLanes.Systems.Tool
         private int m_TrafficRuntimeWaitFrames;
         private EntityQuery m_LaneRefreshOwnerQuery;
 
+        private enum RepairMode
+        {
+            Standard,
+            BalancedOppositeTarget
+        }
+
         protected override void OnCreate()
         {
             base.OnCreate();
@@ -282,9 +288,50 @@ namespace PocketTurnLanes.Systems.Tool
             Entity sourcePrefab,
             Entity targetPrefab)
         {
+            QueueInternal(
+                intersectionNode,
+                Entity.Null,
+                splitNode,
+                originalEdge,
+                pocketEdge,
+                sourcePrefab,
+                targetPrefab,
+                RepairMode.Standard);
+        }
+
+        public void QueueBalancedOppositeTarget(
+            Entity intersectionNode,
+            Entity farIntersectionNode,
+            Entity splitNode,
+            Entity originalEdge,
+            Entity pocketEdge,
+            Entity sourcePrefab,
+            Entity targetPrefab)
+        {
+            QueueInternal(
+                intersectionNode,
+                farIntersectionNode,
+                splitNode,
+                originalEdge,
+                pocketEdge,
+                sourcePrefab,
+                targetPrefab,
+                RepairMode.BalancedOppositeTarget);
+        }
+
+        private void QueueInternal(
+            Entity intersectionNode,
+            Entity farIntersectionNode,
+            Entity splitNode,
+            Entity originalEdge,
+            Entity pocketEdge,
+            Entity sourcePrefab,
+            Entity targetPrefab,
+            RepairMode mode)
+        {
             if (splitNode == Entity.Null || pocketEdge == Entity.Null)
             {
-                Mod.log.Info($"[SplitLaneConnectionFix] Queue skipped: invalid splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)}.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Queue skipped: invalid splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)}.");
                 return;
             }
 
@@ -294,16 +341,18 @@ namespace PocketTurnLanes.Systems.Tool
                 if (existing.SplitNode == splitNode && existing.PocketEdge == pocketEdge)
                 {
                     existing.IntersectionNode = intersectionNode;
+                    existing.FarIntersectionNode = farIntersectionNode;
                     existing.OriginalEdge = originalEdge;
                     existing.SourcePrefab = sourcePrefab;
                     existing.TargetPrefab = targetPrefab;
+                    existing.Mode = mode;
                     existing.QueuedFrame = UnityEngine.Time.frameCount;
                     existing.LaneDataRetries = 0;
                     existing.VerificationAttempts = 0;
                     existing.StableVerificationFrames = 0;
                     existing.TrafficWritten = false;
                     m_Requests[i] = existing;
-                    Mod.log.Info($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} frame={UnityEngine.Time.frameCount}.");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} frame={UnityEngine.Time.frameCount}.");
                     return;
                 }
             }
@@ -311,18 +360,20 @@ namespace PocketTurnLanes.Systems.Tool
             m_Requests.Add(new Request
             {
                 IntersectionNode = intersectionNode,
+                FarIntersectionNode = farIntersectionNode,
                 SplitNode = splitNode,
                 OriginalEdge = originalEdge,
                 PocketEdge = pocketEdge,
                 SourcePrefab = sourcePrefab,
                 TargetPrefab = targetPrefab,
+                Mode = mode,
                 QueuedFrame = UnityEngine.Time.frameCount
             });
 
             bool splitUpdated = MarkUpdatedIfExists(splitNode, out bool splitAlreadyUpdated);
             bool pocketUpdated = MarkUpdatedIfExists(pocketEdge, out bool pocketAlreadyUpdated);
             bool originalUpdated = MarkUpdatedIfExists(originalEdge, out bool originalAlreadyUpdated);
-            Mod.log.Info($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} intersection={FormatEntity(intersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} frame={UnityEngine.Time.frameCount} preMarkedUpdated=split:{FormatUpdateMarker(splitUpdated, splitAlreadyUpdated)},pocket:{FormatUpdateMarker(pocketUpdated, pocketAlreadyUpdated)},original:{FormatUpdateMarker(originalUpdated, originalAlreadyUpdated)}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
+            Mod.log.Info($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} intersection={FormatEntity(intersectionNode)} farIntersection={FormatEntity(farIntersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} frame={UnityEngine.Time.frameCount} preMarkedUpdated=split:{FormatUpdateMarker(splitUpdated, splitAlreadyUpdated)},pocket:{FormatUpdateMarker(pocketUpdated, pocketAlreadyUpdated)},original:{FormatUpdateMarker(originalUpdated, originalAlreadyUpdated)}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
         }
 
         private bool TryPrepareMappings(ref Request request)
@@ -384,7 +435,13 @@ namespace PocketTurnLanes.Systems.Tool
             TurnDirection turn = DetermineTurn(selectedTargets, extraTargetListIndex);
             string centerTurnDiagnostic = "not-run";
             bool centerTurnEvidence = false;
-            if (TryRefineExtraTargetFromCenterConnectors(request, selectedTargets, out int centerExtraTargetListIndex, out TurnDirection centerTurn, out centerTurnDiagnostic))
+            if (TryRefineExtraTargetFromCenterConnectors(
+                    request.IntersectionNode,
+                    request.PocketEdge,
+                    selectedTargets,
+                    out int centerExtraTargetListIndex,
+                    out TurnDirection centerTurn,
+                    out centerTurnDiagnostic))
             {
                 centerTurnEvidence = true;
                 if (centerExtraTargetListIndex != extraTargetListIndex || centerTurn != turn)
@@ -447,7 +504,7 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            Mod.log.Info($"[SplitLaneConnectionFix] Prepared Traffic mapping splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count} selectedTargetCount={selectedTargets.Count} mappingScore={mappingScore:0.###} mappingSource={mappingSource} turn={turn} branchSource={branchSourceLaneIndex} extraTarget={extraTargetLaneIndex} centerDiagnostics={centerTurnDiagnostic} existingConnectors={m_ExistingConnectorLanes.Count} existing={FormatConnectorLanes(m_ExistingConnectorLanes)} mappings={FormatMappings(request.Mappings)} reverseSourceCount={request.ReverseSourceLanes?.Length ?? 0} reverseTargetCount={request.ReverseTargetLanes?.Length ?? 0} reverseMappingSource={reverseMappingSource} reverseMappings={FormatMappings(request.ReverseMappings)}.");
+            Mod.log.Info($"[SplitLaneConnectionFix] Prepared Traffic mapping splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} farIntersection={FormatEntity(request.FarIntersectionNode)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count} selectedTargetCount={selectedTargets.Count} mappingScore={mappingScore:0.###} mappingSource={mappingSource} turn={turn} branchSource={branchSourceLaneIndex} extraTarget={extraTargetLaneIndex} centerDiagnostics={centerTurnDiagnostic} existingConnectors={m_ExistingConnectorLanes.Count} existing={FormatConnectorLanes(m_ExistingConnectorLanes)} mappings={FormatMappings(request.Mappings)} reverseSourceCount={request.ReverseSourceLanes?.Length ?? 0} reverseTargetCount={request.ReverseTargetLanes?.Length ?? 0} reverseMappingSource={reverseMappingSource} reverseMappings={FormatMappings(request.ReverseMappings)}.");
             return true;
         }
 
@@ -485,6 +542,87 @@ namespace PocketTurnLanes.Systems.Tool
             float2 sourceOrigin = GetAveragePosition(m_ReverseSourceLanes);
             AssignLaneLaterals(m_ReverseSourceLanes, sourceOrigin, right);
             AssignLaneLaterals(m_ReverseTargetLanes, sourceOrigin, right);
+
+            if (request.Mode == RepairMode.BalancedOppositeTarget)
+            {
+                if (request.FarIntersectionNode == Entity.Null ||
+                    !EntityManager.Exists(request.FarIntersectionNode))
+                {
+                    reason = $"balanced reverse mapping missing far intersection farIntersection={FormatEntity(request.FarIntersectionNode)}";
+                    return false;
+                }
+
+                if (m_ReverseTargetLanes.Count < m_ReverseSourceLanes.Count + 1)
+                {
+                    reason = $"balanced reverse lane count mismatch source={m_ReverseSourceLanes.Count} target={m_ReverseTargetLanes.Count} expectedTargetAtLeast={m_ReverseSourceLanes.Count + 1}";
+                    return false;
+                }
+
+                if (!TrySelectLaneMapping(m_ReverseSourceLanes, m_ReverseTargetLanes, out List<LaneEndpoint> selectedReverseTargets, out int extraTargetListIndex, out float mappingScore))
+                {
+                    reason = $"balanced reverse target subset selection failed source={m_ReverseSourceLanes.Count} target={m_ReverseTargetLanes.Count}";
+                    return false;
+                }
+
+                TurnDirection turn = DetermineTurn(selectedReverseTargets, extraTargetListIndex);
+                string centerTurnDiagnostic = "not-run";
+                bool centerTurnEvidence = false;
+                if (TryRefineExtraTargetFromCenterConnectors(
+                        request.FarIntersectionNode,
+                        outerEdge,
+                        selectedReverseTargets,
+                        out int centerExtraTargetListIndex,
+                        out TurnDirection centerTurn,
+                        out centerTurnDiagnostic))
+                {
+                    centerTurnEvidence = true;
+                    if (centerExtraTargetListIndex != extraTargetListIndex || centerTurn != turn)
+                    {
+                        Mod.log.Info($"[SplitLaneConnectionFix] Far-center connector turn target overrides balanced reverse split lateral target splitNode={FormatEntity(request.SplitNode)} oldExtra={selectedReverseTargets[extraTargetListIndex].LaneIndex}/{turn} newExtra={selectedReverseTargets[centerExtraTargetListIndex].LaneIndex}/{centerTurn} diagnostics={centerTurnDiagnostic}.");
+                    }
+
+                    extraTargetListIndex = centerExtraTargetListIndex;
+                    turn = centerTurn;
+                }
+
+                if (turn == TurnDirection.Ambiguous)
+                {
+                    reason = $"balanced reverse ambiguous turn extraIndex={extraTargetListIndex} centerDiagnostics={centerTurnDiagnostic}";
+                    return false;
+                }
+
+                int branchSourceListIndex = turn == TurnDirection.Right ? m_ReverseSourceLanes.Count - 1 : 0;
+                int branchSourceLaneIndex = m_ReverseSourceLanes[branchSourceListIndex].LaneIndex;
+                int extraTargetLaneIndex = selectedReverseTargets[extraTargetListIndex].LaneIndex;
+
+                CollectConnectorLanes(request.SplitNode, request.PocketEdge, outerEdge, m_ExistingConnectorLanes);
+                if (m_ExistingConnectorLanes.Count == 0)
+                {
+                    reason = $"balanced reverse waiting for generated connector template source={m_ReverseSourceLanes.Count} target={m_ReverseTargetLanes.Count}";
+                    return false;
+                }
+
+                if (!TryBuildDesiredMappings(
+                        m_ReverseSourceLanes,
+                        selectedReverseTargets,
+                        extraTargetListIndex,
+                        branchSourceLaneIndex,
+                        m_ExistingConnectorLanes,
+                        preferExistingConnectors: !centerTurnEvidence,
+                        out LaneMapping[] balancedReverseMappings,
+                        out string balancedMappingSource,
+                        out string balancedMappingReason))
+                {
+                    reason = $"balanced reverse desired mapping failed: {balancedMappingReason} reverseSourceOrder={FormatLaneOrder(m_ReverseSourceLanes)} selectedTargets={FormatLaneOrder(selectedReverseTargets)} extraTarget={extraTargetLaneIndex} branchSource={branchSourceLaneIndex} existingReverse={FormatConnectorLanes(m_ExistingConnectorLanes)}";
+                    return false;
+                }
+
+                request.ReverseSourceLanes = m_ReverseSourceLanes.ToArray();
+                request.ReverseTargetLanes = selectedReverseTargets.ToArray();
+                request.ReverseMappings = balancedReverseMappings;
+                mappingSource = $"balanced-reverse-{balancedMappingSource}; score={mappingScore:0.###}; turn={turn}; branchSource={branchSourceLaneIndex}; extraTarget={extraTargetLaneIndex}; centerDiagnostics={centerTurnDiagnostic}";
+                return true;
+            }
 
             CollectConnectorLanes(request.SplitNode, request.PocketEdge, outerEdge, m_ExistingConnectorLanes);
             if (!TryBuildStraightMappings(
@@ -913,7 +1051,8 @@ namespace PocketTurnLanes.Systems.Tool
         }
 
         private bool TryRefineExtraTargetFromCenterConnectors(
-            Request request,
+            Entity intersectionNode,
+            Entity centerSourceEdge,
             IReadOnlyList<LaneEndpoint> selectedTargets,
             out int extraTargetIndex,
             out TurnDirection turn,
@@ -923,11 +1062,12 @@ namespace PocketTurnLanes.Systems.Tool
             turn = TurnDirection.Ambiguous;
             diagnostics = string.Empty;
 
-            if (request.IntersectionNode == Entity.Null ||
-                !EntityManager.Exists(request.IntersectionNode) ||
-                !EntityManager.TryGetBuffer(request.IntersectionNode, true, out DynamicBuffer<SubLane> subLanes))
+            if (intersectionNode == Entity.Null ||
+                centerSourceEdge == Entity.Null ||
+                !EntityManager.Exists(intersectionNode) ||
+                !EntityManager.TryGetBuffer(intersectionNode, true, out DynamicBuffer<SubLane> subLanes))
             {
-                diagnostics = "center-node-missing-sublanes";
+                diagnostics = $"center-node-missing-sublanes intersection={FormatEntity(intersectionNode)} sourceEdge={FormatEntity(centerSourceEdge)}";
                 return false;
             }
 
@@ -953,9 +1093,9 @@ namespace PocketTurnLanes.Systems.Tool
                     NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
                     !EntityManager.HasComponent<NetCarLane>(laneEntity) ||
                     !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
-                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, request.IntersectionNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
-                    sourceEdge != request.PocketEdge ||
-                    targetEdge == request.PocketEdge)
+                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, intersectionNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
+                    sourceEdge != centerSourceEdge ||
+                    targetEdge == centerSourceEdge)
                 {
                     continue;
                 }
@@ -967,7 +1107,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 NetCarLane carLane = EntityManager.GetComponentData<NetCarLane>(laneEntity);
-                TurnDirection connectorTurn = ClassifyCenterConnectorTurn(request.IntersectionNode, request.PocketEdge, targetEdge, carLane.m_Flags);
+                TurnDirection connectorTurn = ClassifyCenterConnectorTurn(intersectionNode, centerSourceEdge, targetEdge, carLane.m_Flags);
                 if (connectorTurn == TurnDirection.Left)
                 {
                     leftCounts[targetListIndex]++;
@@ -1581,18 +1721,121 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
-            for (int i = 0; i < request.Mappings.Length; i++)
+            CollectStaleSplitNodeUturnConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, subLanes, m_StaleConnectorLanes);
+            int nextNodeLaneIndex = GetNextNodeLaneIndex(request.SplitNode, subLanes);
+            m_RemoveSubLaneIndexes.Clear();
+            for (int i = 0; i < m_StaleConnectorLanes.Count; i++)
             {
-                expected.Add(new ConnectionKey(request.Mappings[i].SourceLaneIndex, request.Mappings[i].TargetLaneIndex));
+                ConnectorLane connector = m_StaleConnectorLanes[i];
+                QueueDeleteConnector(connector.Entity);
+                m_RemoveSubLaneIndexes.Add(connector.SubLaneIndex);
+                stats.Deleted++;
+                stats.DeletedUturn++;
             }
 
-            CollectConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, subLanes, m_ConnectorLanes);
-            CollectStaleSplitNodeUturnConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, subLanes, m_StaleConnectorLanes);
+            if (!TryRebuildConnectorDirection(
+                    request,
+                    subLanes,
+                    request.Mappings,
+                    request.SourceLanes,
+                    request.TargetLanes,
+                    request.OuterEdge,
+                    request.PocketEdge,
+                    "forward",
+                    ref nextNodeLaneIndex,
+                    ref stats,
+                    out string forwardReason))
+            {
+                stats.Reason = forwardReason;
+                return false;
+            }
 
+            string reverseReason = "standard-reverse-not-rebuilt";
+            if (request.Mode == RepairMode.BalancedOppositeTarget)
+            {
+                if (request.ReverseMappings == null || request.ReverseMappings.Length == 0)
+                {
+                    stats.Reason = "balanced reverse mappings missing";
+                    return false;
+                }
+
+                if (!TryRebuildConnectorDirection(
+                        request,
+                        subLanes,
+                        request.ReverseMappings,
+                        request.ReverseSourceLanes,
+                        request.ReverseTargetLanes,
+                        request.PocketEdge,
+                        request.OuterEdge,
+                        "balanced-reverse",
+                        ref nextNodeLaneIndex,
+                        ref stats,
+                        out reverseReason))
+                {
+                    stats.Reason = reverseReason;
+                    return false;
+                }
+            }
+
+            m_RemoveSubLaneIndexes.Sort();
+            int lastRemovedIndex = -1;
+            for (int i = m_RemoveSubLaneIndexes.Count - 1; i >= 0; i--)
+            {
+                int index = m_RemoveSubLaneIndexes[i];
+                if (index == lastRemovedIndex)
+                {
+                    continue;
+                }
+
+                if (index >= 0 && index < subLanes.Length)
+                {
+                    subLanes.RemoveAt(index);
+                    lastRemovedIndex = index;
+                }
+            }
+
+            stats.Reason = "ok";
+            if (stats.Kept > 0 || stats.Cloned > 0 || stats.Deleted > 0)
+            {
+                MarkUpdatedIfExists(request.SplitNode);
+                MarkUpdatedIfExists(request.OuterEdge);
+                MarkUpdatedIfExists(request.PocketEdge);
+            }
+
+            Mod.log.Info($"[SplitLaneConnectionFix] Direct rebuild result splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} expected={FormatMappings(request.Mappings)} reverseExpected={FormatMappings(request.ReverseMappings)} staleUturn={m_StaleConnectorLanes.Count} reverseReason={reverseReason} kept={stats.Kept} cloned={stats.Cloned} deleted={stats.Deleted} deletedUturn={stats.DeletedUturn} updated={stats.Updated}.");
+            return true;
+        }
+
+        private bool TryRebuildConnectorDirection(
+            Request request,
+            DynamicBuffer<SubLane> subLanes,
+            LaneMapping[] mappings,
+            LaneEndpoint[] sourceLanes,
+            LaneEndpoint[] targetLanes,
+            Entity sourceEdge,
+            Entity targetEdge,
+            string direction,
+            ref int nextNodeLaneIndex,
+            ref DirectRebuildStats stats,
+            out string reason)
+        {
+            reason = string.Empty;
+            if (mappings == null || mappings.Length == 0)
+            {
+                reason = $"{direction} missing expected mappings";
+                return false;
+            }
+
+            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
+            for (int i = 0; i < mappings.Length; i++)
+            {
+                expected.Add(new ConnectionKey(mappings[i].SourceLaneIndex, mappings[i].TargetLaneIndex));
+            }
+
+            CollectConnectorLanes(request.SplitNode, sourceEdge, targetEdge, subLanes, m_ConnectorLanes);
             if (m_ConnectorLanes.Count == 0)
             {
-                stats.Reason = "no existing outer->pocket connector lanes to use as templates";
+                reason = $"{direction} no existing connector lanes to use as templates sourceEdge={FormatEntity(sourceEdge)} targetEdge={FormatEntity(targetEdge)}";
                 return false;
             }
 
@@ -1604,49 +1847,38 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             int missingCloneCount = 0;
-            for (int i = 0; i < request.Mappings.Length; i++)
+            for (int i = 0; i < mappings.Length; i++)
             {
-                LaneMapping mapping = request.Mappings[i];
+                LaneMapping mapping = mappings[i];
                 ConnectionKey key = new ConnectionKey(mapping.SourceLaneIndex, mapping.TargetLaneIndex);
                 if (existingKeys.Contains(key))
                 {
                     continue;
                 }
 
-                if (!TryFindLaneEndpoint(request.SourceLanes, mapping.SourceLaneIndex, out _) ||
-                    !TryFindLaneEndpoint(request.TargetLanes, mapping.TargetLaneIndex, out _))
+                if (!TryFindLaneEndpoint(sourceLanes, mapping.SourceLaneIndex, out _) ||
+                    !TryFindLaneEndpoint(targetLanes, mapping.TargetLaneIndex, out _))
                 {
-                    stats.Reason = $"missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
+                    reason = $"{direction} missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
                     return false;
                 }
 
                 if (!TryFindConnectorTemplate(mapping, out _))
                 {
-                    stats.Reason = $"missing clone template source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
+                    reason = $"{direction} missing clone template source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
                     return false;
                 }
 
                 missingCloneCount++;
             }
 
-            int nextNodeLaneIndex = GetNextNodeLaneIndex(request.SplitNode, subLanes);
             if (nextNodeLaneIndex + missingCloneCount > ushort.MaxValue)
             {
-                stats.Reason = $"node lane index exhausted next={nextNodeLaneIndex} missing={missingCloneCount}";
+                reason = $"{direction} node lane index exhausted next={nextNodeLaneIndex} missing={missingCloneCount}";
                 return false;
             }
 
             Dictionary<ConnectionKey, ConnectorLane> kept = new Dictionary<ConnectionKey, ConnectorLane>();
-            m_RemoveSubLaneIndexes.Clear();
-            for (int i = 0; i < m_StaleConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_StaleConnectorLanes[i];
-                QueueDeleteConnector(connector.Entity);
-                m_RemoveSubLaneIndexes.Add(connector.SubLaneIndex);
-                stats.Deleted++;
-                stats.DeletedUturn++;
-            }
-
             for (int i = 0; i < m_ConnectorLanes.Count; i++)
             {
                 ConnectorLane connector = m_ConnectorLanes[i];
@@ -1666,31 +1898,31 @@ namespace PocketTurnLanes.Systems.Tool
                 stats.Deleted++;
             }
 
-            for (int i = 0; i < request.Mappings.Length; i++)
+            for (int i = 0; i < mappings.Length; i++)
             {
-                LaneMapping mapping = request.Mappings[i];
+                LaneMapping mapping = mappings[i];
                 ConnectionKey key = new ConnectionKey(mapping.SourceLaneIndex, mapping.TargetLaneIndex);
                 if (kept.ContainsKey(key))
                 {
                     continue;
                 }
 
-                if (!TryFindLaneEndpoint(request.SourceLanes, mapping.SourceLaneIndex, out LaneEndpoint source) ||
-                    !TryFindLaneEndpoint(request.TargetLanes, mapping.TargetLaneIndex, out LaneEndpoint target))
+                if (!TryFindLaneEndpoint(sourceLanes, mapping.SourceLaneIndex, out LaneEndpoint source) ||
+                    !TryFindLaneEndpoint(targetLanes, mapping.TargetLaneIndex, out LaneEndpoint target))
                 {
-                    stats.Reason = $"missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
+                    reason = $"{direction} missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
                     return false;
                 }
 
                 if (!TryFindConnectorTemplate(mapping, out ConnectorLane template))
                 {
-                    stats.Reason = $"missing clone template source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
+                    reason = $"{direction} missing clone template source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
                     return false;
                 }
 
                 if (nextNodeLaneIndex > ushort.MaxValue)
                 {
-                    stats.Reason = $"node lane index exhausted next={nextNodeLaneIndex}";
+                    reason = $"{direction} node lane index exhausted next={nextNodeLaneIndex}";
                     return false;
                 }
 
@@ -1712,25 +1944,7 @@ namespace PocketTurnLanes.Systems.Tool
                 stats.Updated++;
             }
 
-            m_RemoveSubLaneIndexes.Sort();
-            for (int i = m_RemoveSubLaneIndexes.Count - 1; i >= 0; i--)
-            {
-                int index = m_RemoveSubLaneIndexes[i];
-                if (index >= 0 && index < subLanes.Length)
-                {
-                    subLanes.RemoveAt(index);
-                }
-            }
-
-            stats.Reason = "ok";
-            if (stats.Kept > 0 || stats.Cloned > 0 || stats.Deleted > 0)
-            {
-                MarkUpdatedIfExists(request.SplitNode);
-                MarkUpdatedIfExists(request.OuterEdge);
-                MarkUpdatedIfExists(request.PocketEdge);
-            }
-
-            Mod.log.Info($"[SplitLaneConnectionFix] Direct rebuild result splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)} existing={m_ConnectorLanes.Count} staleUturn={m_StaleConnectorLanes.Count} kept={stats.Kept} cloned={stats.Cloned} deleted={stats.Deleted} deletedUturn={stats.DeletedUturn} updated={stats.Updated}.");
+            reason = $"{direction} ok expected={FormatConnectionSet(expected)} existing={existingKeys.Count} kept={kept.Count} missingClones={missingCloneCount}";
             return true;
         }
 
@@ -1925,27 +2139,62 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
-            for (int i = 0; i < request.Mappings.Length; i++)
+            bool forwardMatches = VerifyConnectorDirection(
+                request,
+                request.Mappings,
+                request.OuterEdge,
+                request.PocketEdge,
+                "forward",
+                out string forwardDetail);
+            bool reverseMatches = true;
+            string reverseDetail = "standard-reverse-not-verified";
+            if (request.Mode == RepairMode.BalancedOppositeTarget)
             {
-                expected.Add(new ConnectionKey(request.Mappings[i].SourceLaneIndex, request.Mappings[i].TargetLaneIndex));
+                reverseMatches = request.ReverseMappings != null &&
+                                 request.ReverseMappings.Length > 0 &&
+                                 VerifyConnectorDirection(
+                                     request,
+                                     request.ReverseMappings,
+                                     request.PocketEdge,
+                                     request.OuterEdge,
+                                     "balanced-reverse",
+                                     out reverseDetail);
+            }
+
+            int staleUturnCount = CountStaleSplitNodeUturnConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, out string staleUturnSummary);
+            bool matches = forwardMatches && reverseMatches && staleUturnCount == 0;
+            if (!matches)
+            {
+                Mod.log.Info($"[SplitLaneConnectionFix] Connector verification mismatch splitNode={FormatEntity(request.SplitNode)} mode={request.Mode} forward={forwardDetail} reverse={reverseDetail} staleUturnCount={staleUturnCount} staleUturns={staleUturnSummary}.");
+            }
+
+            return matches;
+        }
+
+        private bool VerifyConnectorDirection(
+            Request request,
+            LaneMapping[] mappings,
+            Entity sourceEdge,
+            Entity targetEdge,
+            string direction,
+            out string detail)
+        {
+            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
+            for (int i = 0; i < mappings.Length; i++)
+            {
+                expected.Add(new ConnectionKey(mappings[i].SourceLaneIndex, mappings[i].TargetLaneIndex));
             }
 
             HashSet<ConnectionKey> actual = new HashSet<ConnectionKey>();
-            CollectConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, m_ExistingConnectorLanes);
+            CollectConnectorLanes(request.SplitNode, sourceEdge, targetEdge, m_ExistingConnectorLanes);
             for (int i = 0; i < m_ExistingConnectorLanes.Count; i++)
             {
                 ConnectorLane connector = m_ExistingConnectorLanes[i];
                 actual.Add(new ConnectionKey(connector.SourceLaneIndex, connector.TargetLaneIndex));
             }
 
-            int staleUturnCount = CountStaleSplitNodeUturnConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, out string staleUturnSummary);
-            bool matches = expected.SetEquals(actual) && staleUturnCount == 0;
-            if (!matches)
-            {
-                Mod.log.Info($"[SplitLaneConnectionFix] Connector verification mismatch splitNode={FormatEntity(request.SplitNode)} expected={FormatConnectionSet(expected)} actual={FormatConnectionSet(actual)} staleUturnCount={staleUturnCount} staleUturns={staleUturnSummary}.");
-            }
-
+            bool matches = expected.SetEquals(actual);
+            detail = $"{direction} source={FormatEntity(sourceEdge)} target={FormatEntity(targetEdge)} expected={FormatConnectionSet(expected)} actual={FormatConnectionSet(actual)} connectors={m_ExistingConnectorLanes.Count}";
             return matches;
         }
 
@@ -2302,12 +2551,14 @@ namespace PocketTurnLanes.Systems.Tool
         private struct Request
         {
             public Entity IntersectionNode;
+            public Entity FarIntersectionNode;
             public Entity SplitNode;
             public Entity OriginalEdge;
             public Entity OuterEdge;
             public Entity PocketEdge;
             public Entity SourcePrefab;
             public Entity TargetPrefab;
+            public RepairMode Mode;
             public int QueuedFrame;
             public int LaneDataRetries;
             public bool TrafficWritten;

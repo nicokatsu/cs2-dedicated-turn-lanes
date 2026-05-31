@@ -286,6 +286,8 @@ namespace PocketTurnLanes.Systems.Tool
                             TargetTramTrackLayout = orientedTargetTramLayout.ToString(),
                             SourceBusLaneLayout = sourceProfile.BusLaneLayout.ToString(),
                             TargetBusLaneLayout = orientedTargetBusLayout.ToString(),
+                            TargetTramTrackOffsetProfile = orientedTargetTramLayout,
+                            TargetBusLaneOffsetProfile = orientedTargetBusLayout,
                             SourceBusLaneDetail = sourceProfile.BusLaneDetail,
                             TargetBusLaneDetail = candidateMatch.TargetLayoutProfile.BusLaneDetail,
                             LayoutScoreDetail = layoutScoreDetail,

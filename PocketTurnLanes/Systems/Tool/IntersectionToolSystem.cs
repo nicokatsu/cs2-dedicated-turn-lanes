@@ -16,21 +16,26 @@ namespace PocketTurnLanes.Systems.Tool
     public partial class IntersectionToolSystem : ToolBaseSystem
     {
         private const float SplitGridSize = 8f;
+        private const float PocketLengthGridSize = 8f;
         private const float FallbackPocketLaneLength = 24f;
         private const float MinimumWidthBasedPocketLaneLength = 8f;
         private const float MaximumWidthBasedPocketLaneLength = 32f;
-        private const float DrivableLaneEnvelopeBuffer = SplitGridSize;
+        private const float MaximumRetryPocketLaneLength = 64f;
+        private const float DrivableLaneEnvelopeBuffer = 8f;
         private const float SplitGridAlignmentTolerance = 0.05f;
         private const float IntersectionExitBuffer = 0f;
         private const float MinimumPocketLaneLength = 8f;
+        private const float MinimumPocketLaneLengthTolerance = 0.05f;
         private const float MinimumIntersectionSin = 0.2f;
         private const float MaxIntersectionExitDistance = 40f;
         private const float SplitLengthBuffer = 0.16f;
         private const float MaxNodePickDistance = 16f;
-        private const float SplitRetryStep = 8f;
-        private const int MaxSplitRetryAttempts = 4;
+        private const float SplitRetryStep = PocketLengthGridSize;
+        private const int MaxSplitRetryAttempts = 8;
         private const float MinimumRetryProgress = 2f;
         private const float PreviewSplitNodeTolerance = 0.004f;
+        private const float BalancedRetryPreviewSplitNodePositionTolerance = 1f;
+        private const int BalancedRetryMinimumApplyDelayFrames = 2;
         private const int MaxReplacementPreviewWaitFrames = 6;
         private const float PrefabWidthTolerance = 0.05f;
         private const float SplitNodePositionTolerance = 2.5f;
@@ -94,6 +99,7 @@ namespace PocketTurnLanes.Systems.Tool
         private readonly List<NodeMergeCandidate> m_AppliedNodeMergeCandidates = new List<NodeMergeCandidate>();
         private readonly List<ReplacementCandidate> m_QueuedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_AppliedReplacementCandidates = new List<ReplacementCandidate>();
+        private readonly List<ReplacementCandidate> m_PendingLaneRepairCandidates = new List<ReplacementCandidate>();
 
         public event Action<bool> ToolEnabledChanged;
 
@@ -171,6 +177,7 @@ namespace PocketTurnLanes.Systems.Tool
                     return result;
                 }
 
+                QueuePendingSplitLaneConnectionFixes("all apply phases are complete");
                 ResetPreviewState();
                 return result;
             }
@@ -231,6 +238,33 @@ namespace PocketTurnLanes.Systems.Tool
                 if (UnityEngine.Time.frameCount <= m_PreviewCreatedFrame)
                 {
                     return result;
+                }
+
+                bool hasBalancedRetrySplit = HasBalancedRetrySplitCandidate();
+                if (hasBalancedRetrySplit &&
+                    !AreBalancedRetrySplitNodesReady(out string balancedRetryDetail))
+                {
+                    int waitedFrames = Math.Max(0, UnityEngine.Time.frameCount - m_PreviewCreatedFrame);
+                    if (waitedFrames <= MaxReplacementPreviewWaitFrames)
+                    {
+                        Mod.log.Info($"[IntersectionTool] Waiting for balanced road-node retry split preview before apply waitedFrames={waitedFrames}/{MaxReplacementPreviewWaitFrames} detail={balancedRetryDetail}.");
+                        return result;
+                    }
+
+                    result = ClearPreviewDefinitions(result, $"balanced road-node retry split preview did not materialize before apply; waitedFrames={waitedFrames} detail={balancedRetryDetail}");
+                    return result;
+                }
+                if (hasBalancedRetrySplit)
+                {
+                    int waitedFrames = Math.Max(0, UnityEngine.Time.frameCount - m_PreviewCreatedFrame);
+                    if (waitedFrames < BalancedRetryMinimumApplyDelayFrames)
+                    {
+                        Mod.log.Info($"[IntersectionTool] Balanced road-node retry split preview is ready but waiting one more frame before apply waitedFrames={waitedFrames}/{BalancedRetryMinimumApplyDelayFrames}.");
+                        return result;
+                    }
+
+                    AreBalancedRetrySplitNodesReady(out string balancedRetryReadyDetail);
+                    Mod.log.Info($"[IntersectionTool] Balanced road-node retry split preview is ready for apply detail={balancedRetryReadyDetail}.");
                 }
 
                 CaptureAppliedCandidates();

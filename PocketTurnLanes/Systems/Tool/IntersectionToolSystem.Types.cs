@@ -162,12 +162,26 @@ namespace PocketTurnLanes.Systems.Tool
             public EdgeDeletionDefinitionRequest SecondDeletion;
         }
 
+        private enum SplitLaneConnectionRepairMode
+        {
+            Standard,
+            BalancedOppositeTarget
+        }
+
+        private enum NodeMergeMode
+        {
+            SourcePrefabContinuation,
+            BalancedOppositeTarget
+        }
+
         private struct SplitCandidate
         {
             public Entity Node;
+            public Entity FarNode;
             public Entity Edge;
             public Entity SourcePrefab;
             public Entity TargetPrefab;
+            public SplitLaneConnectionRepairMode LaneRepairMode;
             public bool InvertTarget;
             public bool HasTargetUpgrade;
             public Upgraded TargetUpgrade;
@@ -187,6 +201,7 @@ namespace PocketTurnLanes.Systems.Tool
 
         private struct NodeMergeCandidate
         {
+            public NodeMergeMode Mode;
             public Entity Node;
             public Entity ShortEdge;
             public Entity RemovableNode;
@@ -194,7 +209,9 @@ namespace PocketTurnLanes.Systems.Tool
             public Entity FarNode;
             public Entity SourcePrefab;
             public Entity TargetPrefab;
+            public SplitLaneConnectionRepairMode LaneRepairMode;
             public bool InvertTarget;
+            public bool PostMergeInvertTarget;
             public bool HasTargetUpgrade;
             public Upgraded TargetUpgrade;
             public float ShortEdgeLength;
@@ -203,6 +220,8 @@ namespace PocketTurnLanes.Systems.Tool
             public float ExpectedSplitPosition;
             public float ExpectedSplitDistance;
             public float ExpectedIntersectionDistance;
+            public float ExpectedFarIntersectionDistance;
+            public float ExpectedUsableLength;
             public float ExpectedPocketDistance;
             public float ExpectedTargetDistance;
             public float ExpectedTargetPocketLength;
@@ -259,6 +278,8 @@ namespace PocketTurnLanes.Systems.Tool
             public string TargetTramTrackLayout;
             public string SourceBusLaneLayout;
             public string TargetBusLaneLayout;
+            public DirectionalLaneOffsetProfile TargetTramTrackOffsetProfile;
+            public DirectionalLaneOffsetProfile TargetBusLaneOffsetProfile;
             public string SourceBusLaneDetail;
             public string TargetBusLaneDetail;
             public string LayoutScoreDetail;
@@ -274,11 +295,13 @@ namespace PocketTurnLanes.Systems.Tool
         private struct ReplacementCandidate
         {
             public Entity Node;
+            public Entity FarNode;
             public Entity SplitNode;
             public Entity OriginalEdge;
             public Entity PocketEdge;
             public Entity SourcePrefab;
             public Entity TargetPrefab;
+            public SplitLaneConnectionRepairMode LaneRepairMode;
             public bool InvertTarget;
             public bool HasTargetUpgrade;
             public Upgraded TargetUpgrade;

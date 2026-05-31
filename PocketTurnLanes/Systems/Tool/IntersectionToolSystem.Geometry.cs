@@ -92,17 +92,20 @@ namespace PocketTurnLanes.Systems.Tool
             float requestedTargetPocketLengthBeforeCap = requestedTargetPocketLength > 0f
                 ? requestedTargetPocketLength
                 : adaptiveTargetPocketLength;
+            float maximumRequestedPocketLength = requestedTargetPocketLength > 0f
+                ? MaximumRetryPocketLaneLength
+                : MaximumWidthBasedPocketLaneLength;
             targetPocketLength = requestedTargetPocketLength > 0f
-                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, MaximumWidthBasedPocketLaneLength)
+                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, maximumRequestedPocketLength)
                 : adaptiveTargetPocketLength;
             float maxDistanceFromNode = GetMaximumSplitDistanceFromNode(curve, nodeIsStart, minSplit, maxSplit);
-            if (maxDistanceFromNode - intersectionDistance < MinimumPocketLaneLength)
+            if (!HasMinimumPocketLength(maxDistanceFromNode - intersectionDistance))
             {
-                Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: not enough room for an aligned pocket lane (length={curve.m_Length:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m minPocket={MinimumPocketLaneLength:0.##}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
+                Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: not enough room for a pocket lane (length={curve.m_Length:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m availablePocket={maxDistanceFromNode - intersectionDistance:0.###}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.###}m tolerance={MinimumPocketLaneLengthTolerance:0.###}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
                 return false;
             }
 
-            Mod.log.Info($"[IntersectionTool] Split target pocket length node={FormatEntity(nodeEntity)} edge={FormatEntity(edgeEntity)} prefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={MaximumWidthBasedPocketLaneLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
+            Mod.log.Info($"[IntersectionTool] Split target pocket length node={FormatEntity(nodeEntity)} edge={FormatEntity(edgeEntity)} prefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={maximumRequestedPocketLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
 
             float desiredDistance = GetGridAlignedSplitDistance(
                 intersectionDistance,
@@ -157,6 +160,19 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
+            if (TryBuildBalancedOppositeTargetNodeMergeCandidate(
+                    nodeEntity,
+                    edgeEntity,
+                    edge,
+                    curve,
+                    prefabRef.m_Prefab,
+                    geometryData,
+                    prefabMatch,
+                    out candidate))
+            {
+                return true;
+            }
+
             if (!TryGetMergeableRoadNode(
                     nodeEntity,
                     edgeEntity,
@@ -166,7 +182,8 @@ namespace PocketTurnLanes.Systems.Tool
                     out Entity continuationEdge,
                     out Edge continuationEdgeData,
                     out Curve continuationCurve,
-                    out Entity farNode))
+                    out Entity farNode,
+                    out _))
             {
                 return false;
             }
@@ -224,7 +241,9 @@ namespace PocketTurnLanes.Systems.Tool
                 FarNode = farNode,
                 SourcePrefab = prefabRef.m_Prefab,
                 TargetPrefab = prefabMatch.Prefab,
+                LaneRepairMode = SplitLaneConnectionRepairMode.Standard,
                 InvertTarget = prefabMatch.Invert,
+                PostMergeInvertTarget = prefabMatch.Invert,
                 HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
                 TargetUpgrade = prefabMatch.TargetUpgrade,
                 ShortEdgeLength = curve.m_Length,
@@ -275,22 +294,371 @@ namespace PocketTurnLanes.Systems.Tool
             return true;
         }
 
+        private bool TryBuildBalancedOppositeTargetNodeMergeCandidate(
+            Entity nodeEntity,
+            Entity edgeEntity,
+            Edge edge,
+            Curve curve,
+            Entity sourcePrefab,
+            NetGeometryData sourceGeometryData,
+            ReplacementPrefabMatch prefabMatch,
+            out NodeMergeCandidate candidate)
+        {
+            candidate = default;
+
+            if (prefabMatch.Prefab == Entity.Null)
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)}: replacement target prefab is missing.");
+                return false;
+            }
+
+            if (!TryGetMergeableRoadNode(
+                    nodeEntity,
+                    edgeEntity,
+                    edge,
+                    prefabMatch.Prefab,
+                    out Entity removableNode,
+                    out Entity continuationEdge,
+                    out Edge continuationEdgeData,
+                    out Curve continuationCurve,
+                    out Entity farNode,
+                    out Entity continuationPrefab))
+            {
+                return false;
+            }
+
+            if (!IsValidIntersection(farNode))
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)}: far node is not a valid intersection for opposite-side lane repair.");
+                return false;
+            }
+
+            bool nodeIsStartOnShortEdge = edge.m_Start == nodeEntity;
+            bool farNodeIsStartOnContinuation = continuationEdgeData.m_Start == farNode;
+            if (!TryContinuationMatchesOppositeTargetLayout(
+                    continuationEdge,
+                    prefabMatch,
+                    nodeIsStartOnShortEdge,
+                    farNodeIsStartOnContinuation,
+                    out RoadLaneCounts continuationRoadCounts,
+                    out string continuationLayoutDetail))
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)}: continuation is not the reverse target layout. {continuationLayoutDetail}");
+                return false;
+            }
+
+            if (!EntityManager.TryGetComponent(prefabMatch.Prefab, out NetGeometryData targetGeometryData))
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)}: target prefab has no NetGeometryData.");
+                return false;
+            }
+
+            float nearIntersectionDistance = GetIntersectionExitDistance(
+                nodeEntity,
+                edgeEntity,
+                edge,
+                curve,
+                nodeIsStartOnShortEdge);
+
+            float farIntersectionDistance = GetIntersectionExitDistance(
+                farNode,
+                continuationEdge,
+                continuationEdgeData,
+                continuationCurve,
+                farNodeIsStartOnContinuation);
+
+            float targetPocketLength = GetAdaptiveTargetPocketLength(
+                nodeEntity,
+                edgeEntity,
+                sourcePrefab,
+                nodeIsStartOnShortEdge,
+                sourceGeometryData,
+                out string pocketWidthSource,
+                out float pocketWidth,
+                out float pocketEdgeGeometryWidth,
+                out float pocketPrefabWidth,
+                out string pocketLaneWidthDetail);
+
+            Bezier4x3 currentToFarBezier = ComputeMergedBezier(
+                removableNode,
+                edge,
+                curve,
+                continuationEdgeData,
+                continuationCurve);
+            bool continuationStartsAtRemovedNode = continuationEdgeData.m_Start == removableNode;
+            Bezier4x3 mergedBezier = continuationStartsAtRemovedNode
+                ? currentToFarBezier
+                : MathUtils.Invert(currentToFarBezier);
+            Entity startNode = continuationStartsAtRemovedNode ? nodeEntity : farNode;
+            Entity endNode = continuationStartsAtRemovedNode ? farNode : nodeEntity;
+            bool nodeIsStartOnMergedEdge = startNode == nodeEntity;
+            bool postMergeInvertTarget = prefabMatch.Invert ^ (nodeIsStartOnShortEdge != nodeIsStartOnMergedEdge);
+            float mergedLength = MathUtils.Length(mergedBezier);
+            if (mergedLength <= 0.01f)
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)}: merged curve length is {mergedLength:0.###}m.");
+                return false;
+            }
+
+            float usableLength = mergedLength - nearIntersectionDistance - farIntersectionDistance;
+            float reservedLength = targetPocketLength * 2f;
+            if (usableLength >= reservedLength)
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge skipped shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)}: merged edge has enough room for two reserved pockets, so no half split is needed mergedLength={mergedLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m reservedTwice={reservedLength:0.##}m requestedPocket={targetPocketLength:0.##}m.");
+                return false;
+            }
+
+            float halfUsableLength = usableLength * 0.5f;
+            if (!HasMinimumPocketLength(halfUsableLength))
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)}: usable length is too small after both intersection margins mergedLength={mergedLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m half={halfUsableLength:0.##}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.##}m requestedPocket={targetPocketLength:0.##}m.");
+                return false;
+            }
+
+            GetMinMaxSplitPositions(
+                mergedLength,
+                targetGeometryData.m_DefaultWidth,
+                targetGeometryData.m_EdgeLengthRange.min,
+                out float minSplit,
+                out float maxSplit);
+            if (minSplit >= maxSplit)
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)}: merged target edge is too short to split safely length={mergedLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}.");
+                return false;
+            }
+
+            float splitDistance = nearIntersectionDistance + halfUsableLength;
+            float splitPosition = GetCurvePositionAtDistance(
+                mergedBezier,
+                nodeIsStartOnMergedEdge,
+                splitDistance);
+            if (splitPosition < minSplit || splitPosition > maxSplit)
+            {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)}: half split is outside safe split range split={splitPosition:0.###} minSplit={minSplit:0.###} maxSplit={maxSplit:0.###} splitDistance={splitDistance:0.##}m mergedLength={mergedLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m.");
+                return false;
+            }
+
+            splitDistance = GetCurveDistanceFromNode(mergedBezier, nodeIsStartOnMergedEdge, splitPosition);
+            float pocketDistance = math.max(0f, splitDistance - nearIntersectionDistance);
+            float3 hitPosition = MathUtils.Position(mergedBezier, splitPosition);
+            int randomSeed = EntityManager.TryGetComponent(continuationEdge, out PseudoRandomSeed continuationSeed)
+                ? continuationSeed.m_Seed
+                : continuationEdge.Index;
+            bool hasMergedUpgraded = EntityManager.TryGetComponent(continuationEdge, out Upgraded mergedUpgraded);
+
+            candidate = new NodeMergeCandidate
+            {
+                Mode = NodeMergeMode.BalancedOppositeTarget,
+                Node = nodeEntity,
+                ShortEdge = edgeEntity,
+                RemovableNode = removableNode,
+                ContinuationEdge = continuationEdge,
+                FarNode = farNode,
+                SourcePrefab = sourcePrefab,
+                TargetPrefab = prefabMatch.Prefab,
+                LaneRepairMode = SplitLaneConnectionRepairMode.BalancedOppositeTarget,
+                InvertTarget = prefabMatch.Invert,
+                PostMergeInvertTarget = postMergeInvertTarget,
+                HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
+                TargetUpgrade = prefabMatch.TargetUpgrade,
+                ShortEdgeLength = curve.m_Length > 0.01f ? curve.m_Length : MathUtils.Length(curve.m_Bezier),
+                ContinuationEdgeLength = continuationCurve.m_Length > 0.01f ? continuationCurve.m_Length : MathUtils.Length(continuationCurve.m_Bezier),
+                MergedLength = mergedLength,
+                ExpectedSplitPosition = splitPosition,
+                ExpectedSplitDistance = splitDistance,
+                ExpectedIntersectionDistance = nearIntersectionDistance,
+                ExpectedFarIntersectionDistance = farIntersectionDistance,
+                ExpectedUsableLength = usableLength,
+                ExpectedPocketDistance = pocketDistance,
+                ExpectedTargetDistance = splitDistance,
+                ExpectedTargetPocketLength = targetPocketLength,
+                ExpectedHitPosition = hitPosition,
+                OriginalForwardLanes = continuationRoadCounts.Forward,
+                OriginalBackwardLanes = continuationRoadCounts.Backward,
+                TargetForwardLanes = prefabMatch.TargetCounts.Forward,
+                TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                MergeRequest = new NodeMergeDefinitionRequest
+                {
+                    Prefab = prefabMatch.Prefab,
+                    RemovedNode = removableNode,
+                    StartNode = startNode,
+                    EndNode = endNode,
+                    MergedCurve = mergedBezier,
+                    MergedLength = mergedLength,
+                    RandomSeed = randomSeed,
+                    HasUpgraded = hasMergedUpgraded,
+                    Upgraded = mergedUpgraded,
+                    FirstDeletion = new EdgeDeletionDefinitionRequest
+                    {
+                        Edge = edgeEntity,
+                        StartNode = edge.m_Start,
+                        EndNode = edge.m_End,
+                        Curve = curve.m_Bezier,
+                        Length = curve.m_Length > 0.01f ? curve.m_Length : MathUtils.Length(curve.m_Bezier)
+                    },
+                    SecondDeletion = new EdgeDeletionDefinitionRequest
+                    {
+                        Edge = continuationEdge,
+                        StartNode = continuationEdgeData.m_Start,
+                        EndNode = continuationEdgeData.m_End,
+                        Curve = continuationCurve.m_Bezier,
+                        Length = continuationCurve.m_Length > 0.01f ? continuationCurve.m_Length : MathUtils.Length(continuationCurve.m_Bezier)
+                    }
+                }
+            };
+
+            Mod.log.Info($"[IntersectionTool] Balanced road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(sourcePrefab)} continuationPrefab={GetPrefabNameFromPrefab(continuationPrefab)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)} mergeDirection={(continuationStartsAtRemovedNode ? "current-to-far" : "far-to-current")} previewShortEdgeOrientation={(prefabMatch.Invert ? "reversed" : "direct")} postMergeCurrentOrientation={(postMergeInvertTarget ? "reversed" : "direct")} currentNodeSideOnShort={(nodeIsStartOnShortEdge ? "start" : "end")} currentNodeSideOnMerged={(nodeIsStartOnMergedEdge ? "start" : "end")} continuationLayout={continuationLayoutDetail} shortLength={candidate.ShortEdgeLength:0.##}m continuationLength={candidate.ContinuationEdgeLength:0.##}m mergedLength={mergedLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m reservedTwice={reservedLength:0.##}m half={halfUsableLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m requestedPocket={targetPocketLength:0.##}m widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} mergeTargetUpgrade={(hasMergedUpgraded ? mergedUpgraded.m_Flags.ToString() : "none")} currentTargetUpgrade={(prefabMatch.HasTargetUpgrade ? prefabMatch.TargetUpgrade.m_Flags.ToString() : "none")} laneRepair=balanced-opposite-target.");
+            return true;
+        }
+
+        private bool TryContinuationMatchesOppositeTargetLayout(
+            Entity continuationEdge,
+            ReplacementPrefabMatch prefabMatch,
+            bool currentNodeIsStartOnShortEdge,
+            bool farNodeIsStartOnContinuation,
+            out RoadLaneCounts continuationRoadCounts,
+            out string detail)
+        {
+            continuationRoadCounts = default;
+            if (!TryGetRoadLaneProfile(continuationEdge, prefabMatch.Prefab, out RoadLaneProfile continuationProfile))
+            {
+                detail = "continuationProfile=missing";
+                return false;
+            }
+
+            continuationRoadCounts = continuationProfile.RoadCounts;
+            if (!CountsMatchAtApproachNodes(
+                    prefabMatch.TargetCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.RoadCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} road={FormatApproachCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={FormatApproachCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} rawTargetRoad={prefabMatch.TargetCounts}";
+                return false;
+            }
+
+            if (!CountsMatchAtApproachNodes(
+                    prefabMatch.TargetTramTrackCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.TramTrackCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} tramTracks={FormatApproachCounts(continuationProfile.TramTrackCounts, farNodeIsStartOnContinuation)} expectedTargetTramTracks={FormatApproachCounts(prefabMatch.TargetTramTrackCounts, currentNodeIsStartOnShortEdge)} rawTargetTramTracks={prefabMatch.TargetTramTrackCounts}";
+                return false;
+            }
+
+            if (!CountsMatchAtApproachNodes(
+                    prefabMatch.TargetIndependentTramCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.IndependentTramCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} independentTram={FormatApproachCounts(continuationProfile.IndependentTramCounts, farNodeIsStartOnContinuation)} expectedTargetIndependentTram={FormatApproachCounts(prefabMatch.TargetIndependentTramCounts, currentNodeIsStartOnShortEdge)} rawTargetIndependentTram={prefabMatch.TargetIndependentTramCounts}";
+                return false;
+            }
+
+            if (!CountsMatchAtApproachNodes(
+                    prefabMatch.TargetPublicTransportTramCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.PublicTransportTramCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} publicTransportTram={FormatApproachCounts(continuationProfile.PublicTransportTramCounts, farNodeIsStartOnContinuation)} expectedTargetPublicTransportTram={FormatApproachCounts(prefabMatch.TargetPublicTransportTramCounts, currentNodeIsStartOnShortEdge)} rawTargetPublicTransportTram={prefabMatch.TargetPublicTransportTramCounts}";
+                return false;
+            }
+
+            if (!LayoutCountsMatchAtApproachNodes(
+                    prefabMatch.TargetBusLaneOffsetProfile,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.BusLaneLayout,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} busLayout={FormatApproachLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} expectedTargetBus={FormatApproachLayout(prefabMatch.TargetBusLaneOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetBus={prefabMatch.TargetBusLaneLayout}";
+                return false;
+            }
+
+            if (!LayoutCountsMatchAtApproachNodes(
+                    prefabMatch.TargetTramTrackOffsetProfile,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.TramTrackLayout,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} tramLayout={FormatApproachLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)} expectedTargetTramLayout={FormatApproachLayout(prefabMatch.TargetTramTrackOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetTramLayout={prefabMatch.TargetTramTrackLayout}";
+                return false;
+            }
+
+            detail = $"continuationProfile={continuationProfile.Source} road={FormatApproachCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={FormatApproachCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} bus={FormatApproachLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} tram={FormatApproachLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)}";
+            return true;
+        }
+
+        private static bool CountsMatchAtApproachNodes(
+            RoadLaneCounts targetCounts,
+            bool targetNodeIsStart,
+            RoadLaneCounts continuationCounts,
+            bool continuationNodeIsStart)
+        {
+            return GetIncomingCount(targetCounts, targetNodeIsStart) == GetIncomingCount(continuationCounts, continuationNodeIsStart) &&
+                   GetOutgoingCount(targetCounts, targetNodeIsStart) == GetOutgoingCount(continuationCounts, continuationNodeIsStart);
+        }
+
+        private static int GetIncomingCount(RoadLaneCounts counts, bool nodeIsStart)
+        {
+            return nodeIsStart ? counts.Backward : counts.Forward;
+        }
+
+        private static int GetOutgoingCount(RoadLaneCounts counts, bool nodeIsStart)
+        {
+            return nodeIsStart ? counts.Forward : counts.Backward;
+        }
+
+        private static string FormatApproachCounts(RoadLaneCounts counts, bool nodeIsStart)
+        {
+            return $"raw={counts} nodeSide={(nodeIsStart ? "start" : "end")} incoming={GetIncomingCount(counts, nodeIsStart)} outgoing={GetOutgoingCount(counts, nodeIsStart)}";
+        }
+
+        private static bool LayoutCountsMatchAtApproachNodes(
+            DirectionalLaneOffsetProfile targetLayout,
+            bool targetNodeIsStart,
+            DirectionalLaneOffsetProfile continuationLayout,
+            bool continuationNodeIsStart)
+        {
+            return GetIncomingLayoutCount(targetLayout, targetNodeIsStart) == GetIncomingLayoutCount(continuationLayout, continuationNodeIsStart) &&
+                   GetOutgoingLayoutCount(targetLayout, targetNodeIsStart) == GetOutgoingLayoutCount(continuationLayout, continuationNodeIsStart);
+        }
+
+        private static int GetIncomingLayoutCount(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
+        {
+            return nodeIsStart ? layout.BackwardCount : layout.ForwardCount;
+        }
+
+        private static int GetOutgoingLayoutCount(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
+        {
+            return nodeIsStart ? layout.ForwardCount : layout.BackwardCount;
+        }
+
+        private static string FormatApproachLayout(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
+        {
+            return $"raw={layout} nodeSide={(nodeIsStart ? "start" : "end")} incoming={GetIncomingLayoutCount(layout, nodeIsStart)} outgoing={GetOutgoingLayoutCount(layout, nodeIsStart)}";
+        }
+
         private bool TryGetMergeableRoadNode(
             Entity intersectionNode,
             Entity edgeEntity,
             Edge edge,
-            Entity sourcePrefab,
+            Entity expectedContinuationPrefab,
             out Entity removableNode,
             out Entity continuationEdge,
             out Edge continuationEdgeData,
             out Curve continuationCurve,
-            out Entity farNode)
+            out Entity farNode,
+            out Entity continuationPrefab)
         {
             removableNode = Entity.Null;
             continuationEdge = Entity.Null;
             continuationEdgeData = default;
             continuationCurve = default;
             farNode = Entity.Null;
+            continuationPrefab = Entity.Null;
 
             removableNode = edge.m_Start == intersectionNode
                 ? edge.m_End
@@ -330,13 +698,14 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (continuationEdge == Entity.Null ||
                 !IsRoadEdge(continuationEdge) ||
-                !EntityManager.TryGetComponent(continuationEdge, out continuationEdgeData) ||
-                !EntityManager.TryGetComponent(continuationEdge, out continuationCurve) ||
-                !EntityManager.TryGetComponent(continuationEdge, out PrefabRef continuationPrefabRef))
+                    !EntityManager.TryGetComponent(continuationEdge, out continuationEdgeData) ||
+                    !EntityManager.TryGetComponent(continuationEdge, out continuationCurve) ||
+                    !EntityManager.TryGetComponent(continuationEdge, out PrefabRef continuationPrefabRef))
             {
                 Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: continuation is not a complete road edge.");
                 return false;
             }
+            continuationPrefab = continuationPrefabRef.m_Prefab;
 
             if (EntityManager.HasComponent<Owner>(edgeEntity) ||
                 EntityManager.HasComponent<Owner>(continuationEdge))
@@ -345,9 +714,9 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            if (continuationPrefabRef.m_Prefab != sourcePrefab)
+            if (continuationPrefabRef.m_Prefab != expectedContinuationPrefab)
             {
-                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: prefab mismatch source={GetPrefabNameFromPrefab(sourcePrefab)} continuation={GetPrefabNameFromPrefab(continuationPrefabRef.m_Prefab)}.");
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: prefab mismatch expected={GetPrefabNameFromPrefab(expectedContinuationPrefab)} continuation={GetPrefabNameFromPrefab(continuationPrefabRef.m_Prefab)}.");
                 return false;
             }
 
@@ -435,21 +804,24 @@ namespace PocketTurnLanes.Systems.Tool
             float requestedTargetPocketLengthBeforeCap = requestedTargetPocketLength > 0f
                 ? requestedTargetPocketLength
                 : adaptiveTargetPocketLength;
+            float maximumRequestedPocketLength = requestedTargetPocketLength > 0f
+                ? MaximumRetryPocketLaneLength
+                : MaximumWidthBasedPocketLaneLength;
             targetPocketLength = requestedTargetPocketLength > 0f
-                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, MaximumWidthBasedPocketLaneLength)
+                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, maximumRequestedPocketLength)
                 : adaptiveTargetPocketLength;
             float maxDistanceFromNode = GetMaximumSplitDistanceFromNode(
                 mergedBezier,
                 nodeIsStartOnMergedEdge,
                 minSplit,
                 maxSplit);
-            if (maxDistanceFromNode - intersectionDistance < MinimumPocketLaneLength)
+            if (!HasMinimumPocketLength(maxDistanceFromNode - intersectionDistance))
             {
-                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge still has no room for an aligned pocket lane (mergedLength={mergedLength:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m minPocket={MinimumPocketLaneLength:0.##}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge still has no room for a pocket lane (mergedLength={mergedLength:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m availablePocket={maxDistanceFromNode - intersectionDistance:0.###}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.###}m tolerance={MinimumPocketLaneLengthTolerance:0.###}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
                 return false;
             }
 
-            Mod.log.Info($"[IntersectionTool] Road-node merge split target pocket length node={FormatEntity(nodeEntity)} sourceEdge={FormatEntity(sourceEdgeEntity)} prefab={GetPrefabName(sourceEdgeEntity)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={MaximumWidthBasedPocketLaneLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
+            Mod.log.Info($"[IntersectionTool] Road-node merge split target pocket length node={FormatEntity(nodeEntity)} sourceEdge={FormatEntity(sourceEdgeEntity)} prefab={GetPrefabName(sourceEdgeEntity)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={maximumRequestedPocketLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
 
             float desiredDistance = GetGridAlignedSplitDistance(
                 intersectionDistance,
@@ -598,7 +970,7 @@ namespace PocketTurnLanes.Systems.Tool
                 roadWidth = profile.DrivableLaneEnvelopeWidth;
                 widthSource = $"DrivableLaneEnvelope:{profile.Source}";
                 laneWidthDetail = $"lanes={profile.DrivableLaneEnvelopeCount} min={profile.DrivableLaneEnvelopeMin:0.##}m max={profile.DrivableLaneEnvelopeMax:0.##}m envelope={profile.DrivableLaneEnvelopeWidth:0.##}m buffer={DrivableLaneEnvelopeBuffer:0.##}m detail={profile.DrivableLaneEnvelopeDetail}";
-                return AlignLengthUpToSplitGrid(math.clamp(
+                return AlignLengthUpToPocketLengthGrid(math.clamp(
                     roadWidth + DrivableLaneEnvelopeBuffer,
                     MinimumWidthBasedPocketLaneLength,
                     MaximumWidthBasedPocketLaneLength));
@@ -633,7 +1005,7 @@ namespace PocketTurnLanes.Systems.Tool
                 roadWidth,
                 MinimumWidthBasedPocketLaneLength,
                 MaximumWidthBasedPocketLaneLength);
-            return AlignLengthUpToSplitGrid(clampedWidth);
+            return AlignLengthUpToPocketLengthGrid(clampedWidth);
         }
 
         private static string FormatMeters(float value)
@@ -696,6 +1068,16 @@ namespace PocketTurnLanes.Systems.Tool
             return math.ceil(math.max(0f, length - SplitGridAlignmentTolerance) / SplitGridSize) * SplitGridSize;
         }
 
+        private static float AlignLengthUpToPocketLengthGrid(float length)
+        {
+            if (length <= 0f)
+            {
+                return 0f;
+            }
+
+            return math.ceil(math.max(0f, length - SplitGridAlignmentTolerance) / PocketLengthGridSize) * PocketLengthGridSize;
+        }
+
         private static float AlignLengthDownToSplitGrid(float length)
         {
             if (length <= 0f)
@@ -704,6 +1086,16 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             return math.floor((length + SplitGridAlignmentTolerance) / SplitGridSize) * SplitGridSize;
+        }
+
+        private static bool HasMinimumPocketLength(float pocketLength)
+        {
+            return pocketLength + SplitLengthBuffer + MinimumPocketLaneLengthTolerance >= MinimumPocketLaneLength;
+        }
+
+        private static float GetEffectiveMinimumPocketLength()
+        {
+            return math.max(0f, MinimumPocketLaneLength - SplitLengthBuffer - MinimumPocketLaneLengthTolerance);
         }
 
         private static float GetCurvePositionAtDistance(Curve curve, bool fromStart, float distance)
