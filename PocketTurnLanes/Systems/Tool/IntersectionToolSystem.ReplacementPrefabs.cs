@@ -70,36 +70,8 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             bool found = false;
-            int scannedCount = 0;
-            int dlcBlockedCount = 0;
-            int widthMatchCount = 0;
-            int parkingExcludedCount = 0;
-            int laneMatchCount = 0;
-            int missingLaneCount = 0;
-            int independentTramCandidateCount = 0;
-            int publicTransportTramCandidateCount = 0;
-            int tramUpgradeCandidateCount = 0;
-            int tramUpgradeRejectedCount = 0;
-            int busUpgradeCandidateCount = 0;
-            int busUpgradeRejectedCount = 0;
-            int layoutScoredCount = 0;
-            int busLayoutCandidateCount = 0;
-            int sourcePrefabLaneMatchCount = 0;
-            int roadBuilderDiscardedCount = 0;
-            string tramUpgradeRejectSample = "<none>";
-            string busUpgradeRejectSample = "<none>";
-            int busUpgradeRejectSampleCount = 0;
-            string widthCandidateSample = "<none>";
-            int widthCandidateSampleCount = 0;
-            string roadBuilderCandidateSample = "<none>";
-            int roadBuilderCandidateSampleCount = 0;
-            string roadBuilderBusUpgradeSample = "<none>";
-            int roadBuilderBusUpgradeSampleCount = 0;
-            string roadBuilderDiscardedSample = "<none>";
-            int roadBuilderDiscardedSampleCount = 0;
-            string bestBusLayoutCandidateDetail = "<none>";
+            ReplacementSearchStats stats = ReplacementSearchStats.Create();
             int bestScore = int.MaxValue;
-            int bestBusLayoutCandidateScore = int.MaxValue;
             ReplacementPrefabMatch bestMatch = default;
             bool sourceHasTramTracks = !sourceProfile.TramTrackCounts.IsEmpty;
             bool sourceHasIndependentTram = !sourceProfile.IndependentTramCounts.IsEmpty;
@@ -115,7 +87,7 @@ namespace PocketTurnLanes.Systems.Tool
                 for (int i = 0; i < prefabEntities.Length; i++)
                 {
                     Entity candidatePrefab = prefabEntities[i];
-                    scannedCount++;
+                    stats.Scanned++;
                     bool candidateIsSourcePrefab = candidatePrefab == sourcePrefabRef.m_Prefab;
                     string candidateName = GetPrefabNameFromPrefab(candidatePrefab);
                     GetRoadBuilderComponentProfile(
@@ -129,10 +101,8 @@ namespace PocketTurnLanes.Systems.Tool
 
                     if (candidateIsDiscardedRoadBuilderPrefab)
                     {
-                        roadBuilderDiscardedCount++;
-                        AppendLogSample(
-                            ref roadBuilderDiscardedSample,
-                            ref roadBuilderDiscardedSampleCount,
+                        stats.RoadBuilderDiscarded++;
+                        stats.AddRoadBuilderDiscardedSample(
                             $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} {candidateRoadBuilderComponentDetail}",
                             8);
                         continue;
@@ -148,24 +118,20 @@ namespace PocketTurnLanes.Systems.Tool
                         continue;
                     }
 
-                    widthMatchCount++;
+                    stats.WidthMatches++;
                     if (!TryGetDefaultRoadLaneProfile(
                             candidatePrefab,
                             out RoadLaneProfile candidateProfile))
                     {
-                        missingLaneCount++;
+                        stats.MissingLaneData++;
                         if (sourceHasTramTracks || sourceProfile.BusLaneLayout.HasAny)
                         {
-                            AppendLogSample(
-                                ref widthCandidateSample,
-                                ref widthCandidateSampleCount,
+                            stats.AddWidthCandidateSample(
                                 $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} status=missingLaneData deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
                                 24);
                             if (candidateLooksLikeRoadBuilder)
                             {
-                                AppendLogSample(
-                                    ref roadBuilderCandidateSample,
-                                    ref roadBuilderCandidateSampleCount,
+                                stats.AddRoadBuilderCandidateSample(
                                     $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} status=missingLaneData deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
                                     16);
                             }
@@ -176,16 +142,12 @@ namespace PocketTurnLanes.Systems.Tool
 
                     if (sourceHasTramTracks || sourceProfile.BusLaneLayout.HasAny)
                     {
-                        AppendLogSample(
-                            ref widthCandidateSample,
-                            ref widthCandidateSampleCount,
+                        stats.AddWidthCandidateSample(
                             $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultRoad={candidateProfile.RoadCounts} defaultBus={candidateProfile.BusLaneLayout} defaultTram={candidateProfile.TramTrackCounts} profileSource={candidateProfile.Source} markedParking={candidateProfile.HasMarkedParking} deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
                             24);
                         if (candidateLooksLikeRoadBuilder)
                         {
-                            AppendLogSample(
-                                ref roadBuilderCandidateSample,
-                                ref roadBuilderCandidateSampleCount,
+                            stats.AddRoadBuilderCandidateSample(
                                 $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultRoad={candidateProfile.RoadCounts} defaultBus={candidateProfile.BusLaneLayout} defaultTram={candidateProfile.TramTrackCounts} profileSource={candidateProfile.Source} markedParking={candidateProfile.HasMarkedParking} deleted={EntityManager.HasComponent<Deleted>(candidatePrefab)}",
                                 16);
                         }
@@ -193,238 +155,40 @@ namespace PocketTurnLanes.Systems.Tool
 
                     if (candidateProfile.HasMarkedParking)
                     {
-                        parkingExcludedCount++;
+                        stats.ParkingExcluded++;
                         continue;
                     }
 
                     GetRoadContentProfile(candidatePrefab, out bool candidateIsDlc, out string candidateContentDetail);
                     if (!sourceIsDlc && candidateIsDlc)
                     {
-                        dlcBlockedCount++;
+                        stats.DlcBlocked++;
                         continue;
                     }
 
-                    bool invert;
-                    RoadLaneCounts targetCounts = desiredCounts;
-                    RoadLaneCounts targetEffectiveCounts = desiredCounts;
-                    bool targetUsesTramUpgradeFallback = false;
-                    RoadLaneCounts targetIndependentTramCounts = candidateProfile.IndependentTramCounts;
-                    RoadLaneCounts targetPublicTransportTramCounts = candidateProfile.PublicTransportTramCounts;
-                    RoadLaneCounts targetTramTrackCounts = candidateProfile.TramTrackCounts;
-                    bool targetHasIndependentTram = !targetIndependentTramCounts.IsEmpty;
-                    bool targetHasPublicTransportTram = !targetPublicTransportTramCounts.IsEmpty;
-                    bool targetHasTramTrackMatch = !sourceHasTramTracks;
-                    bool hasTargetUpgrade = false;
-                    Upgraded targetUpgrade = default;
-                    RoadLaneProfile targetLayoutProfile = candidateProfile;
-                    string tramMatchDetail = sourceHasTramTracks
-                        ? $"sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} candidateIndependentTram={candidateProfile.IndependentTramCounts} candidatePublicTransportTram={candidateProfile.PublicTransportTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail}"
-                        : "sourceTramTracks=none";
-
-                    if (sourceHasIndependentTram)
+                    if (!TryMatchReplacementCandidateLaneProfile(
+                            candidatePrefab,
+                            candidateName,
+                            candidateIsSourcePrefab,
+                            candidateLooksLikeRoadBuilder,
+                            candidateProfile,
+                            sourceProfile,
+                            desiredCounts,
+                            originalEffectiveCounts,
+                            desiredEffectiveCounts,
+                            sourceHasTramTracks,
+                            sourceHasIndependentTram,
+                            sourceTramUpgradeFlags,
+                            ref stats,
+                            out CandidateLaneMatch candidateMatch))
                     {
-                        if (targetHasIndependentTram)
-                        {
-                            independentTramCandidateCount++;
-                        }
-
-                        if (targetHasPublicTransportTram)
-                        {
-                            publicTransportTramCandidateCount++;
-                        }
-
-                        if (targetHasIndependentTram &&
-                            RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert) &&
-                            CountsMatchForOrientation(candidateProfile.IndependentTramCounts, sourceProfile.IndependentTramCounts, invert))
-                        {
-                            targetEffectiveCounts = RoadLaneCounts.Add(desiredCounts, sourceProfile.IndependentTramCounts);
-                            targetHasTramTrackMatch = true;
-                            tramMatchDetail = $"mode=independent-tram sourceIndependentTram={sourceProfile.IndependentTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} candidateIndependentTram={candidateProfile.IndependentTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.IndependentTramDetail}";
-                        }
-                        else if (targetHasPublicTransportTram &&
-                                 RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredEffectiveCounts, out invert) &&
-                                 CountsMatchForOrientation(candidateProfile.PublicTransportTramCounts, sourceProfile.IndependentTramCounts, invert))
-                        {
-                            targetEffectiveCounts = desiredEffectiveCounts;
-                            targetHasTramTrackMatch = true;
-                            tramMatchDetail = $"mode=public-transport-tram sourceIndependentTram={sourceProfile.IndependentTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} candidatePublicTransportTram={candidateProfile.PublicTransportTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.PublicTransportTramDetail}";
-                        }
-                        else
-                        {
-                            if (!RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredEffectiveCounts, out invert))
-                            {
-                                continue;
-                            }
-
-                            if (!TryFindMatchingTramUpgrade(
-                                    candidatePrefab,
-                                    candidateProfile,
-                                    sourceProfile,
-                                    desiredCounts,
-                                    desiredEffectiveCounts,
-                                    sourceProfile.IndependentTramCounts,
-                                    sourceTramUpgradeFlags,
-                                    invert,
-                                    out targetUpgrade,
-                                    out targetLayoutProfile,
-                                    out string tramUpgradeDetail))
-                            {
-                                tramUpgradeRejectedCount++;
-                                if (tramUpgradeRejectSample == "<none>")
-                                {
-                                    tramUpgradeRejectSample = $"candidate={GetPrefabNameFromPrefab(candidatePrefab)} candidateRoad={candidateProfile.RoadCounts} candidateTramTracks={candidateProfile.TramTrackCounts} invert={invert} {tramUpgradeDetail}";
-                                }
-
-                                continue;
-                            }
-
-                            tramUpgradeCandidateCount++;
-                            targetUsesTramUpgradeFallback = true;
-                            hasTargetUpgrade = true;
-                            targetEffectiveCounts = desiredEffectiveCounts;
-                            targetIndependentTramCounts = targetLayoutProfile.IndependentTramCounts;
-                            targetPublicTransportTramCounts = targetLayoutProfile.PublicTransportTramCounts;
-                            targetTramTrackCounts = targetLayoutProfile.TramTrackCounts;
-                            targetHasIndependentTram = !targetIndependentTramCounts.IsEmpty;
-                            targetHasPublicTransportTram = !targetPublicTransportTramCounts.IsEmpty;
-                            targetHasTramTrackMatch = true;
-                            tramMatchDetail = $"mode=tram-upgrade-fallback sourceIndependentTram={sourceProfile.IndependentTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} adjustedOriginal={originalEffectiveCounts} adjustedDesired={desiredEffectiveCounts} targetUpgrade={targetUpgrade.m_Flags} {tramUpgradeDetail}";
-                        }
-                    }
-                    else if (sourceHasTramTracks)
-                    {
-                        if (!RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert))
-                        {
-                            continue;
-                        }
-
-                        bool hasIndependentTramMatch = targetHasIndependentTram &&
-                                                       CountsMatchForOrientation(candidateProfile.IndependentTramCounts, sourceProfile.TramTrackCounts, invert);
-                        bool hasPublicTransportTramMatch = targetHasPublicTransportTram &&
-                                                           CountsMatchForOrientation(candidateProfile.PublicTransportTramCounts, sourceProfile.TramTrackCounts, invert);
-                        bool hasAnyTramMatch = CountsMatchForOrientation(candidateProfile.TramTrackCounts, sourceProfile.TramTrackCounts, invert);
-
-                        if (hasIndependentTramMatch)
-                        {
-                            independentTramCandidateCount++;
-                            targetHasTramTrackMatch = true;
-                            tramMatchDetail = $"mode=tram-default-independent sourceTramTracks={sourceProfile.TramTrackCounts} candidateIndependentTram={candidateProfile.IndependentTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.IndependentTramDetail}";
-                        }
-                        else if (hasPublicTransportTramMatch)
-                        {
-                            publicTransportTramCandidateCount++;
-                            targetHasTramTrackMatch = true;
-                            tramMatchDetail = $"mode=public-transport-tram sourceTramTracks={sourceProfile.TramTrackCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} candidatePublicTransportTram={candidateProfile.PublicTransportTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.PublicTransportTramDetail}";
-                        }
-                        else if (hasAnyTramMatch)
-                        {
-                            targetHasTramTrackMatch = true;
-                            tramMatchDetail = $"mode=tram-default-embedded sourceTramTracks={sourceProfile.TramTrackCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail}";
-                        }
-                        else if (TryFindMatchingTramUpgrade(
-                                     candidatePrefab,
-                                     candidateProfile,
-                                     sourceProfile,
-                                     desiredCounts,
-                                     desiredCounts,
-                                     sourceProfile.TramTrackCounts,
-                                     sourceTramUpgradeFlags,
-                                     invert,
-                                     out targetUpgrade,
-                                     out targetLayoutProfile,
-                                     out string tramUpgradeDetail))
-                        {
-                            tramUpgradeCandidateCount++;
-                            targetUsesTramUpgradeFallback = true;
-                            hasTargetUpgrade = true;
-                            targetIndependentTramCounts = targetLayoutProfile.IndependentTramCounts;
-                            targetPublicTransportTramCounts = targetLayoutProfile.PublicTransportTramCounts;
-                            targetTramTrackCounts = targetLayoutProfile.TramTrackCounts;
-                            targetHasIndependentTram = !targetIndependentTramCounts.IsEmpty;
-                            targetHasPublicTransportTram = !targetPublicTransportTramCounts.IsEmpty;
-                            targetHasTramTrackMatch = true;
-                            tramMatchDetail = $"mode=tram-upgrade-preserve sourceTramTracks={sourceProfile.TramTrackCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} targetUpgrade={targetUpgrade.m_Flags} {tramUpgradeDetail}";
-                        }
-                        else
-                        {
-                            tramUpgradeRejectedCount++;
-                            if (tramUpgradeRejectSample == "<none>")
-                            {
-                                tramUpgradeRejectSample = $"candidate={GetPrefabNameFromPrefab(candidatePrefab)} candidateRoad={candidateProfile.RoadCounts} candidateTramTracks={candidateProfile.TramTrackCounts} invert={invert} {tramUpgradeDetail}";
-                            }
-
-                            tramMatchDetail = $"mode=missing-tram-fallback sourceTramTracks={sourceProfile.TramTrackCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail} rejectedUpgrade={tramUpgradeDetail}";
-                        }
-                    }
-                    else
-                    {
-                        bool defaultLaneMatch = RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert);
-                        bool shouldScanBusUpgrade = sourceProfile.BusLaneLayout.HasAny &&
-                                                    (!defaultLaneMatch || !candidateProfile.BusLaneLayout.HasAny);
-                        string busUpgradeDetail = "busUpgrade=not-scanned";
-                        bool hasBusUpgradeMatch = false;
-                        bool busUpgradeInvert = false;
-                        Upgraded busTargetUpgrade = default;
-                        RoadLaneProfile busTargetProfile = default;
-
-                        if (shouldScanBusUpgrade)
-                        {
-                            hasBusUpgradeMatch = TryFindMatchingBusUpgrade(
-                                candidatePrefab,
-                                sourceProfile,
-                                desiredCounts,
-                                out busUpgradeInvert,
-                                out busTargetUpgrade,
-                                out busTargetProfile,
-                                out busUpgradeDetail);
-                        }
-
-                        if (hasBusUpgradeMatch)
-                        {
-                            busUpgradeCandidateCount++;
-                            invert = busUpgradeInvert;
-                            hasTargetUpgrade = true;
-                            targetUpgrade = busTargetUpgrade;
-                            targetLayoutProfile = busTargetProfile;
-                            targetIndependentTramCounts = targetLayoutProfile.IndependentTramCounts;
-                            targetPublicTransportTramCounts = targetLayoutProfile.PublicTransportTramCounts;
-                            targetTramTrackCounts = targetLayoutProfile.TramTrackCounts;
-                            targetHasIndependentTram = !targetIndependentTramCounts.IsEmpty;
-                            targetHasPublicTransportTram = !targetPublicTransportTramCounts.IsEmpty;
-                            tramMatchDetail = $"mode=bus-upgrade-preserve sourceBusLayout={sourceProfile.BusLaneLayout} targetUpgrade={targetUpgrade.m_Flags} {busUpgradeDetail}";
-                        }
-                        else
-                        {
-                            if (shouldScanBusUpgrade)
-                            {
-                                busUpgradeRejectedCount++;
-                                AppendLogSample(
-                                    ref busUpgradeRejectSample,
-                                    ref busUpgradeRejectSampleCount,
-                                    $"candidate={candidateName} candidateEntity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} candidateSource={candidateProfile.Source} defaultLaneMatch={defaultLaneMatch} {busUpgradeDetail}",
-                                    6);
-                            }
-
-                            if (candidateLooksLikeRoadBuilder)
-                            {
-                                AppendLogSample(
-                                    ref roadBuilderBusUpgradeSample,
-                                    ref roadBuilderBusUpgradeSampleCount,
-                                    $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultLaneMatch={defaultLaneMatch} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} {busUpgradeDetail}",
-                                    16);
-                            }
-
-                            if (!defaultLaneMatch)
-                            {
-                                continue;
-                            }
-                        }
+                        continue;
                     }
 
-                    laneMatchCount++;
+                    stats.LaneMatches++;
                     if (candidateIsSourcePrefab)
                     {
-                        sourcePrefabLaneMatchCount++;
+                        stats.SourcePrefabLaneMatches++;
                     }
 
                     EntityManager.TryGetComponent(candidatePrefab, out RoadData candidateRoadData);
@@ -436,13 +200,13 @@ namespace PocketTurnLanes.Systems.Tool
                         candidateRoadData,
                         candidateNetData,
                         candidateGeometry,
-                        invert,
+                        candidateMatch.Invert,
                         sourceIsDlc,
                         candidateIsDlc);
                     int layoutScore = GetReplacementLayoutScore(
                         sourceProfile,
-                        targetLayoutProfile,
-                        invert,
+                        candidateMatch.TargetLayoutProfile,
+                        candidateMatch.Invert,
                         out int tramLayoutScore,
                         out int busLayoutScore,
                         out string layoutScoreDetail,
@@ -452,21 +216,18 @@ namespace PocketTurnLanes.Systems.Tool
                     if (sourceProfile.TramTrackLayout.HasAny ||
                         sourceProfile.BusLaneLayout.HasAny)
                     {
-                        layoutScoredCount++;
+                        stats.LayoutScored++;
                     }
 
                     if (sourceProfile.BusLaneLayout.HasAny &&
                         orientedTargetBusLayout.HasAny)
                     {
-                        busLayoutCandidateCount++;
-                        if (score < bestBusLayoutCandidateScore)
-                        {
-                            bestBusLayoutCandidateScore = score;
-                            bestBusLayoutCandidateDetail = $"candidate={candidateName} orientation={(invert ? "reversed" : "direct")} score={score} candidateRoad={candidateProfile.RoadCounts} targetSource={targetLayoutProfile.Source} targetBus={orientedTargetBusLayout} targetBusDetail={targetLayoutProfile.BusLaneDetail} targetPublicTransportTram={targetPublicTransportTramCounts} targetUpgrade={(hasTargetUpgrade ? targetUpgrade.m_Flags.ToString() : "none")}";
-                        }
+                        stats.RecordBusLayoutCandidate(
+                            score,
+                            $"candidate={candidateName} orientation={(candidateMatch.Invert ? "reversed" : "direct")} score={score} candidateRoad={candidateProfile.RoadCounts} targetSource={candidateMatch.TargetLayoutProfile.Source} targetBus={orientedTargetBusLayout} targetBusDetail={candidateMatch.TargetLayoutProfile.BusLaneDetail} targetPublicTransportTram={candidateMatch.TargetPublicTransportTramCounts} targetUpgrade={(candidateMatch.HasTargetUpgrade ? candidateMatch.TargetUpgrade.m_Flags.ToString() : "none")}");
                     }
 
-                    if (targetUsesTramUpgradeFallback)
+                    if (candidateMatch.TargetUsesTramUpgradeFallback)
                     {
                         score += TramUpgradeFallbackPenalty;
                     }
@@ -476,17 +237,17 @@ namespace PocketTurnLanes.Systems.Tool
                         RoadLaneCounts requiredTramCounts = sourceHasIndependentTram
                             ? sourceProfile.IndependentTramCounts
                             : sourceProfile.TramTrackCounts;
-                        if (!targetHasTramTrackMatch)
+                        if (!candidateMatch.TargetHasTramTrackMatch)
                         {
                             score += MissingTramTargetPenalty;
                         }
-                        else if (targetHasIndependentTram &&
-                                 CountsMatchForOrientation(targetIndependentTramCounts, requiredTramCounts, invert))
+                        else if (candidateMatch.TargetHasIndependentTram &&
+                                 CountsMatchForOrientation(candidateMatch.TargetIndependentTramCounts, requiredTramCounts, candidateMatch.Invert))
                         {
                             score -= IndependentTramTargetPreference;
                         }
-                        else if (targetHasPublicTransportTram &&
-                                 CountsMatchForOrientation(targetPublicTransportTramCounts, requiredTramCounts, invert))
+                        else if (candidateMatch.TargetHasPublicTransportTram &&
+                                 CountsMatchForOrientation(candidateMatch.TargetPublicTransportTramCounts, requiredTramCounts, candidateMatch.Invert))
                         {
                             score += PublicTransportTramTargetPenalty;
                         }
@@ -503,30 +264,30 @@ namespace PocketTurnLanes.Systems.Tool
                         bestMatch = new ReplacementPrefabMatch
                         {
                             Prefab = candidatePrefab,
-                            Invert = invert,
+                            Invert = candidateMatch.Invert,
                             OriginalCounts = originalCounts,
                             TargetCounts = desiredCounts,
                             CandidateCounts = candidateProfile.RoadCounts,
                             OriginalEffectiveCounts = originalEffectiveCounts,
-                            TargetEffectiveCounts = targetEffectiveCounts,
+                            TargetEffectiveCounts = candidateMatch.TargetEffectiveCounts,
                             SourceIndependentTramCounts = sourceProfile.IndependentTramCounts,
-                            TargetIndependentTramCounts = targetIndependentTramCounts,
+                            TargetIndependentTramCounts = candidateMatch.TargetIndependentTramCounts,
                             SourcePublicTransportTramCounts = sourceProfile.PublicTransportTramCounts,
-                            TargetPublicTransportTramCounts = targetPublicTransportTramCounts,
+                            TargetPublicTransportTramCounts = candidateMatch.TargetPublicTransportTramCounts,
                             SourceTramTrackCounts = sourceProfile.TramTrackCounts,
-                            TargetTramTrackCounts = targetTramTrackCounts,
-                            TargetHasIndependentTram = targetHasIndependentTram,
-                            TargetHasPublicTransportTram = targetHasPublicTransportTram,
-                            TargetUsesTramUpgradeFallback = targetUsesTramUpgradeFallback,
-                            HasTargetUpgrade = hasTargetUpgrade,
-                            TargetUpgrade = targetUpgrade,
-                            TramMatchDetail = tramMatchDetail,
+                            TargetTramTrackCounts = candidateMatch.TargetTramTrackCounts,
+                            TargetHasIndependentTram = candidateMatch.TargetHasIndependentTram,
+                            TargetHasPublicTransportTram = candidateMatch.TargetHasPublicTransportTram,
+                            TargetUsesTramUpgradeFallback = candidateMatch.TargetUsesTramUpgradeFallback,
+                            HasTargetUpgrade = candidateMatch.HasTargetUpgrade,
+                            TargetUpgrade = candidateMatch.TargetUpgrade,
+                            TramMatchDetail = candidateMatch.TramMatchDetail,
                             SourceTramTrackLayout = sourceProfile.TramTrackLayout.ToString(),
                             TargetTramTrackLayout = orientedTargetTramLayout.ToString(),
                             SourceBusLaneLayout = sourceProfile.BusLaneLayout.ToString(),
                             TargetBusLaneLayout = orientedTargetBusLayout.ToString(),
                             SourceBusLaneDetail = sourceProfile.BusLaneDetail,
-                            TargetBusLaneDetail = targetLayoutProfile.BusLaneDetail,
+                            TargetBusLaneDetail = candidateMatch.TargetLayoutProfile.BusLaneDetail,
                             LayoutScoreDetail = layoutScoreDetail,
                             LayoutScore = layoutScore,
                             TramLayoutScore = tramLayoutScore,
@@ -542,12 +303,12 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (!found)
             {
-                Mod.log.Warn($"[IntersectionTool] No pocket lane replacement prefab found sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourcePublicTransportTramDetail={sourceProfile.PublicTransportTramDetail} sourceTramTracks={sourceProfile.TramTrackCounts} sourceTramTrackLayout={sourceProfile.TramTrackLayout} sourceTramDetail={sourceProfile.TramTrackDetail} sourceHasUpgraded={sourceHasUpgraded} sourceTramUpgradeFlags={sourceTramUpgradeFlags} sourceBusLayout={sourceProfile.BusLaneLayout} sourceBusDetail={sourceProfile.BusLaneDetail} originalLanes={originalCounts} desiredLanes={desiredCounts} originalEffectiveLanes={originalEffectiveCounts} desiredEffectiveLanes={desiredEffectiveCounts} width={sourceGeometry.m_DefaultWidth:0.##}m scanned={scannedCount} bridgeQueryExcluded=True dlcBlocked={dlcBlockedCount} widthMatches={widthMatchCount} widthCandidateSample={widthCandidateSample} roadBuilderCandidateSample={roadBuilderCandidateSample} roadBuilderDiscarded={roadBuilderDiscardedCount} roadBuilderDiscardedSample={roadBuilderDiscardedSample} parkingExcluded={parkingExcludedCount} independentTramCandidates={independentTramCandidateCount} publicTransportTramCandidates={publicTransportTramCandidateCount} tramUpgradeCandidates={tramUpgradeCandidateCount} tramUpgradeRejected={tramUpgradeRejectedCount} tramUpgradeRejectSample={tramUpgradeRejectSample} busUpgradeCandidates={busUpgradeCandidateCount} busUpgradeRejected={busUpgradeRejectedCount} busUpgradeRejectSample={busUpgradeRejectSample} roadBuilderBusUpgradeSample={roadBuilderBusUpgradeSample} layoutScored={layoutScoredCount} busLayoutCandidates={busLayoutCandidateCount} bestBusLayoutCandidate={bestBusLayoutCandidateDetail} sourcePrefabLaneMatches={sourcePrefabLaneMatchCount} laneMatches=0 missingLaneData={missingLaneCount}.");
+                Mod.log.Warn($"[IntersectionTool] No pocket lane replacement prefab found sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourcePublicTransportTramDetail={sourceProfile.PublicTransportTramDetail} sourceTramTracks={sourceProfile.TramTrackCounts} sourceTramTrackLayout={sourceProfile.TramTrackLayout} sourceTramDetail={sourceProfile.TramTrackDetail} sourceHasUpgraded={sourceHasUpgraded} sourceTramUpgradeFlags={sourceTramUpgradeFlags} sourceBusLayout={sourceProfile.BusLaneLayout} sourceBusDetail={sourceProfile.BusLaneDetail} originalLanes={originalCounts} desiredLanes={desiredCounts} originalEffectiveLanes={originalEffectiveCounts} desiredEffectiveLanes={desiredEffectiveCounts} width={sourceGeometry.m_DefaultWidth:0.##}m scanned={stats.Scanned} bridgeQueryExcluded=True dlcBlocked={stats.DlcBlocked} widthMatches={stats.WidthMatches} widthCandidateSample={stats.WidthCandidateSample} roadBuilderCandidateSample={stats.RoadBuilderCandidateSample} roadBuilderDiscarded={stats.RoadBuilderDiscarded} roadBuilderDiscardedSample={stats.RoadBuilderDiscardedSample} parkingExcluded={stats.ParkingExcluded} independentTramCandidates={stats.IndependentTramCandidates} publicTransportTramCandidates={stats.PublicTransportTramCandidates} tramUpgradeCandidates={stats.TramUpgradeCandidates} tramUpgradeRejected={stats.TramUpgradeRejected} tramUpgradeRejectSample={stats.TramUpgradeRejectSample} busUpgradeCandidates={stats.BusUpgradeCandidates} busUpgradeRejected={stats.BusUpgradeRejected} busUpgradeRejectSample={stats.BusUpgradeRejectSample} roadBuilderBusUpgradeSample={stats.RoadBuilderBusUpgradeSample} layoutScored={stats.LayoutScored} busLayoutCandidates={stats.BusLayoutCandidates} bestBusLayoutCandidate={stats.BestBusLayoutCandidateDetail} sourcePrefabLaneMatches={stats.SourcePrefabLaneMatches} laneMatches=0 missingLaneData={stats.MissingLaneData}.");
                 return false;
             }
 
             match = bestMatch;
-            Mod.log.Info($"[IntersectionTool] Replacement prefab selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} targetPrefab={GetPrefabNameFromPrefab(match.Prefab)} targetIsSourcePrefab={match.TargetIsSourcePrefab} targetDlc={match.TargetIsDlc} targetContent={match.TargetContentDetail} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={match.SourceIndependentTramCounts} targetIndependentTram={match.TargetIndependentTramCounts} sourcePublicTransportTram={match.SourcePublicTransportTramCounts} targetPublicTransportTram={match.TargetPublicTransportTramCounts} sourceTramTracks={match.SourceTramTrackCounts} targetTramTracks={match.TargetTramTrackCounts} targetHasIndependentTram={match.TargetHasIndependentTram} targetHasPublicTransportTram={match.TargetHasPublicTransportTram} tramUpgradeFallback={match.TargetUsesTramUpgradeFallback} targetUpgrade={(match.HasTargetUpgrade ? match.TargetUpgrade.m_Flags.ToString() : "none")} tramMatch={match.TramMatchDetail} sourceTramTrackLayout={match.SourceTramTrackLayout} targetTramTrackLayout={match.TargetTramTrackLayout} sourceBusLayout={match.SourceBusLaneLayout} sourceBusDetail={match.SourceBusLaneDetail} targetBusLayout={match.TargetBusLaneLayout} targetBusDetail={match.TargetBusLaneDetail} layoutScore={match.LayoutScore} tramLayoutScore={match.TramLayoutScore} busLayoutScore={match.BusLayoutScore} layoutDetail={match.LayoutScoreDetail} width={sourceGeometry.m_DefaultWidth:0.##}m originalLanes={match.OriginalCounts} desiredLanes={match.TargetCounts} originalEffectiveLanes={match.OriginalEffectiveCounts} desiredEffectiveLanes={match.TargetEffectiveCounts} candidateLanes={match.CandidateCounts} scanned={scannedCount} bridgeQueryExcluded=True dlcBlocked={dlcBlockedCount} widthMatches={widthMatchCount} widthCandidateSample={widthCandidateSample} roadBuilderCandidateSample={roadBuilderCandidateSample} roadBuilderDiscarded={roadBuilderDiscardedCount} roadBuilderDiscardedSample={roadBuilderDiscardedSample} parkingExcluded={parkingExcludedCount} independentTramCandidates={independentTramCandidateCount} publicTransportTramCandidates={publicTransportTramCandidateCount} tramUpgradeCandidates={tramUpgradeCandidateCount} tramUpgradeRejected={tramUpgradeRejectedCount} busUpgradeCandidates={busUpgradeCandidateCount} busUpgradeRejected={busUpgradeRejectedCount} busUpgradeRejectSample={busUpgradeRejectSample} roadBuilderBusUpgradeSample={roadBuilderBusUpgradeSample} layoutScored={layoutScoredCount} busLayoutCandidates={busLayoutCandidateCount} bestBusLayoutCandidate={bestBusLayoutCandidateDetail} sourcePrefabLaneMatches={sourcePrefabLaneMatchCount} laneMatches={laneMatchCount} missingLaneData={missingLaneCount} score={match.Score}.");
+            Mod.log.Info($"[IntersectionTool] Replacement prefab selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} targetPrefab={GetPrefabNameFromPrefab(match.Prefab)} targetIsSourcePrefab={match.TargetIsSourcePrefab} targetDlc={match.TargetIsDlc} targetContent={match.TargetContentDetail} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={match.SourceIndependentTramCounts} targetIndependentTram={match.TargetIndependentTramCounts} sourcePublicTransportTram={match.SourcePublicTransportTramCounts} targetPublicTransportTram={match.TargetPublicTransportTramCounts} sourceTramTracks={match.SourceTramTrackCounts} targetTramTracks={match.TargetTramTrackCounts} targetHasIndependentTram={match.TargetHasIndependentTram} targetHasPublicTransportTram={match.TargetHasPublicTransportTram} tramUpgradeFallback={match.TargetUsesTramUpgradeFallback} targetUpgrade={(match.HasTargetUpgrade ? match.TargetUpgrade.m_Flags.ToString() : "none")} tramMatch={match.TramMatchDetail} sourceTramTrackLayout={match.SourceTramTrackLayout} targetTramTrackLayout={match.TargetTramTrackLayout} sourceBusLayout={match.SourceBusLaneLayout} sourceBusDetail={match.SourceBusLaneDetail} targetBusLayout={match.TargetBusLaneLayout} targetBusDetail={match.TargetBusLaneDetail} layoutScore={match.LayoutScore} tramLayoutScore={match.TramLayoutScore} busLayoutScore={match.BusLayoutScore} layoutDetail={match.LayoutScoreDetail} width={sourceGeometry.m_DefaultWidth:0.##}m originalLanes={match.OriginalCounts} desiredLanes={match.TargetCounts} originalEffectiveLanes={match.OriginalEffectiveCounts} desiredEffectiveLanes={match.TargetEffectiveCounts} candidateLanes={match.CandidateCounts} scanned={stats.Scanned} bridgeQueryExcluded=True dlcBlocked={stats.DlcBlocked} widthMatches={stats.WidthMatches} widthCandidateSample={stats.WidthCandidateSample} roadBuilderCandidateSample={stats.RoadBuilderCandidateSample} roadBuilderDiscarded={stats.RoadBuilderDiscarded} roadBuilderDiscardedSample={stats.RoadBuilderDiscardedSample} parkingExcluded={stats.ParkingExcluded} independentTramCandidates={stats.IndependentTramCandidates} publicTransportTramCandidates={stats.PublicTransportTramCandidates} tramUpgradeCandidates={stats.TramUpgradeCandidates} tramUpgradeRejected={stats.TramUpgradeRejected} busUpgradeCandidates={stats.BusUpgradeCandidates} busUpgradeRejected={stats.BusUpgradeRejected} busUpgradeRejectSample={stats.BusUpgradeRejectSample} roadBuilderBusUpgradeSample={stats.RoadBuilderBusUpgradeSample} layoutScored={stats.LayoutScored} busLayoutCandidates={stats.BusLayoutCandidates} bestBusLayoutCandidate={stats.BestBusLayoutCandidateDetail} sourcePrefabLaneMatches={stats.SourcePrefabLaneMatches} laneMatches={stats.LaneMatches} missingLaneData={stats.MissingLaneData} score={match.Score}.");
             return true;
         }
 
@@ -633,6 +394,118 @@ namespace PocketTurnLanes.Systems.Tool
             public bool IsIndependentTram;
             public bool IsPublicTransportTram;
             public string Semantic;
+        }
+
+        private struct ReplacementSearchStats
+        {
+            public int Scanned;
+            public int DlcBlocked;
+            public int WidthMatches;
+            public int ParkingExcluded;
+            public int LaneMatches;
+            public int MissingLaneData;
+            public int IndependentTramCandidates;
+            public int PublicTransportTramCandidates;
+            public int TramUpgradeCandidates;
+            public int TramUpgradeRejected;
+            public int BusUpgradeCandidates;
+            public int BusUpgradeRejected;
+            public int LayoutScored;
+            public int BusLayoutCandidates;
+            public int SourcePrefabLaneMatches;
+            public int RoadBuilderDiscarded;
+            public string TramUpgradeRejectSample;
+            public string BusUpgradeRejectSample;
+            public string WidthCandidateSample;
+            public string RoadBuilderCandidateSample;
+            public string RoadBuilderBusUpgradeSample;
+            public string RoadBuilderDiscardedSample;
+            public string BestBusLayoutCandidateDetail;
+            private int m_BusUpgradeRejectSampleCount;
+            private int m_WidthCandidateSampleCount;
+            private int m_RoadBuilderCandidateSampleCount;
+            private int m_RoadBuilderBusUpgradeSampleCount;
+            private int m_RoadBuilderDiscardedSampleCount;
+            private int m_BestBusLayoutCandidateScore;
+
+            public static ReplacementSearchStats Create()
+            {
+                return new ReplacementSearchStats
+                {
+                    TramUpgradeRejectSample = "<none>",
+                    BusUpgradeRejectSample = "<none>",
+                    WidthCandidateSample = "<none>",
+                    RoadBuilderCandidateSample = "<none>",
+                    RoadBuilderBusUpgradeSample = "<none>",
+                    RoadBuilderDiscardedSample = "<none>",
+                    BestBusLayoutCandidateDetail = "<none>",
+                    m_BestBusLayoutCandidateScore = int.MaxValue
+                };
+            }
+
+            public void AddTramUpgradeRejection(string sample)
+            {
+                TramUpgradeRejected++;
+                if (TramUpgradeRejectSample == "<none>")
+                {
+                    TramUpgradeRejectSample = sample;
+                }
+            }
+
+            public void AddBusUpgradeRejection(string sample, int maxSamples)
+            {
+                BusUpgradeRejected++;
+                AppendLogSample(ref BusUpgradeRejectSample, ref m_BusUpgradeRejectSampleCount, sample, maxSamples);
+            }
+
+            public void AddWidthCandidateSample(string sample, int maxSamples)
+            {
+                AppendLogSample(ref WidthCandidateSample, ref m_WidthCandidateSampleCount, sample, maxSamples);
+            }
+
+            public void AddRoadBuilderCandidateSample(string sample, int maxSamples)
+            {
+                AppendLogSample(ref RoadBuilderCandidateSample, ref m_RoadBuilderCandidateSampleCount, sample, maxSamples);
+            }
+
+            public void AddRoadBuilderBusUpgradeSample(string sample, int maxSamples)
+            {
+                AppendLogSample(ref RoadBuilderBusUpgradeSample, ref m_RoadBuilderBusUpgradeSampleCount, sample, maxSamples);
+            }
+
+            public void AddRoadBuilderDiscardedSample(string sample, int maxSamples)
+            {
+                AppendLogSample(ref RoadBuilderDiscardedSample, ref m_RoadBuilderDiscardedSampleCount, sample, maxSamples);
+            }
+
+            public void RecordBusLayoutCandidate(int score, string detail)
+            {
+                BusLayoutCandidates++;
+                if (score >= m_BestBusLayoutCandidateScore)
+                {
+                    return;
+                }
+
+                m_BestBusLayoutCandidateScore = score;
+                BestBusLayoutCandidateDetail = detail;
+            }
+        }
+
+        private struct CandidateLaneMatch
+        {
+            public bool Invert;
+            public RoadLaneCounts TargetEffectiveCounts;
+            public RoadLaneCounts TargetIndependentTramCounts;
+            public RoadLaneCounts TargetPublicTransportTramCounts;
+            public RoadLaneCounts TargetTramTrackCounts;
+            public bool TargetHasIndependentTram;
+            public bool TargetHasPublicTransportTram;
+            public bool TargetHasTramTrackMatch;
+            public bool TargetUsesTramUpgradeFallback;
+            public bool HasTargetUpgrade;
+            public Upgraded TargetUpgrade;
+            public RoadLaneProfile TargetLayoutProfile;
+            public string TramMatchDetail;
         }
 
         private static RoadLaneProfile CreateEmptyRoadLaneProfile(string source)
@@ -1624,6 +1497,239 @@ namespace PocketTurnLanes.Systems.Tool
             bool markedParking = angleDegrees >= MinimumMarkedParkingSlotAngleDegrees;
             detail = $"lane={FormatEntity(lanePrefab)} flags={flags} slotAngle={angleDegrees:0.#}deg slotSize=({parkingLaneData.m_SlotSize.x:0.##},{parkingLaneData.m_SlotSize.y:0.##}) threshold={MinimumMarkedParkingSlotAngleDegrees:0.#}deg";
             return markedParking;
+        }
+
+        private bool TryMatchReplacementCandidateLaneProfile(
+            Entity candidatePrefab,
+            string candidateName,
+            bool candidateIsSourcePrefab,
+            bool candidateLooksLikeRoadBuilder,
+            RoadLaneProfile candidateProfile,
+            RoadLaneProfile sourceProfile,
+            RoadLaneCounts desiredCounts,
+            RoadLaneCounts originalEffectiveCounts,
+            RoadLaneCounts desiredEffectiveCounts,
+            bool sourceHasTramTracks,
+            bool sourceHasIndependentTram,
+            CompositionFlags sourceTramUpgradeFlags,
+            ref ReplacementSearchStats stats,
+            out CandidateLaneMatch match)
+        {
+            match = new CandidateLaneMatch
+            {
+                TargetEffectiveCounts = desiredCounts,
+                TargetIndependentTramCounts = candidateProfile.IndependentTramCounts,
+                TargetPublicTransportTramCounts = candidateProfile.PublicTransportTramCounts,
+                TargetTramTrackCounts = candidateProfile.TramTrackCounts,
+                TargetHasIndependentTram = !candidateProfile.IndependentTramCounts.IsEmpty,
+                TargetHasPublicTransportTram = !candidateProfile.PublicTransportTramCounts.IsEmpty,
+                TargetHasTramTrackMatch = !sourceHasTramTracks,
+                TargetLayoutProfile = candidateProfile,
+                TramMatchDetail = sourceHasTramTracks
+                    ? $"sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} candidateIndependentTram={candidateProfile.IndependentTramCounts} candidatePublicTransportTram={candidateProfile.PublicTransportTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail}"
+                    : "sourceTramTracks=none"
+            };
+
+            bool invert = false;
+            if (sourceHasIndependentTram)
+            {
+                if (match.TargetHasIndependentTram)
+                {
+                    stats.IndependentTramCandidates++;
+                }
+
+                if (match.TargetHasPublicTransportTram)
+                {
+                    stats.PublicTransportTramCandidates++;
+                }
+
+                if (match.TargetHasIndependentTram &&
+                    RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert) &&
+                    CountsMatchForOrientation(candidateProfile.IndependentTramCounts, sourceProfile.IndependentTramCounts, invert))
+                {
+                    match.TargetEffectiveCounts = RoadLaneCounts.Add(desiredCounts, sourceProfile.IndependentTramCounts);
+                    match.TargetHasTramTrackMatch = true;
+                    match.TramMatchDetail = $"mode=independent-tram sourceIndependentTram={sourceProfile.IndependentTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} candidateIndependentTram={candidateProfile.IndependentTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.IndependentTramDetail}";
+                }
+                else if (match.TargetHasPublicTransportTram &&
+                         RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredEffectiveCounts, out invert) &&
+                         CountsMatchForOrientation(candidateProfile.PublicTransportTramCounts, sourceProfile.IndependentTramCounts, invert))
+                {
+                    match.TargetEffectiveCounts = desiredEffectiveCounts;
+                    match.TargetHasTramTrackMatch = true;
+                    match.TramMatchDetail = $"mode=public-transport-tram sourceIndependentTram={sourceProfile.IndependentTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} candidatePublicTransportTram={candidateProfile.PublicTransportTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.PublicTransportTramDetail}";
+                }
+                else
+                {
+                    if (!RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredEffectiveCounts, out invert))
+                    {
+                        return false;
+                    }
+
+                    if (!TryFindMatchingTramUpgrade(
+                            candidatePrefab,
+                            candidateProfile,
+                            sourceProfile,
+                            desiredCounts,
+                            desiredEffectiveCounts,
+                            sourceProfile.IndependentTramCounts,
+                            sourceTramUpgradeFlags,
+                            invert,
+                            out Upgraded targetUpgrade,
+                            out RoadLaneProfile targetLayoutProfile,
+                            out string tramUpgradeDetail))
+                    {
+                        stats.AddTramUpgradeRejection(BuildTramUpgradeRejectSample(candidatePrefab, candidateProfile, invert, tramUpgradeDetail));
+                        return false;
+                    }
+
+                    stats.TramUpgradeCandidates++;
+                    match.TargetUsesTramUpgradeFallback = true;
+                    match.HasTargetUpgrade = true;
+                    match.TargetUpgrade = targetUpgrade;
+                    match.TargetEffectiveCounts = desiredEffectiveCounts;
+                    match.TargetLayoutProfile = targetLayoutProfile;
+                    CopyTargetTramProfile(targetLayoutProfile, ref match);
+                    match.TargetHasTramTrackMatch = true;
+                    match.TramMatchDetail = $"mode=tram-upgrade-fallback sourceIndependentTram={sourceProfile.IndependentTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} adjustedOriginal={originalEffectiveCounts} adjustedDesired={desiredEffectiveCounts} targetUpgrade={targetUpgrade.m_Flags} {tramUpgradeDetail}";
+                }
+            }
+            else if (sourceHasTramTracks)
+            {
+                if (!RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert))
+                {
+                    return false;
+                }
+
+                bool hasIndependentTramMatch = match.TargetHasIndependentTram &&
+                                               CountsMatchForOrientation(candidateProfile.IndependentTramCounts, sourceProfile.TramTrackCounts, invert);
+                bool hasPublicTransportTramMatch = match.TargetHasPublicTransportTram &&
+                                                   CountsMatchForOrientation(candidateProfile.PublicTransportTramCounts, sourceProfile.TramTrackCounts, invert);
+                bool hasAnyTramMatch = CountsMatchForOrientation(candidateProfile.TramTrackCounts, sourceProfile.TramTrackCounts, invert);
+
+                if (hasIndependentTramMatch)
+                {
+                    stats.IndependentTramCandidates++;
+                    match.TargetHasTramTrackMatch = true;
+                    match.TramMatchDetail = $"mode=tram-default-independent sourceTramTracks={sourceProfile.TramTrackCounts} candidateIndependentTram={candidateProfile.IndependentTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.IndependentTramDetail}";
+                }
+                else if (hasPublicTransportTramMatch)
+                {
+                    stats.PublicTransportTramCandidates++;
+                    match.TargetHasTramTrackMatch = true;
+                    match.TramMatchDetail = $"mode=public-transport-tram sourceTramTracks={sourceProfile.TramTrackCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} candidatePublicTransportTram={candidateProfile.PublicTransportTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.PublicTransportTramDetail}";
+                }
+                else if (hasAnyTramMatch)
+                {
+                    match.TargetHasTramTrackMatch = true;
+                    match.TramMatchDetail = $"mode=tram-default-embedded sourceTramTracks={sourceProfile.TramTrackCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail}";
+                }
+                else if (TryFindMatchingTramUpgrade(
+                             candidatePrefab,
+                             candidateProfile,
+                             sourceProfile,
+                             desiredCounts,
+                             desiredCounts,
+                             sourceProfile.TramTrackCounts,
+                             sourceTramUpgradeFlags,
+                             invert,
+                             out Upgraded targetUpgrade,
+                             out RoadLaneProfile targetLayoutProfile,
+                             out string tramUpgradeDetail))
+                {
+                    stats.TramUpgradeCandidates++;
+                    match.TargetUsesTramUpgradeFallback = true;
+                    match.HasTargetUpgrade = true;
+                    match.TargetUpgrade = targetUpgrade;
+                    match.TargetLayoutProfile = targetLayoutProfile;
+                    CopyTargetTramProfile(targetLayoutProfile, ref match);
+                    match.TargetHasTramTrackMatch = true;
+                    match.TramMatchDetail = $"mode=tram-upgrade-preserve sourceTramTracks={sourceProfile.TramTrackCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} targetUpgrade={targetUpgrade.m_Flags} {tramUpgradeDetail}";
+                }
+                else
+                {
+                    stats.AddTramUpgradeRejection(BuildTramUpgradeRejectSample(candidatePrefab, candidateProfile, invert, tramUpgradeDetail));
+                    match.TramMatchDetail = $"mode=missing-tram-fallback sourceTramTracks={sourceProfile.TramTrackCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail} rejectedUpgrade={tramUpgradeDetail}";
+                }
+            }
+            else
+            {
+                bool defaultLaneMatch = RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert);
+                bool shouldScanBusUpgrade = sourceProfile.BusLaneLayout.HasAny &&
+                                            (!defaultLaneMatch || !candidateProfile.BusLaneLayout.HasAny);
+                string busUpgradeDetail = "busUpgrade=not-scanned";
+                bool hasBusUpgradeMatch = false;
+                bool busUpgradeInvert = false;
+                Upgraded busTargetUpgrade = default;
+                RoadLaneProfile busTargetProfile = default;
+
+                if (shouldScanBusUpgrade)
+                {
+                    hasBusUpgradeMatch = TryFindMatchingBusUpgrade(
+                        candidatePrefab,
+                        sourceProfile,
+                        desiredCounts,
+                        out busUpgradeInvert,
+                        out busTargetUpgrade,
+                        out busTargetProfile,
+                        out busUpgradeDetail);
+                }
+
+                if (hasBusUpgradeMatch)
+                {
+                    stats.BusUpgradeCandidates++;
+                    invert = busUpgradeInvert;
+                    match.HasTargetUpgrade = true;
+                    match.TargetUpgrade = busTargetUpgrade;
+                    match.TargetLayoutProfile = busTargetProfile;
+                    CopyTargetTramProfile(busTargetProfile, ref match);
+                    match.TramMatchDetail = $"mode=bus-upgrade-preserve sourceBusLayout={sourceProfile.BusLaneLayout} targetUpgrade={busTargetUpgrade.m_Flags} {busUpgradeDetail}";
+                }
+                else
+                {
+                    if (shouldScanBusUpgrade)
+                    {
+                        stats.AddBusUpgradeRejection(
+                            $"candidate={candidateName} candidateEntity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} candidateSource={candidateProfile.Source} defaultLaneMatch={defaultLaneMatch} {busUpgradeDetail}",
+                            6);
+                    }
+
+                    if (candidateLooksLikeRoadBuilder)
+                    {
+                        stats.AddRoadBuilderBusUpgradeSample(
+                            $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultLaneMatch={defaultLaneMatch} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} {busUpgradeDetail}",
+                            16);
+                    }
+
+                    if (!defaultLaneMatch)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            match.Invert = invert;
+            return true;
+        }
+
+        private static void CopyTargetTramProfile(
+            RoadLaneProfile targetLayoutProfile,
+            ref CandidateLaneMatch match)
+        {
+            match.TargetIndependentTramCounts = targetLayoutProfile.IndependentTramCounts;
+            match.TargetPublicTransportTramCounts = targetLayoutProfile.PublicTransportTramCounts;
+            match.TargetTramTrackCounts = targetLayoutProfile.TramTrackCounts;
+            match.TargetHasIndependentTram = !match.TargetIndependentTramCounts.IsEmpty;
+            match.TargetHasPublicTransportTram = !match.TargetPublicTransportTramCounts.IsEmpty;
+        }
+
+        private string BuildTramUpgradeRejectSample(
+            Entity candidatePrefab,
+            RoadLaneProfile candidateProfile,
+            bool invert,
+            string tramUpgradeDetail)
+        {
+            return $"candidate={GetPrefabNameFromPrefab(candidatePrefab)} candidateRoad={candidateProfile.RoadCounts} candidateTramTracks={candidateProfile.TramTrackCounts} invert={invert} {tramUpgradeDetail}";
         }
 
         private bool TryFindMatchingTramUpgrade(
