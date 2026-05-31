@@ -277,6 +277,13 @@ namespace PocketTurnLanes.Systems.Tool
                     continue;
                 }
 
+                if (IsHighwayRoadEdge(edgeEntity, out string highwayDetail))
+                {
+                    skippedCount++;
+                    Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: highway roads are excluded from selection and replacement matching. {highwayDetail}");
+                    continue;
+                }
+
                 if (!HasAnyMotorRoadLane(edgeEntity, out string motorLaneDetail))
                 {
                     skippedCount++;
