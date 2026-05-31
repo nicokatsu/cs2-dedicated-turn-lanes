@@ -15,8 +15,12 @@ namespace PocketTurnLanes.Systems.Tool
 {
     public partial class IntersectionToolSystem : ToolBaseSystem
     {
-        private const float PocketLaneLength = 24f;
         private const float SplitGridSize = 8f;
+        private const float FallbackPocketLaneLength = 24f;
+        private const float MinimumWidthBasedPocketLaneLength = 8f;
+        private const float MaximumWidthBasedPocketLaneLength = 32f;
+        private const float DrivableLaneEnvelopeBuffer = SplitGridSize;
+        private const float SplitGridAlignmentTolerance = 0.05f;
         private const float IntersectionExitBuffer = 0f;
         private const float MinimumPocketLaneLength = 8f;
         private const float MinimumIntersectionSin = 0.2f;

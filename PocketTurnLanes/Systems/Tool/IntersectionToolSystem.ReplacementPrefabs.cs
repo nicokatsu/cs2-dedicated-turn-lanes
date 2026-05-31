@@ -373,7 +373,12 @@ namespace PocketTurnLanes.Systems.Tool
             public DirectionalLaneOffsetProfile IndependentTramLayout;
             public DirectionalLaneOffsetProfile PublicTransportTramLayout;
             public DirectionalLaneOffsetProfile BusLaneLayout;
+            public int DrivableLaneEnvelopeCount;
+            public float DrivableLaneEnvelopeMin;
+            public float DrivableLaneEnvelopeMax;
+            public float DrivableLaneEnvelopeWidth;
             public bool HasMarkedParking;
+            public string DrivableLaneEnvelopeDetail;
             public string MarkedParkingDetail;
             public string TramTrackDetail;
             public string IndependentTramDetail;
@@ -512,6 +517,7 @@ namespace PocketTurnLanes.Systems.Tool
         {
             return new RoadLaneProfile
             {
+                DrivableLaneEnvelopeDetail = "<none>",
                 MarkedParkingDetail = "<none>",
                 TramTrackDetail = "<none>",
                 IndependentTramDetail = "<none>",
@@ -1020,6 +1026,11 @@ namespace PocketTurnLanes.Systems.Tool
             string flagMergeDetail = FormatEffectiveLaneFlags(flags, effectiveFlags);
 
             RoadLaneCountMatcher.CountRoadLane(effectiveFlags, ref profile.RoadCounts);
+            if (IsDrivablePocketLengthLane(effectiveFlags) &&
+                TryGetLanePrefabWidth(lanePrefab, out float laneWidth))
+            {
+                AddDrivableLaneEnvelope(effectiveFlags, lateralOffset, laneWidth, flagMergeDetail, ref profile);
+            }
 
             if (!profile.HasMarkedParking &&
                 IsMarkedParkingLane(effectiveFlags, lanePrefab, out string detail))
@@ -1066,6 +1077,64 @@ namespace PocketTurnLanes.Systems.Tool
                     profile.BusLaneDetail = busDetail + flagMergeDetail;
                 }
             }
+        }
+
+        private static bool IsDrivablePocketLengthLane(LaneFlags flags)
+        {
+            if ((flags & (LaneFlags.Master | LaneFlags.Road)) != LaneFlags.Road)
+            {
+                return false;
+            }
+
+            const LaneFlags excluded =
+                LaneFlags.BicyclesOnly |
+                LaneFlags.Parking |
+                LaneFlags.Pedestrian |
+                LaneFlags.Utility;
+            return (flags & excluded) == 0;
+        }
+
+        private bool TryGetLanePrefabWidth(Entity lanePrefab, out float width)
+        {
+            width = 0f;
+            if (lanePrefab == Entity.Null ||
+                !EntityManager.TryGetComponent(lanePrefab, out NetLaneData laneData) ||
+                laneData.m_Width <= 0.01f)
+            {
+                return false;
+            }
+
+            width = laneData.m_Width;
+            return true;
+        }
+
+        private static void AddDrivableLaneEnvelope(
+            LaneFlags flags,
+            float lateralOffset,
+            float laneWidth,
+            string flagMergeDetail,
+            ref RoadLaneProfile profile)
+        {
+            float halfWidth = laneWidth * 0.5f;
+            float min = lateralOffset - halfWidth;
+            float max = lateralOffset + halfWidth;
+
+            if (profile.DrivableLaneEnvelopeCount == 0)
+            {
+                profile.DrivableLaneEnvelopeMin = min;
+                profile.DrivableLaneEnvelopeMax = max;
+                profile.DrivableLaneEnvelopeDetail = $"firstLane offset={lateralOffset:0.##}m width={laneWidth:0.##}m flags={flags}{flagMergeDetail}";
+            }
+            else
+            {
+                profile.DrivableLaneEnvelopeMin = math.min(profile.DrivableLaneEnvelopeMin, min);
+                profile.DrivableLaneEnvelopeMax = math.max(profile.DrivableLaneEnvelopeMax, max);
+            }
+
+            profile.DrivableLaneEnvelopeCount++;
+            profile.DrivableLaneEnvelopeWidth = math.max(
+                0f,
+                profile.DrivableLaneEnvelopeMax - profile.DrivableLaneEnvelopeMin);
         }
 
         private LaneFlags GetEffectiveLaneFlags(LaneFlags flags, Entity lanePrefab)

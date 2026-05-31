@@ -197,7 +197,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 int nextAttempt = candidate.Attempt + 1;
-                float retryPocketLength = PocketLaneLength + SplitRetryStep * nextAttempt;
+                float retryPocketLength = candidate.TargetPocketLength + SplitRetryStep;
                 if (!TryBuildSplitDefinitionRequest(
                         candidate.Node,
                         candidate.Edge,
@@ -207,10 +207,11 @@ namespace PocketTurnLanes.Systems.Tool
                         out float intersectionDistance,
                         out float pocketDistance,
                         out float targetDistance,
+                        out float targetPocketLength,
                         retryPocketLength))
                 {
                     exhaustedCount++;
-                    Mod.log.Info($"[IntersectionTool] Retry split cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} requestedPocket={retryPocketLength:0.##}m.");
+                    Mod.log.Info($"[IntersectionTool] Retry split cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m.");
                     continue;
                 }
 
@@ -241,6 +242,7 @@ namespace PocketTurnLanes.Systems.Tool
                     CurvePosition = splitPosition,
                     HitPosition = request.HitPosition,
                     TargetDistance = targetDistance,
+                    TargetPocketLength = targetPocketLength,
                     SplitDistance = splitDistance,
                     IntersectionDistance = intersectionDistance,
                     PocketDistance = pocketDistance,
@@ -255,7 +257,7 @@ namespace PocketTurnLanes.Systems.Tool
                 retryNode = candidate.Node;
                 lastRetryEdge = candidate.Edge;
                 result = createDefinitionJobHandle;
-                Mod.log.Info($"[IntersectionTool] Retrying failed split edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={nextAttempt} split={splitPosition:0.###} target={targetDistance:0.##}m distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m.");
+                Mod.log.Info($"[IntersectionTool] Retrying failed split edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={nextAttempt} requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m target={targetDistance:0.##}m split={splitPosition:0.###} distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m.");
             }
 
             m_AppliedCandidates.Clear();
@@ -341,7 +343,8 @@ namespace PocketTurnLanes.Systems.Tool
                         out float splitDistance,
                         out float intersectionDistance,
                         out float pocketDistance,
-                        out float targetDistance))
+                        out float targetDistance,
+                        out float targetPocketLength))
                 {
                     noRoomCount++;
                     Mod.log.Info($"[IntersectionTool] Road-node merge verified but split cannot be prepared mergedEdge={FormatEntity(mergedEdge)} shortEdge={FormatEntity(mergeCandidate.ShortEdge)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} mergedLength={mergedLength:0.##}m expectedLength={mergeCandidate.MergedLength:0.##}m lengthError={mergedLengthError:0.##}m.");
@@ -369,6 +372,7 @@ namespace PocketTurnLanes.Systems.Tool
                     CurvePosition = splitPosition,
                     HitPosition = request.HitPosition,
                     TargetDistance = targetDistance,
+                    TargetPocketLength = targetPocketLength,
                     SplitDistance = splitDistance,
                     IntersectionDistance = intersectionDistance,
                     PocketDistance = pocketDistance,
@@ -382,7 +386,7 @@ namespace PocketTurnLanes.Systems.Tool
                 queuedSplitCount++;
                 previewNode = mergeCandidate.Node;
                 lastQueuedEdge = mergedEdge;
-                Mod.log.Info($"[IntersectionTool] Road-node merge verified; queued split on merged edge shortEdge={FormatEntity(mergeCandidate.ShortEdge)} continuation={FormatEntity(mergeCandidate.ContinuationEdge)} mergedEdge={FormatEntity(mergedEdge)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} node={FormatEntity(mergeCandidate.Node)} farNode={FormatEntity(mergeCandidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(mergeCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(mergeCandidate.TargetPrefab)} orientation={(mergeCandidate.InvertTarget ? "reversed" : "direct")} mergedLength={mergedLength:0.##}m expectedLength={mergeCandidate.MergedLength:0.##}m lengthError={mergedLengthError:0.##}m split={splitPosition:0.###} distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m target={targetDistance:0.##}m.");
+                Mod.log.Info($"[IntersectionTool] Road-node merge verified; queued split on merged edge shortEdge={FormatEntity(mergeCandidate.ShortEdge)} continuation={FormatEntity(mergeCandidate.ContinuationEdge)} mergedEdge={FormatEntity(mergedEdge)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} node={FormatEntity(mergeCandidate.Node)} farNode={FormatEntity(mergeCandidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(mergeCandidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(mergeCandidate.TargetPrefab)} orientation={(mergeCandidate.InvertTarget ? "reversed" : "direct")} mergedLength={mergedLength:0.##}m expectedLength={mergeCandidate.MergedLength:0.##}m lengthError={mergedLengthError:0.##}m requestedPocket={targetPocketLength:0.##}m split={splitPosition:0.###} distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m target={targetDistance:0.##}m.");
             }
 
             m_AppliedNodeMergeCandidates.Clear();

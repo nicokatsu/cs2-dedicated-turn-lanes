@@ -20,7 +20,8 @@ namespace PocketTurnLanes.Systems.Tool
             out float intersectionDistance,
             out float pocketDistance,
             out float targetDistance,
-            float targetPocketLength = PocketLaneLength)
+            out float targetPocketLength,
+            float requestedTargetPocketLength = -1f)
         {
             request = default;
             splitPosition = 0f;
@@ -28,6 +29,7 @@ namespace PocketTurnLanes.Systems.Tool
             intersectionDistance = 0f;
             pocketDistance = 0f;
             targetDistance = 0f;
+            targetPocketLength = 0f;
 
             if (!EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
                 !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
@@ -76,12 +78,31 @@ namespace PocketTurnLanes.Systems.Tool
                 edge,
                 curve,
                 nodeIsStart);
-            float maxDistanceFromNode = curve.m_Length * 0.5f;
+            float adaptiveTargetPocketLength = GetAdaptiveTargetPocketLength(
+                nodeEntity,
+                edgeEntity,
+                prefabRef.m_Prefab,
+                nodeIsStart,
+                geometryData,
+                out string pocketWidthSource,
+                out float pocketWidth,
+                out float pocketEdgeGeometryWidth,
+                out float pocketPrefabWidth,
+                out string pocketLaneWidthDetail);
+            float requestedTargetPocketLengthBeforeCap = requestedTargetPocketLength > 0f
+                ? requestedTargetPocketLength
+                : adaptiveTargetPocketLength;
+            targetPocketLength = requestedTargetPocketLength > 0f
+                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, MaximumWidthBasedPocketLaneLength)
+                : adaptiveTargetPocketLength;
+            float maxDistanceFromNode = GetMaximumSplitDistanceFromNode(curve, nodeIsStart, minSplit, maxSplit);
             if (maxDistanceFromNode - intersectionDistance < MinimumPocketLaneLength)
             {
-                Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: not enough room for an aligned pocket lane (length={curve.m_Length:0.##}m intersection={intersectionDistance:0.##}m).");
+                Mod.log.Info($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: not enough room for an aligned pocket lane (length={curve.m_Length:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m minPocket={MinimumPocketLaneLength:0.##}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
                 return false;
             }
+
+            Mod.log.Info($"[IntersectionTool] Split target pocket length node={FormatEntity(nodeEntity)} edge={FormatEntity(edgeEntity)} prefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={MaximumWidthBasedPocketLaneLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
 
             float desiredDistance = GetGridAlignedSplitDistance(
                 intersectionDistance,
@@ -176,12 +197,14 @@ namespace PocketTurnLanes.Systems.Tool
                     startNode == nodeEntity,
                     mergedBezier,
                     mergedLength,
+                    prefabRef.m_Prefab,
                     geometryData,
                     out float splitPosition,
                     out float splitDistance,
                     out float intersectionDistance,
                     out float pocketDistance,
                     out float targetDistance,
+                    out float targetPocketLength,
                     out float3 hitPosition))
             {
                 return false;
@@ -212,6 +235,7 @@ namespace PocketTurnLanes.Systems.Tool
                 ExpectedIntersectionDistance = intersectionDistance,
                 ExpectedPocketDistance = pocketDistance,
                 ExpectedTargetDistance = targetDistance,
+                ExpectedTargetPocketLength = targetPocketLength,
                 ExpectedHitPosition = hitPosition,
                 OriginalForwardLanes = prefabMatch.OriginalCounts.Forward,
                 OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
@@ -247,7 +271,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
             };
 
-            Mod.log.Info($"[IntersectionTool] Road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} shortLength={curve.m_Length:0.##}m continuationLength={continuationCurve.m_Length:0.##}m mergedLength={mergedLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m target={targetDistance:0.##}m. Safety: removable node has exactly two connected road edges and both prefabs match.");
+            Mod.log.Info($"[IntersectionTool] Road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} shortLength={curve.m_Length:0.##}m continuationLength={continuationCurve.m_Length:0.##}m mergedLength={mergedLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m requestedPocket={targetPocketLength:0.##}m target={targetDistance:0.##}m. Safety: removable node has exactly two connected road edges and both prefabs match.");
             return true;
         }
 
@@ -352,14 +376,16 @@ namespace PocketTurnLanes.Systems.Tool
             bool nodeIsStartOnMergedEdge,
             Bezier4x3 mergedBezier,
             float mergedLength,
+            Entity sourcePrefab,
             NetGeometryData geometryData,
             out float splitPosition,
             out float splitDistance,
             out float intersectionDistance,
             out float pocketDistance,
             out float targetDistance,
+            out float targetPocketLength,
             out float3 hitPosition,
-            float targetPocketLength = PocketLaneLength)
+            float requestedTargetPocketLength = -1f)
         {
             splitPosition = 0f;
             splitDistance = 0f;
@@ -367,6 +393,7 @@ namespace PocketTurnLanes.Systems.Tool
             pocketDistance = 0f;
             targetDistance = 0f;
             hitPosition = default;
+            targetPocketLength = 0f;
 
             if (mergedLength <= 0.01f)
             {
@@ -394,12 +421,35 @@ namespace PocketTurnLanes.Systems.Tool
                 sourceEdge,
                 sourceCurve,
                 nodeIsStartOnSourceEdge);
-            float maxDistanceFromNode = mergedLength * 0.5f;
+            float adaptiveTargetPocketLength = GetAdaptiveTargetPocketLength(
+                nodeEntity,
+                sourceEdgeEntity,
+                sourcePrefab,
+                nodeIsStartOnSourceEdge,
+                geometryData,
+                out string pocketWidthSource,
+                out float pocketWidth,
+                out float pocketEdgeGeometryWidth,
+                out float pocketPrefabWidth,
+                out string pocketLaneWidthDetail);
+            float requestedTargetPocketLengthBeforeCap = requestedTargetPocketLength > 0f
+                ? requestedTargetPocketLength
+                : adaptiveTargetPocketLength;
+            targetPocketLength = requestedTargetPocketLength > 0f
+                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, MaximumWidthBasedPocketLaneLength)
+                : adaptiveTargetPocketLength;
+            float maxDistanceFromNode = GetMaximumSplitDistanceFromNode(
+                mergedBezier,
+                nodeIsStartOnMergedEdge,
+                minSplit,
+                maxSplit);
             if (maxDistanceFromNode - intersectionDistance < MinimumPocketLaneLength)
             {
-                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge still has no room for an aligned pocket lane (mergedLength={mergedLength:0.##}m intersection={intersectionDistance:0.##}m).");
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge still has no room for an aligned pocket lane (mergedLength={mergedLength:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m minPocket={MinimumPocketLaneLength:0.##}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
                 return false;
             }
+
+            Mod.log.Info($"[IntersectionTool] Road-node merge split target pocket length node={FormatEntity(nodeEntity)} sourceEdge={FormatEntity(sourceEdgeEntity)} prefab={GetPrefabName(sourceEdgeEntity)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={MaximumWidthBasedPocketLaneLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
 
             float desiredDistance = GetGridAlignedSplitDistance(
                 intersectionDistance,
@@ -516,6 +566,76 @@ namespace PocketTurnLanes.Systems.Tool
             return false;
         }
 
+        private float GetAdaptiveTargetPocketLength(
+            Entity nodeEntity,
+            Entity edgeEntity,
+            Entity sourcePrefab,
+            bool nodeIsStart,
+            NetGeometryData geometryData,
+            out string widthSource,
+            out float roadWidth,
+            out float edgeGeometryWidth,
+            out float prefabWidth,
+            out string laneWidthDetail)
+        {
+            bool hasMeasuredWidth = TryGetEdgeHalfWidthAtNode(
+                edgeEntity,
+                nodeEntity,
+                nodeIsStart,
+                out float halfWidth,
+                out string measuredWidthSource,
+                out edgeGeometryWidth,
+                out prefabWidth);
+
+            if (prefabWidth <= 0f && geometryData.m_DefaultWidth > 0f)
+            {
+                prefabWidth = geometryData.m_DefaultWidth;
+            }
+
+            if (TryGetRoadLaneProfile(edgeEntity, sourcePrefab, out RoadLaneProfile profile) &&
+                profile.DrivableLaneEnvelopeWidth > 0f)
+            {
+                roadWidth = profile.DrivableLaneEnvelopeWidth;
+                widthSource = $"DrivableLaneEnvelope:{profile.Source}";
+                laneWidthDetail = $"lanes={profile.DrivableLaneEnvelopeCount} min={profile.DrivableLaneEnvelopeMin:0.##}m max={profile.DrivableLaneEnvelopeMax:0.##}m envelope={profile.DrivableLaneEnvelopeWidth:0.##}m buffer={DrivableLaneEnvelopeBuffer:0.##}m detail={profile.DrivableLaneEnvelopeDetail}";
+                return AlignLengthUpToSplitGrid(math.clamp(
+                    roadWidth + DrivableLaneEnvelopeBuffer,
+                    MinimumWidthBasedPocketLaneLength,
+                    MaximumWidthBasedPocketLaneLength));
+            }
+
+            laneWidthDetail = profile.Source == null
+                ? "profile=not-attempted"
+                : $"profile={profile.Source} drivableEnvelope=missing";
+
+            if (prefabWidth > 0f)
+            {
+                roadWidth = prefabWidth;
+                widthSource = edgeGeometryWidth > 0f ? "PrefabWidthWithEdgeGeometry" : "PrefabWidth";
+            }
+            else if (hasMeasuredWidth)
+            {
+                roadWidth = halfWidth * 2f;
+                widthSource = measuredWidthSource;
+            }
+            else
+            {
+                roadWidth = 0f;
+                widthSource = "MissingWidthFallback";
+            }
+
+            if (roadWidth <= 0f)
+            {
+                return FallbackPocketLaneLength;
+            }
+
+            float clampedWidth = math.clamp(
+                roadWidth,
+                MinimumWidthBasedPocketLaneLength,
+                MaximumWidthBasedPocketLaneLength);
+            return AlignLengthUpToSplitGrid(clampedWidth);
+        }
+
         private static string FormatMeters(float value)
         {
             return value > 0f ? $"{value:0.##}m" : "<missing>";
@@ -551,19 +671,39 @@ namespace PocketTurnLanes.Systems.Tool
                 return maximumDistance;
             }
 
-            float alignedPocketLength = math.ceil(targetPocketLength / SplitGridSize) * SplitGridSize;
+            float alignedPocketLength = AlignLengthUpToSplitGrid(targetPocketLength);
             if (alignedPocketLength <= maxPocketLength)
             {
                 return intersectionDistance + alignedPocketLength;
             }
 
-            alignedPocketLength = math.floor(maxPocketLength / SplitGridSize) * SplitGridSize;
+            alignedPocketLength = AlignLengthDownToSplitGrid(maxPocketLength);
             if (alignedPocketLength >= minimumPocketLength)
             {
                 return intersectionDistance + alignedPocketLength;
             }
 
             return maximumDistance;
+        }
+
+        private static float AlignLengthUpToSplitGrid(float length)
+        {
+            if (length <= 0f)
+            {
+                return 0f;
+            }
+
+            return math.ceil(math.max(0f, length - SplitGridAlignmentTolerance) / SplitGridSize) * SplitGridSize;
+        }
+
+        private static float AlignLengthDownToSplitGrid(float length)
+        {
+            if (length <= 0f)
+            {
+                return 0f;
+            }
+
+            return math.floor((length + SplitGridAlignmentTolerance) / SplitGridSize) * SplitGridSize;
         }
 
         private static float GetCurvePositionAtDistance(Curve curve, bool fromStart, float distance)
@@ -595,6 +735,25 @@ namespace PocketTurnLanes.Systems.Tool
             position = math.saturate(position);
             Bounds1 range = fromStart ? new Bounds1(0f, position) : new Bounds1(position, 1f);
             return MathUtils.Length(bezier, range);
+        }
+
+        private static float GetMaximumSplitDistanceFromNode(
+            Curve curve,
+            bool fromStart,
+            float minSplit,
+            float maxSplit)
+        {
+            return GetMaximumSplitDistanceFromNode(curve.m_Bezier, fromStart, minSplit, maxSplit);
+        }
+
+        private static float GetMaximumSplitDistanceFromNode(
+            Bezier4x3 bezier,
+            bool fromStart,
+            float minSplit,
+            float maxSplit)
+        {
+            float furthestSafePosition = fromStart ? maxSplit : minSplit;
+            return GetCurveDistanceFromNode(bezier, fromStart, furthestSafePosition);
         }
 
         private static Bezier4x3 ComputeMergedBezier(Entity nodeEntity, Edge edge1, Curve curve1, Edge edge2, Curve curve2)

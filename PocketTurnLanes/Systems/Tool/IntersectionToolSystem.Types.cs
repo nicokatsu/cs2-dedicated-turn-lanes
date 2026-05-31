@@ -174,6 +174,7 @@ namespace PocketTurnLanes.Systems.Tool
             public float CurvePosition;
             public float3 HitPosition;
             public float TargetDistance;
+            public float TargetPocketLength;
             public float SplitDistance;
             public float IntersectionDistance;
             public float PocketDistance;
@@ -204,6 +205,7 @@ namespace PocketTurnLanes.Systems.Tool
             public float ExpectedIntersectionDistance;
             public float ExpectedPocketDistance;
             public float ExpectedTargetDistance;
+            public float ExpectedTargetPocketLength;
             public float3 ExpectedHitPosition;
             public int OriginalForwardLanes;
             public int OriginalBackwardLanes;

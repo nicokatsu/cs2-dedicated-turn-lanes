@@ -313,7 +313,8 @@ namespace PocketTurnLanes.Systems.Tool
                         out float splitDistance,
                         out float intersectionDistance,
                         out float pocketDistance,
-                        out float targetDistance))
+                        out float targetDistance,
+                        out float targetPocketLength))
                 {
                     if (!TryFindPocketLaneReplacementPrefab(
                             nodeEntity,
@@ -345,6 +346,7 @@ namespace PocketTurnLanes.Systems.Tool
                         CurvePosition = splitPosition,
                         HitPosition = request.HitPosition,
                         TargetDistance = targetDistance,
+                        TargetPocketLength = targetPocketLength,
                         SplitDistance = splitDistance,
                         IntersectionDistance = intersectionDistance,
                         PocketDistance = pocketDistance,
@@ -354,7 +356,7 @@ namespace PocketTurnLanes.Systems.Tool
                         TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
                         Attempt = 0
                     });
-                    Mod.log.Info($"[IntersectionTool] Prepared split preview edge={FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} split={splitPosition:0.###} target={targetDistance:0.##}m distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m replacement={GetPrefabNameFromPrefab(prefabMatch.Prefab)} orientation={(prefabMatch.Invert ? "reversed" : "direct")} lanes={prefabMatch.OriginalCounts}->{prefabMatch.TargetCounts} frame={UnityEngine.Time.frameCount}.");
+                    Mod.log.Info($"[IntersectionTool] Prepared split preview edge={FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} split={splitPosition:0.###} requestedPocket={targetPocketLength:0.##}m target={targetDistance:0.##}m distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m replacement={GetPrefabNameFromPrefab(prefabMatch.Prefab)} orientation={(prefabMatch.Invert ? "reversed" : "direct")} lanes={prefabMatch.OriginalCounts}->{prefabMatch.TargetCounts} frame={UnityEngine.Time.frameCount}.");
                     result = createDefinitionJobHandle;
                     lastQueuedEdge = edgeEntity;
                 }
