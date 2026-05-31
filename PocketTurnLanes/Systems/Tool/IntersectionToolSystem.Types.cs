@@ -162,16 +162,29 @@ namespace PocketTurnLanes.Systems.Tool
             public EdgeDeletionDefinitionRequest SecondDeletion;
         }
 
+        private struct ShortEdgeFallbackContext
+        {
+            public Entity RemovableNode;
+            public Entity ContinuationEdge;
+            public Edge ContinuationEdgeData;
+            public Curve ContinuationCurve;
+            public Entity FarNode;
+            public Entity ContinuationPrefab;
+            public int ConnectedEdgeCount;
+        }
+
         private enum SplitLaneConnectionRepairMode
         {
             Standard,
-            BalancedOppositeTarget
+            BalancedOppositeTarget,
+            ShortEdgeTransition
         }
 
         private enum NodeMergeMode
         {
             SourcePrefabContinuation,
-            BalancedOppositeTarget
+            BalancedOppositeTarget,
+            ShortEdgeReplacementOnly
         }
 
         private struct SplitCandidate
@@ -231,6 +244,7 @@ namespace PocketTurnLanes.Systems.Tool
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
             public NodeMergeDefinitionRequest MergeRequest;
+            public SplitLaneConnectionFixSystem.TransitionConnectionSnapshot TransitionReverseSnapshot;
         }
 
         private struct ReplacementDefinitionRequest
@@ -310,6 +324,8 @@ namespace PocketTurnLanes.Systems.Tool
             public int OriginalBackwardLanes;
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
+            public Entity TransitionOuterEdge;
+            public SplitLaneConnectionFixSystem.TransitionConnectionSnapshot TransitionReverseSnapshot;
         }
 
         private struct CreateNodeMergeDefinitionJob : IJob

@@ -379,11 +379,12 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 CaptureAppliedCandidates();
+                CaptureAppliedReplacementCandidates();
                 CaptureAppliedNodeMergeCandidates();
                 applyMode = ApplyMode.Apply;
                 m_ClearSplitDefinitions = true;
                 m_ApplyPreviewNextFrame = false;
-                Mod.log.Info($"[IntersectionTool] Applying prepared split preview node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} lastEdge={FormatEntity(m_PreviewEdge)}.");
+                Mod.log.Info($"[IntersectionTool] Applying prepared split preview node={FormatEntity(m_PreviewIntersection)} edges={m_PreviewEdgeCount} lastEdge={FormatEntity(m_PreviewEdge)} replacementDefinitions={m_AppliedReplacementCandidates.Count}.");
             }
             else if (applyPressed)
             {

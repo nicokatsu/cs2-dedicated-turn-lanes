@@ -160,6 +160,29 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
+            if (!TryGetShortEdgeFallbackContext(
+                    nodeEntity,
+                    edgeEntity,
+                    edge,
+                    out ShortEdgeFallbackContext fallbackContext))
+            {
+                return false;
+            }
+
+            if (fallbackContext.ContinuationPrefab == prefabRef.m_Prefab)
+            {
+                return TryBuildSourcePrefabContinuationNodeMergeCandidate(
+                    nodeEntity,
+                    edgeEntity,
+                    edge,
+                    curve,
+                    prefabRef.m_Prefab,
+                    geometryData,
+                    prefabMatch,
+                    fallbackContext,
+                    out candidate);
+            }
+
             if (TryBuildBalancedOppositeTargetNodeMergeCandidate(
                     nodeEntity,
                     edgeEntity,
@@ -168,25 +191,41 @@ namespace PocketTurnLanes.Systems.Tool
                     prefabRef.m_Prefab,
                     geometryData,
                     prefabMatch,
+                    fallbackContext,
                     out candidate))
             {
                 return true;
             }
 
-            if (!TryGetMergeableRoadNode(
-                    nodeEntity,
-                    edgeEntity,
-                    edge,
-                    prefabRef.m_Prefab,
-                    out Entity removableNode,
-                    out Entity continuationEdge,
-                    out Edge continuationEdgeData,
-                    out Curve continuationCurve,
-                    out Entity farNode,
-                    out _))
-            {
-                return false;
-            }
+            return TryBuildShortEdgeReplacementOnlyCandidate(
+                nodeEntity,
+                edgeEntity,
+                edge,
+                curve,
+                prefabRef.m_Prefab,
+                prefabMatch,
+                fallbackContext,
+                out candidate);
+        }
+
+        private bool TryBuildSourcePrefabContinuationNodeMergeCandidate(
+            Entity nodeEntity,
+            Entity edgeEntity,
+            Edge edge,
+            Curve curve,
+            Entity sourcePrefab,
+            NetGeometryData geometryData,
+            ReplacementPrefabMatch prefabMatch,
+            ShortEdgeFallbackContext fallbackContext,
+            out NodeMergeCandidate candidate)
+        {
+            candidate = default;
+
+            Entity removableNode = fallbackContext.RemovableNode;
+            Entity continuationEdge = fallbackContext.ContinuationEdge;
+            Edge continuationEdgeData = fallbackContext.ContinuationEdgeData;
+            Curve continuationCurve = fallbackContext.ContinuationCurve;
+            Entity farNode = fallbackContext.FarNode;
 
             Entity neighbor1 = edge.m_Start == removableNode ? edge.m_End : edge.m_Start;
             Entity neighbor2 = continuationEdgeData.m_Start == removableNode ? continuationEdgeData.m_End : continuationEdgeData.m_Start;
@@ -214,7 +253,7 @@ namespace PocketTurnLanes.Systems.Tool
                     startNode == nodeEntity,
                     mergedBezier,
                     mergedLength,
-                    prefabRef.m_Prefab,
+                    sourcePrefab,
                     geometryData,
                     out float splitPosition,
                     out float splitDistance,
@@ -239,7 +278,7 @@ namespace PocketTurnLanes.Systems.Tool
                 RemovableNode = removableNode,
                 ContinuationEdge = continuationEdge,
                 FarNode = farNode,
-                SourcePrefab = prefabRef.m_Prefab,
+                SourcePrefab = sourcePrefab,
                 TargetPrefab = prefabMatch.Prefab,
                 LaneRepairMode = SplitLaneConnectionRepairMode.Standard,
                 InvertTarget = prefabMatch.Invert,
@@ -262,7 +301,7 @@ namespace PocketTurnLanes.Systems.Tool
                 TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
                 MergeRequest = new NodeMergeDefinitionRequest
                 {
-                    Prefab = prefabRef.m_Prefab,
+                    Prefab = sourcePrefab,
                     RemovedNode = removableNode,
                     StartNode = startNode,
                     EndNode = endNode,
@@ -290,7 +329,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
             };
 
-            Mod.log.Info($"[IntersectionTool] Road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} shortLength={curve.m_Length:0.##}m continuationLength={continuationCurve.m_Length:0.##}m mergedLength={mergedLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m requestedPocket={targetPocketLength:0.##}m target={targetDistance:0.##}m. Safety: removable node has exactly two connected road edges and both prefabs match.");
+            Mod.log.Info($"[IntersectionTool] Road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(sourcePrefab)} shortLength={curve.m_Length:0.##}m continuationLength={continuationCurve.m_Length:0.##}m mergedLength={mergedLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m requestedPocket={targetPocketLength:0.##}m target={targetDistance:0.##}m. Safety: removable node has exactly two connected road edges and both prefabs match.");
             return true;
         }
 
@@ -302,6 +341,7 @@ namespace PocketTurnLanes.Systems.Tool
             Entity sourcePrefab,
             NetGeometryData sourceGeometryData,
             ReplacementPrefabMatch prefabMatch,
+            ShortEdgeFallbackContext fallbackContext,
             out NodeMergeCandidate candidate)
         {
             candidate = default;
@@ -312,18 +352,16 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            if (!TryGetMergeableRoadNode(
-                    nodeEntity,
-                    edgeEntity,
-                    edge,
-                    prefabMatch.Prefab,
-                    out Entity removableNode,
-                    out Entity continuationEdge,
-                    out Edge continuationEdgeData,
-                    out Curve continuationCurve,
-                    out Entity farNode,
-                    out Entity continuationPrefab))
+            Entity removableNode = fallbackContext.RemovableNode;
+            Entity continuationEdge = fallbackContext.ContinuationEdge;
+            Edge continuationEdgeData = fallbackContext.ContinuationEdgeData;
+            Curve continuationCurve = fallbackContext.ContinuationCurve;
+            Entity farNode = fallbackContext.FarNode;
+            Entity continuationPrefab = fallbackContext.ContinuationPrefab;
+
+            if (continuationPrefab != prefabMatch.Prefab)
             {
+                Mod.log.Info($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)}: continuation prefab does not match target prefab continuationPrefab={GetPrefabNameFromPrefab(continuationPrefab)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)} connectedEdges={fallbackContext.ConnectedEdgeCount}.");
                 return false;
             }
 
@@ -511,6 +549,85 @@ namespace PocketTurnLanes.Systems.Tool
             return true;
         }
 
+        private bool TryBuildShortEdgeReplacementOnlyCandidate(
+            Entity nodeEntity,
+            Entity edgeEntity,
+            Edge edge,
+            Curve curve,
+            Entity sourcePrefab,
+            ReplacementPrefabMatch prefabMatch,
+            ShortEdgeFallbackContext fallbackContext,
+            out NodeMergeCandidate candidate)
+        {
+            candidate = default;
+
+            if (prefabMatch.Prefab == Entity.Null)
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge direct replacement rejected shortEdge={FormatEntity(edgeEntity)}: replacement target prefab is missing.");
+                return false;
+            }
+
+            if (fallbackContext.ContinuationPrefab == sourcePrefab)
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge direct replacement rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(fallbackContext.ContinuationEdge)}: continuation prefab still matches source prefab={GetPrefabNameFromPrefab(sourcePrefab)}, so source-prefab merge should own this case.");
+                return false;
+            }
+
+            float shortLength = curve.m_Length > 0.01f
+                ? curve.m_Length
+                : MathUtils.Length(curve.m_Bezier);
+            float continuationLength = fallbackContext.ContinuationCurve.m_Length > 0.01f
+                ? fallbackContext.ContinuationCurve.m_Length
+                : MathUtils.Length(fallbackContext.ContinuationCurve.m_Bezier);
+            float3 hitPosition = MathUtils.Position(curve.m_Bezier, 0.5f);
+            SplitLaneConnectionFixSystem.TransitionConnectionSnapshot reverseSnapshot = m_SplitLaneConnectionFixSystem != null
+                ? m_SplitLaneConnectionFixSystem.CaptureTransitionReverseConnections(
+                    fallbackContext.RemovableNode,
+                    edgeEntity,
+                    fallbackContext.ContinuationEdge)
+                : null;
+
+            candidate = new NodeMergeCandidate
+            {
+                Mode = NodeMergeMode.ShortEdgeReplacementOnly,
+                Node = nodeEntity,
+                ShortEdge = edgeEntity,
+                RemovableNode = fallbackContext.RemovableNode,
+                ContinuationEdge = fallbackContext.ContinuationEdge,
+                FarNode = fallbackContext.FarNode,
+                SourcePrefab = sourcePrefab,
+                TargetPrefab = prefabMatch.Prefab,
+                LaneRepairMode = SplitLaneConnectionRepairMode.ShortEdgeTransition,
+                InvertTarget = prefabMatch.Invert,
+                PostMergeInvertTarget = prefabMatch.Invert,
+                HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
+                TargetUpgrade = prefabMatch.TargetUpgrade,
+                ShortEdgeLength = shortLength,
+                ContinuationEdgeLength = continuationLength,
+                MergedLength = shortLength,
+                ExpectedSplitPosition = 0f,
+                ExpectedSplitDistance = shortLength,
+                ExpectedIntersectionDistance = 0f,
+                ExpectedFarIntersectionDistance = 0f,
+                ExpectedUsableLength = shortLength,
+                ExpectedPocketDistance = shortLength,
+                ExpectedTargetDistance = shortLength,
+                ExpectedTargetPocketLength = shortLength,
+                ExpectedHitPosition = hitPosition,
+                OriginalForwardLanes = prefabMatch.OriginalCounts.Forward,
+                OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
+                TargetForwardLanes = prefabMatch.TargetCounts.Forward,
+                TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                TransitionReverseSnapshot = reverseSnapshot
+            };
+
+            string snapshotDetail = reverseSnapshot != null
+                ? reverseSnapshot.Detail
+                : "snapshot=unavailable fixSystem=missing";
+            Mod.log.Info($"[IntersectionTool] Short-edge direct replacement fallback accepted shortEdge={FormatEntity(edgeEntity)} transitionNode={FormatEntity(fallbackContext.RemovableNode)} continuation={FormatEntity(fallbackContext.ContinuationEdge)} farNode={FormatEntity(fallbackContext.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(sourcePrefab)} continuationPrefab={GetPrefabNameFromPrefab(fallbackContext.ContinuationPrefab)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)} orientation={(prefabMatch.Invert ? "reversed" : "direct")} shortLength={shortLength:0.##}m continuationLength={continuationLength:0.##}m connectedEdges={fallbackContext.ConnectedEdgeCount} noMergeDefinitions=true noSplitDefinitions=true laneRepair=short-edge-transition {snapshotDetail}.");
+            return true;
+        }
+
         private bool TryContinuationMatchesOppositeTargetLayout(
             Entity continuationEdge,
             ReplacementPrefabMatch prefabMatch,
@@ -639,6 +756,95 @@ namespace PocketTurnLanes.Systems.Tool
         private static string FormatApproachLayout(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
         {
             return $"raw={layout} nodeSide={(nodeIsStart ? "start" : "end")} incoming={GetIncomingLayoutCount(layout, nodeIsStart)} outgoing={GetOutgoingLayoutCount(layout, nodeIsStart)}";
+        }
+
+        private bool TryGetShortEdgeFallbackContext(
+            Entity intersectionNode,
+            Entity edgeEntity,
+            Edge edge,
+            out ShortEdgeFallbackContext context)
+        {
+            context = default;
+
+            Entity removableNode = edge.m_Start == intersectionNode
+                ? edge.m_End
+                : edge.m_End == intersectionNode
+                    ? edge.m_Start
+                    : Entity.Null;
+            if (removableNode == Entity.Null ||
+                !EntityManager.Exists(removableNode) ||
+                !EntityManager.HasComponent<Node>(removableNode) ||
+                EntityManager.HasComponent<Roundabout>(removableNode))
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge fallback rejected edge={FormatEntity(edgeEntity)}: far endpoint {FormatEntity(removableNode)} is not a removable/transition road node.");
+                return false;
+            }
+
+            if (!EntityManager.TryGetBuffer(removableNode, true, out DynamicBuffer<ConnectedEdge> removableConnectedEdges))
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge fallback rejected edge={FormatEntity(edgeEntity)} transitionNode={FormatEntity(removableNode)}: missing ConnectedEdge buffer.");
+                return false;
+            }
+
+            if (removableConnectedEdges.Length != 2)
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge fallback rejected edge={FormatEntity(edgeEntity)} transitionNode={FormatEntity(removableNode)}: connectedEdges={removableConnectedEdges.Length}; all short-edge fallback modes require exactly two connected edges, so road intersections are skipped.");
+                return false;
+            }
+
+            Entity continuationEdge = Entity.Null;
+            for (int i = 0; i < removableConnectedEdges.Length; i++)
+            {
+                Entity candidateEdge = removableConnectedEdges[i].m_Edge;
+                if (candidateEdge != edgeEntity)
+                {
+                    continuationEdge = candidateEdge;
+                    break;
+                }
+            }
+
+            if (continuationEdge == Entity.Null ||
+                !IsRoadEdge(continuationEdge) ||
+                !EntityManager.TryGetComponent(continuationEdge, out Edge continuationEdgeData) ||
+                !EntityManager.TryGetComponent(continuationEdge, out Curve continuationCurve) ||
+                !EntityManager.TryGetComponent(continuationEdge, out PrefabRef continuationPrefabRef))
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge fallback rejected edge={FormatEntity(edgeEntity)} transitionNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: continuation is not a complete road edge.");
+                return false;
+            }
+
+            if (EntityManager.HasComponent<Owner>(edgeEntity) ||
+                EntityManager.HasComponent<Owner>(continuationEdge))
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge fallback rejected edge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)}: owned sub-net edges are not modified automatically.");
+                return false;
+            }
+
+            Entity farNode = continuationEdgeData.m_Start == removableNode
+                ? continuationEdgeData.m_End
+                : continuationEdgeData.m_End == removableNode
+                    ? continuationEdgeData.m_Start
+                    : Entity.Null;
+            if (farNode == Entity.Null ||
+                farNode == intersectionNode ||
+                !EntityManager.Exists(farNode) ||
+                !EntityManager.HasComponent<Node>(farNode))
+            {
+                Mod.log.Info($"[IntersectionTool] Short-edge fallback rejected edge={FormatEntity(edgeEntity)} transitionNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)}: invalid far node {FormatEntity(farNode)}.");
+                return false;
+            }
+
+            context = new ShortEdgeFallbackContext
+            {
+                RemovableNode = removableNode,
+                ContinuationEdge = continuationEdge,
+                ContinuationEdgeData = continuationEdgeData,
+                ContinuationCurve = continuationCurve,
+                FarNode = farNode,
+                ContinuationPrefab = continuationPrefabRef.m_Prefab,
+                ConnectedEdgeCount = removableConnectedEdges.Length
+            };
+            return true;
         }
 
         private bool TryGetMergeableRoadNode(

@@ -507,6 +507,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             int queuedCount = 0;
             int mergeQueuedCount = 0;
+            int directReplacementQueuedCount = 0;
             Entity previewNode = Entity.Null;
             Entity lastQueuedEdge = Entity.Null;
             m_NextPreviewCandidates.Clear();
@@ -552,6 +553,19 @@ namespace PocketTurnLanes.Systems.Tool
             for (int i = 0; i < m_PreviewNodeMergeCandidates.Count; i++)
             {
                 NodeMergeCandidate mergeCandidate = m_PreviewNodeMergeCandidates[i];
+                if (mergeCandidate.Mode == NodeMergeMode.ShortEdgeReplacementOnly)
+                {
+                    if (!TryQueueShortEdgeReplacementApplyDefinition(mergeCandidate, ref result))
+                    {
+                        continue;
+                    }
+
+                    directReplacementQueuedCount++;
+                    previewNode = mergeCandidate.Node;
+                    lastQueuedEdge = mergeCandidate.ShortEdge;
+                    continue;
+                }
+
                 if (!QueueNodeMergeDefinition(mergeCandidate, ref result))
                 {
                     continue;
@@ -567,10 +581,65 @@ namespace PocketTurnLanes.Systems.Tool
             m_NextPreviewCandidates.Clear();
             m_PreviewIntersection = previewNode;
             m_PreviewEdge = lastQueuedEdge;
-            m_PreviewEdgeCount = queuedCount + mergeQueuedCount;
-            m_NodeMergeDefinitionsReadyForApply = m_PreviewNodeMergeCandidates.Count == 0 || mergeQueuedCount > 0;
-            Mod.log.Info($"[IntersectionTool] Rebuilt clean definitions for apply node={FormatEntity(previewNode)} splitDefinitions={queuedCount} roadNodeMergeDefinitions={mergeQueuedCount}; hover preview definitions were discarded before apply remainingReplacementPreviewDefinitions={remainingReplacementPreviewDefinitions}.");
+            m_PreviewEdgeCount = queuedCount + mergeQueuedCount + directReplacementQueuedCount;
+            m_NodeMergeDefinitionsReadyForApply = m_PreviewNodeMergeCandidates.Count == 0 || (mergeQueuedCount + directReplacementQueuedCount) > 0;
+            Mod.log.Info($"[IntersectionTool] Rebuilt clean definitions for apply node={FormatEntity(previewNode)} splitDefinitions={queuedCount} roadNodeMergeDefinitions={mergeQueuedCount} directShortEdgeReplacementDefinitions={directReplacementQueuedCount}; hover preview definitions were discarded before apply remainingReplacementPreviewDefinitions={remainingReplacementPreviewDefinitions}.");
             return result;
+        }
+
+        private bool TryQueueShortEdgeReplacementApplyDefinition(NodeMergeCandidate candidate, ref JobHandle result)
+        {
+            if (candidate.ShortEdge == Entity.Null ||
+                candidate.TargetPrefab == Entity.Null ||
+                !EntityManager.Exists(candidate.ShortEdge))
+            {
+                Mod.log.Info($"[IntersectionTool] Cannot queue short-edge direct replacement apply definition shortEdge={FormatEntity(candidate.ShortEdge)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)}: missing edge or target prefab.");
+                return false;
+            }
+
+            ReplacementCandidate replacementCandidate = new ReplacementCandidate
+            {
+                Node = candidate.Node,
+                FarNode = candidate.FarNode,
+                SplitNode = candidate.RemovableNode,
+                OriginalEdge = candidate.ShortEdge,
+                PocketEdge = candidate.ShortEdge,
+                SourcePrefab = candidate.SourcePrefab,
+                TargetPrefab = candidate.TargetPrefab,
+                LaneRepairMode = SplitLaneConnectionRepairMode.ShortEdgeTransition,
+                InvertTarget = candidate.InvertTarget,
+                HasTargetUpgrade = candidate.HasTargetUpgrade,
+                TargetUpgrade = candidate.TargetUpgrade,
+                HitPosition = candidate.ExpectedHitPosition,
+                OriginalForwardLanes = candidate.OriginalForwardLanes,
+                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
+                TargetForwardLanes = candidate.TargetForwardLanes,
+                TargetBackwardLanes = candidate.TargetBackwardLanes,
+                TransitionOuterEdge = candidate.ContinuationEdge,
+                TransitionReverseSnapshot = candidate.TransitionReverseSnapshot
+            };
+
+            if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest request))
+            {
+                Mod.log.Info($"[IntersectionTool] Cannot queue short-edge direct replacement apply definition shortEdge={FormatEntity(candidate.ShortEdge)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} transitionNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)}: replacement request could not be built.");
+                return false;
+            }
+
+            JobHandle createDefinitionJobHandle = new CreateReplacementDefinitionJob
+            {
+                Request = request,
+                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+            }.Schedule(result);
+
+            m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+            result = createDefinitionJobHandle;
+            m_QueuedReplacementCandidates.Add(replacementCandidate);
+
+            string snapshotDetail = candidate.TransitionReverseSnapshot != null
+                ? candidate.TransitionReverseSnapshot.Detail
+                : "snapshot=unavailable";
+            Mod.log.Info($"[IntersectionTool] Queued short-edge direct replacement apply definition shortEdge={FormatEntity(candidate.ShortEdge)} transitionNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} farNode={FormatEntity(candidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} flags={request.Flags} fixedIndex={request.FixedIndex} randomSeed={request.RandomSeed} laneRepair=short-edge-transition {snapshotDetail}.");
+            return true;
         }
 
         private bool QueueNodeMergeDefinition(NodeMergeCandidate candidate, ref JobHandle result)
@@ -646,7 +715,7 @@ namespace PocketTurnLanes.Systems.Tool
             Entity continuationPreviewEdge = Entity.Null;
             string continuationPreviewDetail = "no continuation preview source was requested";
             bool requiresContinuationPreview = m_PreviewCandidates.Count > 0 &&
-                                               candidate.Mode != NodeMergeMode.BalancedOppositeTarget;
+                                               candidate.Mode == NodeMergeMode.SourcePrefabContinuation;
             if (m_PreviewCandidates.Count > 0)
             {
                 if (TryFindPreviewShortEdgeSource(candidate, out Entity tempShortEdge, out previewSourceDetail))
@@ -669,7 +738,7 @@ namespace PocketTurnLanes.Systems.Tool
 
                 if (!requiresContinuationPreview)
                 {
-                    continuationPreviewDetail = "balanced-opposite-target skips companion source preview; preview intentionally remains the short replacement segment only";
+                    continuationPreviewDetail = $"{candidate.Mode} skips companion source preview; preview intentionally remains the short replacement segment only";
                 }
             }
 

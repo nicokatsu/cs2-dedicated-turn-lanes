@@ -48,7 +48,32 @@ namespace PocketTurnLanes.Systems.Tool
         private enum RepairMode
         {
             Standard,
-            BalancedOppositeTarget
+            BalancedOppositeTarget,
+            ShortEdgeTransition
+        }
+
+        public sealed class TransitionConnectionSnapshot
+        {
+            public Entity Node;
+            public Entity SourceEdge;
+            public Entity TargetEdge;
+            public string Source;
+            public string Detail;
+            public TransitionConnectionSnapshotMapping[] Mappings;
+        }
+
+        public struct TransitionConnectionSnapshotMapping
+        {
+            public int SourceLaneIndex;
+            public int TargetLaneIndex;
+            public float SourceLateral;
+            public float TargetLateral;
+            public float3 SourceLanePosition;
+            public float3 TargetLanePosition;
+            public int2 SourceCarriagewayAndGroup;
+            public int2 TargetCarriagewayAndGroup;
+            public PathMethod Method;
+            public bool IsUnsafe;
         }
 
         protected override void OnCreate()
@@ -319,6 +344,28 @@ namespace PocketTurnLanes.Systems.Tool
                 RepairMode.BalancedOppositeTarget);
         }
 
+        public void QueueShortEdgeTransition(
+            Entity intersectionNode,
+            Entity transitionNode,
+            Entity continuationEdge,
+            Entity shortEdge,
+            Entity sourcePrefab,
+            Entity targetPrefab,
+            TransitionConnectionSnapshot reverseSnapshot)
+        {
+            QueueInternal(
+                intersectionNode,
+                Entity.Null,
+                transitionNode,
+                continuationEdge,
+                shortEdge,
+                sourcePrefab,
+                targetPrefab,
+                RepairMode.ShortEdgeTransition,
+                continuationEdge,
+                reverseSnapshot);
+        }
+
         private void QueueInternal(
             Entity intersectionNode,
             Entity farIntersectionNode,
@@ -327,7 +374,9 @@ namespace PocketTurnLanes.Systems.Tool
             Entity pocketEdge,
             Entity sourcePrefab,
             Entity targetPrefab,
-            RepairMode mode)
+            RepairMode mode,
+            Entity explicitOuterEdge = default,
+            TransitionConnectionSnapshot reverseSnapshot = null)
         {
             if (splitNode == Entity.Null || pocketEdge == Entity.Null)
             {
@@ -346,13 +395,15 @@ namespace PocketTurnLanes.Systems.Tool
                     existing.SourcePrefab = sourcePrefab;
                     existing.TargetPrefab = targetPrefab;
                     existing.Mode = mode;
+                    existing.OuterEdge = explicitOuterEdge;
+                    existing.TransitionReverseSnapshot = reverseSnapshot;
                     existing.QueuedFrame = UnityEngine.Time.frameCount;
                     existing.LaneDataRetries = 0;
                     existing.VerificationAttempts = 0;
                     existing.StableVerificationFrames = 0;
                     existing.TrafficWritten = false;
                     m_Requests[i] = existing;
-                    Mod.log.Info($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} frame={UnityEngine.Time.frameCount}.");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} reverseSnapshot={FormatSnapshot(reverseSnapshot)} frame={UnityEngine.Time.frameCount}.");
                     return;
                 }
             }
@@ -367,13 +418,194 @@ namespace PocketTurnLanes.Systems.Tool
                 SourcePrefab = sourcePrefab,
                 TargetPrefab = targetPrefab,
                 Mode = mode,
+                OuterEdge = explicitOuterEdge,
+                TransitionReverseSnapshot = reverseSnapshot,
                 QueuedFrame = UnityEngine.Time.frameCount
             });
 
             bool splitUpdated = MarkUpdatedIfExists(splitNode, out bool splitAlreadyUpdated);
             bool pocketUpdated = MarkUpdatedIfExists(pocketEdge, out bool pocketAlreadyUpdated);
             bool originalUpdated = MarkUpdatedIfExists(originalEdge, out bool originalAlreadyUpdated);
-            Mod.log.Info($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} intersection={FormatEntity(intersectionNode)} farIntersection={FormatEntity(farIntersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} frame={UnityEngine.Time.frameCount} preMarkedUpdated=split:{FormatUpdateMarker(splitUpdated, splitAlreadyUpdated)},pocket:{FormatUpdateMarker(pocketUpdated, pocketAlreadyUpdated)},original:{FormatUpdateMarker(originalUpdated, originalAlreadyUpdated)}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
+            Mod.log.Info($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} intersection={FormatEntity(intersectionNode)} farIntersection={FormatEntity(farIntersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} reverseSnapshot={FormatSnapshot(reverseSnapshot)} frame={UnityEngine.Time.frameCount} preMarkedUpdated=split:{FormatUpdateMarker(splitUpdated, splitAlreadyUpdated)},pocket:{FormatUpdateMarker(pocketUpdated, pocketAlreadyUpdated)},original:{FormatUpdateMarker(originalUpdated, originalAlreadyUpdated)}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
+        }
+
+        public TransitionConnectionSnapshot CaptureTransitionReverseConnections(
+            Entity transitionNode,
+            Entity sourceEdge,
+            Entity targetEdge)
+        {
+            m_ReverseSourceLanes.Clear();
+            m_ReverseTargetLanes.Clear();
+            CollectEdgeCarLaneEndpoints(sourceEdge, transitionNode, EndpointRole.SourceEndAtNode, m_ReverseSourceLanes);
+            CollectEdgeCarLaneEndpoints(targetEdge, transitionNode, EndpointRole.TargetStartAtNode, m_ReverseTargetLanes);
+            NormalizeTransitionLaneLaterals(m_ReverseSourceLanes, m_ReverseTargetLanes);
+
+            List<TransitionConnectionSnapshotMapping> mappings = new List<TransitionConnectionSnapshotMapping>(8);
+            string source = "none";
+            string trafficDetail = "not-run";
+            if (TryGetTrafficApi(out TrafficApi trafficApi, out string trafficError))
+            {
+                if (TryCaptureTrafficReverseMappings(
+                        trafficApi,
+                        transitionNode,
+                        sourceEdge,
+                        targetEdge,
+                        m_ReverseSourceLanes,
+                        m_ReverseTargetLanes,
+                        mappings,
+                        out trafficDetail))
+                {
+                    source = "traffic";
+                }
+            }
+            else
+            {
+                trafficDetail = trafficError;
+            }
+
+            string liveDetail = "not-run";
+            if (mappings.Count == 0)
+            {
+                CollectConnectorLanes(transitionNode, sourceEdge, targetEdge, m_ExistingConnectorLanes);
+                for (int i = 0; i < m_ExistingConnectorLanes.Count; i++)
+                {
+                    ConnectorLane connector = m_ExistingConnectorLanes[i];
+                    if (!TryBuildSnapshotMapping(
+                            connector.SourceLaneIndex,
+                            connector.TargetLaneIndex,
+                            connector.PathMethods,
+                            false,
+                            m_ReverseSourceLanes,
+                            m_ReverseTargetLanes,
+                            out TransitionConnectionSnapshotMapping mapping))
+                    {
+                        continue;
+                    }
+
+                    mappings.Add(mapping);
+                }
+
+                source = mappings.Count > 0 ? "live-connectors" : "empty";
+                liveDetail = $"connectors={m_ExistingConnectorLanes.Count}";
+            }
+
+            TransitionConnectionSnapshot snapshot = new TransitionConnectionSnapshot
+            {
+                Node = transitionNode,
+                SourceEdge = sourceEdge,
+                TargetEdge = targetEdge,
+                Source = source,
+                Mappings = mappings.ToArray()
+            };
+            snapshot.Detail = $"snapshotSource={source} mappings={snapshot.Mappings.Length} sourceLanes={m_ReverseSourceLanes.Count} targetLanes={m_ReverseTargetLanes.Count} trafficDetail={trafficDetail} liveDetail={liveDetail}";
+            Mod.log.Info($"[SplitLaneConnectionFix] Captured transition reverse connection snapshot node={FormatEntity(transitionNode)} sourceEdge={FormatEntity(sourceEdge)} targetEdge={FormatEntity(targetEdge)} {snapshot.Detail} mappings={FormatSnapshotMappings(snapshot.Mappings)} sourceOrder={FormatLaneOrder(m_ReverseSourceLanes)} targetOrder={FormatLaneOrder(m_ReverseTargetLanes)}.");
+            return snapshot;
+        }
+
+        private bool TryCaptureTrafficReverseMappings(
+            TrafficApi trafficApi,
+            Entity transitionNode,
+            Entity sourceEdge,
+            Entity targetEdge,
+            IReadOnlyList<LaneEndpoint> sourceLanes,
+            IReadOnlyList<LaneEndpoint> targetLanes,
+            List<TransitionConnectionSnapshotMapping> mappings,
+            out string detail)
+        {
+            detail = "none";
+            if (!trafficApi.HasModifiedLaneConnectionsBuffer(EntityManager, transitionNode))
+            {
+                detail = "trafficBuffer=missing";
+                return false;
+            }
+
+            object modifiedBuffer = trafficApi.GetModifiedLaneConnectionsBuffer(EntityManager, transitionNode, true);
+            int sourceEntries = 0;
+            int generatedEntries = 0;
+            int accepted = 0;
+            int length = trafficApi.GetBufferLength(modifiedBuffer);
+            for (int i = 0; i < length; i++)
+            {
+                object modified = trafficApi.GetBufferItem(modifiedBuffer, i);
+                Entity edge = trafficApi.GetModifiedConnectionEdge(modified);
+                if (edge != sourceEdge)
+                {
+                    continue;
+                }
+
+                sourceEntries++;
+                Entity modifiedConnectionEntity = trafficApi.GetModifiedConnectionEntity(modified);
+                if (modifiedConnectionEntity == Entity.Null ||
+                    !EntityManager.Exists(modifiedConnectionEntity) ||
+                    !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedConnectionEntity))
+                {
+                    continue;
+                }
+
+                object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedConnectionEntity, true);
+                int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
+                for (int generatedIndex = 0; generatedIndex < generatedLength; generatedIndex++)
+                {
+                    object generated = trafficApi.GetBufferItem(generatedBuffer, generatedIndex);
+                    if (trafficApi.GetGeneratedConnectionSource(generated) != sourceEdge ||
+                        trafficApi.GetGeneratedConnectionTarget(generated) != targetEdge)
+                    {
+                        continue;
+                    }
+
+                    generatedEntries++;
+                    int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
+                    if (!TryBuildSnapshotMapping(
+                            laneIndexMap.x & 0xff,
+                            laneIndexMap.y & 0xff,
+                            trafficApi.GetGeneratedConnectionMethod(generated),
+                            trafficApi.GetGeneratedConnectionUnsafe(generated),
+                            sourceLanes,
+                            targetLanes,
+                            out TransitionConnectionSnapshotMapping mapping))
+                    {
+                        continue;
+                    }
+
+                    mappings.Add(mapping);
+                    accepted++;
+                }
+            }
+
+            detail = $"trafficSources={sourceEntries} generatedMatches={generatedEntries} accepted={accepted}";
+            return accepted > 0;
+        }
+
+        private static bool TryBuildSnapshotMapping(
+            int sourceLaneIndex,
+            int targetLaneIndex,
+            PathMethod method,
+            bool isUnsafe,
+            IReadOnlyList<LaneEndpoint> sourceLanes,
+            IReadOnlyList<LaneEndpoint> targetLanes,
+            out TransitionConnectionSnapshotMapping mapping)
+        {
+            mapping = default;
+            if (!TryFindLaneEndpoint(sourceLanes, sourceLaneIndex, out LaneEndpoint source) ||
+                !TryFindLaneEndpoint(targetLanes, targetLaneIndex, out LaneEndpoint target))
+            {
+                return false;
+            }
+
+            mapping = new TransitionConnectionSnapshotMapping
+            {
+                SourceLaneIndex = sourceLaneIndex,
+                TargetLaneIndex = targetLaneIndex,
+                SourceLateral = source.Lateral,
+                TargetLateral = target.Lateral,
+                SourceLanePosition = source.LanePosition,
+                TargetLanePosition = target.LanePosition,
+                SourceCarriagewayAndGroup = source.CarriagewayAndGroup,
+                TargetCarriagewayAndGroup = target.CarriagewayAndGroup,
+                Method = method,
+                IsUnsafe = isUnsafe
+            };
+            return true;
         }
 
         private bool TryPrepareMappings(ref Request request)
@@ -624,6 +856,33 @@ namespace PocketTurnLanes.Systems.Tool
                 return true;
             }
 
+            if (request.Mode == RepairMode.ShortEdgeTransition)
+            {
+                if (!TryBuildSnapshotReverseMappings(
+                        request.TransitionReverseSnapshot,
+                        m_ReverseSourceLanes,
+                        m_ReverseTargetLanes,
+                        request.PocketEdge,
+                        outerEdge,
+                        out LaneMapping[] snapshotReverseMappings,
+                        out mappingSource,
+                        out string snapshotReason))
+                {
+                    request.ReverseSourceLanes = m_ReverseSourceLanes.ToArray();
+                    request.ReverseTargetLanes = m_ReverseTargetLanes.ToArray();
+                    request.ReverseMappings = Array.Empty<LaneMapping>();
+                    mappingSource = $"short-edge-transition-reverse-skipped: {snapshotReason}";
+                    Mod.log.Info($"[SplitLaneConnectionFix] Short-edge transition reverse restore skipped splitNode={FormatEntity(request.SplitNode)} source={FormatEntity(request.PocketEdge)} target={FormatEntity(outerEdge)} reason={snapshotReason} snapshot={FormatSnapshot(request.TransitionReverseSnapshot)} reverseSourceOrder={FormatLaneOrder(m_ReverseSourceLanes)} reverseTargetOrder={FormatLaneOrder(m_ReverseTargetLanes)}.");
+                    return true;
+                }
+
+                request.ReverseSourceLanes = m_ReverseSourceLanes.ToArray();
+                request.ReverseTargetLanes = m_ReverseTargetLanes.ToArray();
+                request.ReverseMappings = snapshotReverseMappings;
+                mappingSource = $"short-edge-transition-{mappingSource}";
+                return true;
+            }
+
             CollectConnectorLanes(request.SplitNode, request.PocketEdge, outerEdge, m_ExistingConnectorLanes);
             if (!TryBuildStraightMappings(
                     m_ReverseSourceLanes,
@@ -708,6 +967,16 @@ namespace PocketTurnLanes.Systems.Tool
         private bool TryFindOuterEdge(Request request, out Entity outerEdge)
         {
             outerEdge = Entity.Null;
+            if (request.OuterEdge != Entity.Null &&
+                EntityManager.Exists(request.OuterEdge) &&
+                !EntityManager.HasComponent<Deleted>(request.OuterEdge) &&
+                EntityManager.TryGetComponent(request.OuterEdge, out NetEdge explicitEdge) &&
+                (explicitEdge.m_Start == request.SplitNode || explicitEdge.m_End == request.SplitNode))
+            {
+                outerEdge = request.OuterEdge;
+                return true;
+            }
+
             if (!EntityManager.TryGetBuffer(request.SplitNode, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
             {
                 return false;
@@ -1410,6 +1679,283 @@ namespace PocketTurnLanes.Systems.Tool
             return true;
         }
 
+        private bool TryBuildSnapshotReverseMappings(
+            TransitionConnectionSnapshot snapshot,
+            IReadOnlyList<LaneEndpoint> sourceLanes,
+            IReadOnlyList<LaneEndpoint> targetLanes,
+            Entity sourceEdge,
+            Entity targetEdge,
+            out LaneMapping[] mappings,
+            out string mappingSource,
+            out string reason)
+        {
+            mappings = null;
+            mappingSource = "none";
+            reason = string.Empty;
+
+            if (snapshot == null || snapshot.Mappings == null || snapshot.Mappings.Length == 0)
+            {
+                reason = "snapshot empty";
+                return false;
+            }
+
+            if (sourceLanes == null || targetLanes == null || sourceLanes.Count == 0 || targetLanes.Count == 0)
+            {
+                reason = $"missing reverse endpoints source={sourceLanes?.Count ?? 0} target={targetLanes?.Count ?? 0}";
+                return false;
+            }
+
+            if (!TryBuildSnapshotLaneRemap(
+                    snapshot.Mappings,
+                    sourceLanes,
+                    source: true,
+                    out Dictionary<int, LaneEndpoint> sourceRemap,
+                    out string sourceRemapDetail,
+                    out string sourceRemapReason))
+            {
+                reason = $"source remap failed: {sourceRemapReason}";
+                return false;
+            }
+
+            if (!TryBuildSnapshotLaneRemap(
+                    snapshot.Mappings,
+                    targetLanes,
+                    source: false,
+                    out Dictionary<int, LaneEndpoint> targetRemap,
+                    out string targetRemapDetail,
+                    out string targetRemapReason))
+            {
+                reason = $"target remap failed: {targetRemapReason}";
+                return false;
+            }
+
+            m_Mappings.Clear();
+            HashSet<ConnectionKey> used = new HashSet<ConnectionKey>();
+            int skipped = 0;
+            for (int i = 0; i < snapshot.Mappings.Length; i++)
+            {
+                TransitionConnectionSnapshotMapping snapshotMapping = snapshot.Mappings[i];
+                if (!sourceRemap.TryGetValue(snapshotMapping.SourceLaneIndex, out LaneEndpoint source) ||
+                    !targetRemap.TryGetValue(snapshotMapping.TargetLaneIndex, out LaneEndpoint target))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                ConnectionKey key = new ConnectionKey(source.LaneIndex, target.LaneIndex);
+                if (used.Contains(key))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                used.Add(key);
+                m_Mappings.Add(new LaneMapping
+                {
+                    SourceEdge = sourceEdge,
+                    TargetEdge = targetEdge,
+                    SourceLaneIndex = source.LaneIndex,
+                    TargetLaneIndex = target.LaneIndex,
+                    Method = RemapSnapshotMethod(snapshotMapping.Method, source, target),
+                    IsBranch = false
+                });
+            }
+
+            if (m_Mappings.Count == 0)
+            {
+                reason = $"no snapshot mappings could be remapped snapshot={FormatSnapshot(snapshot)} skipped={skipped}";
+                return false;
+            }
+
+            mappings = m_Mappings.ToArray();
+            mappingSource = $"snapshot={snapshot.Source}; sourceRemap=({sourceRemapDetail}); targetRemap=({targetRemapDetail}); skipped={skipped}; original={snapshot.Mappings.Length}";
+            reason = "ok";
+            return true;
+        }
+
+        private static void NormalizeTransitionLaneLaterals(List<LaneEndpoint> sourceLanes, List<LaneEndpoint> targetLanes)
+        {
+            if (sourceLanes == null ||
+                targetLanes == null ||
+                sourceLanes.Count == 0 ||
+                targetLanes.Count == 0)
+            {
+                return;
+            }
+
+            float2 travelDirection = sourceLanes[0].TravelDirection;
+            if (math.lengthsq(travelDirection) <= 0.0001f)
+            {
+                return;
+            }
+
+            float2 right = new float2(travelDirection.y, -travelDirection.x);
+            float2 sourceOrigin = GetAveragePosition(sourceLanes);
+            AssignLaneLaterals(sourceLanes, sourceOrigin, right);
+            AssignLaneLaterals(targetLanes, sourceOrigin, right);
+        }
+
+        private static bool TryBuildSnapshotLaneRemap(
+            IReadOnlyList<TransitionConnectionSnapshotMapping> snapshotMappings,
+            IReadOnlyList<LaneEndpoint> currentLanes,
+            bool source,
+            out Dictionary<int, LaneEndpoint> remap,
+            out string detail,
+            out string reason)
+        {
+            remap = null;
+            detail = "none";
+            reason = string.Empty;
+
+            if (snapshotMappings == null || snapshotMappings.Count == 0)
+            {
+                reason = "snapshot empty";
+                return false;
+            }
+
+            if (currentLanes == null || currentLanes.Count == 0)
+            {
+                reason = "current lanes empty";
+                return false;
+            }
+
+            Dictionary<int, SnapshotLaneOrder> snapshotLanes = new Dictionary<int, SnapshotLaneOrder>();
+            for (int i = 0; i < snapshotMappings.Count; i++)
+            {
+                TransitionConnectionSnapshotMapping mapping = snapshotMappings[i];
+                int laneIndex = source ? mapping.SourceLaneIndex : mapping.TargetLaneIndex;
+                float lateral = source ? mapping.SourceLateral : mapping.TargetLateral;
+                if (snapshotLanes.TryGetValue(laneIndex, out SnapshotLaneOrder existing))
+                {
+                    existing.LateralSum += lateral;
+                    existing.Count++;
+                    snapshotLanes[laneIndex] = existing;
+                }
+                else
+                {
+                    snapshotLanes.Add(laneIndex, new SnapshotLaneOrder
+                    {
+                        LaneIndex = laneIndex,
+                        LateralSum = lateral,
+                        Count = 1,
+                        FirstSnapshotOrder = i
+                    });
+                }
+            }
+
+            if (snapshotLanes.Count > currentLanes.Count)
+            {
+                reason = $"snapshot lanes exceed current lanes snapshot={snapshotLanes.Count} current={currentLanes.Count}";
+                return false;
+            }
+
+            List<SnapshotLaneOrder> orderedSnapshot = snapshotLanes.Values.ToList();
+            float minLateral = orderedSnapshot.Min(lane => lane.AverageLateral);
+            float maxLateral = orderedSnapshot.Max(lane => lane.AverageLateral);
+            bool useLateralOrder = maxLateral - minLateral > 0.75f;
+            orderedSnapshot.Sort((a, b) =>
+            {
+                int compare = useLateralOrder
+                    ? a.AverageLateral.CompareTo(b.AverageLateral)
+                    : a.LaneIndex.CompareTo(b.LaneIndex);
+                return compare != 0
+                    ? compare
+                    : a.FirstSnapshotOrder.CompareTo(b.FirstSnapshotOrder);
+            });
+
+            List<LaneEndpoint> orderedCurrent = currentLanes.ToList();
+            orderedCurrent.Sort((a, b) => a.Lateral.CompareTo(b.Lateral));
+
+            remap = new Dictionary<int, LaneEndpoint>(orderedSnapshot.Count);
+            HashSet<int> usedCurrentIndexes = new HashSet<int>();
+            for (int i = 0; i < orderedSnapshot.Count; i++)
+            {
+                SnapshotLaneOrder snapshotLane = orderedSnapshot[i];
+                if (!TrySelectCurrentLaneByRank(
+                        orderedCurrent,
+                        orderedSnapshot.Count,
+                        i,
+                        usedCurrentIndexes,
+                        out LaneEndpoint currentLane))
+                {
+                    reason = $"no current lane for snapshotLane={snapshotLane.LaneIndex} rank={i} current={FormatLaneOrder(currentLanes)}";
+                    remap = null;
+                    return false;
+                }
+
+                remap.Add(snapshotLane.LaneIndex, currentLane);
+                usedCurrentIndexes.Add(currentLane.LaneIndex);
+            }
+
+            List<string> remapDetails = new List<string>(orderedSnapshot.Count);
+            for (int i = 0; i < orderedSnapshot.Count; i++)
+            {
+                SnapshotLaneOrder snapshotLane = orderedSnapshot[i];
+                LaneEndpoint currentLane = remap[snapshotLane.LaneIndex];
+                remapDetails.Add($"{snapshotLane.LaneIndex}->{currentLane.LaneIndex}@{snapshotLane.AverageLateral:0.##}/{currentLane.Lateral:0.##}");
+            }
+
+            detail = $"rank-{(useLateralOrder ? "lateral" : "index")}; " + string.Join(",", remapDetails);
+            return true;
+        }
+
+        private static bool TrySelectCurrentLaneByRank(
+            IReadOnlyList<LaneEndpoint> orderedCurrent,
+            int snapshotLaneCount,
+            int snapshotRank,
+            HashSet<int> usedCurrentIndexes,
+            out LaneEndpoint lane)
+        {
+            lane = default;
+            if (orderedCurrent == null || orderedCurrent.Count == 0)
+            {
+                return false;
+            }
+
+            int preferredRank = snapshotLaneCount <= 1
+                ? 0
+                : (int)math.round(snapshotRank * (orderedCurrent.Count - 1f) / (snapshotLaneCount - 1f));
+            preferredRank = math.clamp(preferredRank, 0, orderedCurrent.Count - 1);
+
+            int bestRankDistance = int.MaxValue;
+            int bestIndex = -1;
+            for (int i = 0; i < orderedCurrent.Count; i++)
+            {
+                LaneEndpoint candidate = orderedCurrent[i];
+                if (usedCurrentIndexes.Contains(candidate.LaneIndex))
+                {
+                    continue;
+                }
+
+                int rankDistance = math.abs(i - preferredRank);
+                if (rankDistance < bestRankDistance)
+                {
+                    bestRankDistance = rankDistance;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex < 0)
+            {
+                return false;
+            }
+
+            lane = orderedCurrent[bestIndex];
+            return true;
+        }
+
+        private static PathMethod RemapSnapshotMethod(PathMethod snapshotMethod, LaneEndpoint source, LaneEndpoint target)
+        {
+            PathMethod method = snapshotMethod | PathMethod.Road;
+            PathMethod compatible = GetMappingMethod(source, target);
+            if ((method & PathMethod.Track) != 0 && (compatible & PathMethod.Track) == 0)
+            {
+                method &= ~PathMethod.Track;
+            }
+
+            return method;
+        }
+
         private static bool TryBuildStraightMappings(
             IReadOnlyList<LaneEndpoint> sourceLanes,
             IReadOnlyList<LaneEndpoint> targetLanes,
@@ -1598,12 +2144,14 @@ namespace PocketTurnLanes.Systems.Tool
 
             int removedExisting = 0;
             int originalLength = trafficApi.GetBufferLength(modifiedBuffer);
+            bool removePocketExisting = request.Mode != RepairMode.ShortEdgeTransition ||
+                                        (request.ReverseMappings != null && request.ReverseMappings.Length > 0);
             for (int i = 0; i < originalLength; i++)
             {
                 object existing = trafficApi.GetBufferItem(modifiedBuffer, i);
                 Entity edge = trafficApi.GetModifiedConnectionEdge(existing);
                 Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(existing);
-                if (edge == request.OuterEdge || edge == request.PocketEdge)
+                if (edge == request.OuterEdge || (removePocketExisting && edge == request.PocketEdge))
                 {
                     removedExisting++;
                     if (modifiedEntity != Entity.Null && EntityManager.Exists(modifiedEntity))
@@ -1750,7 +2298,9 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            string reverseReason = "standard-reverse-not-rebuilt";
+            string reverseReason = request.Mode == RepairMode.ShortEdgeTransition
+                ? "short-edge-transition-reverse-not-restored"
+                : "standard-reverse-not-rebuilt";
             if (request.Mode == RepairMode.BalancedOppositeTarget)
             {
                 if (request.ReverseMappings == null || request.ReverseMappings.Length == 0)
@@ -1768,6 +2318,27 @@ namespace PocketTurnLanes.Systems.Tool
                         request.PocketEdge,
                         request.OuterEdge,
                         "balanced-reverse",
+                        ref nextNodeLaneIndex,
+                        ref stats,
+                        out reverseReason))
+                {
+                    stats.Reason = reverseReason;
+                    return false;
+                }
+            }
+            else if (request.Mode == RepairMode.ShortEdgeTransition &&
+                     request.ReverseMappings != null &&
+                     request.ReverseMappings.Length > 0)
+            {
+                if (!TryRebuildConnectorDirection(
+                        request,
+                        subLanes,
+                        request.ReverseMappings,
+                        request.ReverseSourceLanes,
+                        request.ReverseTargetLanes,
+                        request.PocketEdge,
+                        request.OuterEdge,
+                        "short-edge-transition-reverse",
                         ref nextNodeLaneIndex,
                         ref stats,
                         out reverseReason))
@@ -2160,6 +2731,23 @@ namespace PocketTurnLanes.Systems.Tool
                                      "balanced-reverse",
                                      out reverseDetail);
             }
+            else if (request.Mode == RepairMode.ShortEdgeTransition)
+            {
+                if (request.ReverseMappings != null && request.ReverseMappings.Length > 0)
+                {
+                    reverseMatches = VerifyConnectorDirection(
+                        request,
+                        request.ReverseMappings,
+                        request.PocketEdge,
+                        request.OuterEdge,
+                        "short-edge-transition-reverse",
+                        out reverseDetail);
+                }
+                else
+                {
+                    reverseDetail = "short-edge-transition-reverse-skipped";
+                }
+            }
 
             int staleUturnCount = CountStaleSplitNodeUturnConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, out string staleUturnSummary);
             bool matches = forwardMatches && reverseMatches && staleUturnCount == 0;
@@ -2500,6 +3088,27 @@ namespace PocketTurnLanes.Systems.Tool
             return string.Join(",", mappings.Select(FormatMapping));
         }
 
+        private static string FormatSnapshot(TransitionConnectionSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return "<none>";
+            }
+
+            int count = snapshot.Mappings?.Length ?? 0;
+            return $"{snapshot.Source}/{count} node={FormatEntity(snapshot.Node)} source={FormatEntity(snapshot.SourceEdge)} target={FormatEntity(snapshot.TargetEdge)} detail=({snapshot.Detail})";
+        }
+
+        private static string FormatSnapshotMappings(IReadOnlyList<TransitionConnectionSnapshotMapping> mappings)
+        {
+            if (mappings == null || mappings.Count == 0)
+            {
+                return "<none>";
+            }
+
+            return string.Join(",", mappings.Select(mapping => $"{mapping.SourceLaneIndex}->{mapping.TargetLaneIndex}[{mapping.Method}] unsafe={mapping.IsUnsafe} srcLat={mapping.SourceLateral:0.##} tgtLat={mapping.TargetLateral:0.##}"));
+        }
+
         private static string FormatMapping(LaneMapping mapping)
         {
             return $"{FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}->{FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}[{mapping.Method}]{(mapping.IsBranch ? "*" : string.Empty)}";
@@ -2574,6 +3183,7 @@ namespace PocketTurnLanes.Systems.Tool
             public LaneEndpoint[] ReverseTargetLanes;
             public LaneMapping[] Mappings;
             public LaneMapping[] ReverseMappings;
+            public TransitionConnectionSnapshot TransitionReverseSnapshot;
             public int BranchSourceLaneIndex;
             public int ExtraTargetLaneIndex;
             public TurnDirection Turn;
@@ -2616,6 +3226,16 @@ namespace PocketTurnLanes.Systems.Tool
             public int TargetLaneIndex;
             public PathMethod Method;
             public bool IsBranch;
+        }
+
+        private struct SnapshotLaneOrder
+        {
+            public int LaneIndex;
+            public float LateralSum;
+            public int Count;
+            public int FirstSnapshotOrder;
+
+            public float AverageLateral => Count > 0 ? LateralSum / Count : 0f;
         }
 
         private struct CenterTurnCandidate
@@ -2710,6 +3330,8 @@ namespace PocketTurnLanes.Systems.Tool
             private readonly MethodInfo m_GetModifiedLaneConnectionsBuffer;
             private readonly MethodInfo m_HasModifiedLaneConnectionsBuffer;
             private readonly MethodInfo m_AddGeneratedConnectionBuffer;
+            private readonly MethodInfo m_GetGeneratedConnectionBuffer;
+            private readonly MethodInfo m_HasGeneratedConnectionBuffer;
             private readonly MethodInfo m_SetDataOwner;
             private readonly FieldInfo m_DataOwnerEntityField;
             private readonly FieldInfo m_ModifiedLaneIndexField;
@@ -2742,6 +3364,8 @@ namespace PocketTurnLanes.Systems.Tool
                 m_GetModifiedLaneConnectionsBuffer = MakeEntityManagerGeneric(nameof(EntityManager.GetBuffer), modifiedLaneConnectionsType, typeof(Entity), typeof(bool));
                 m_HasModifiedLaneConnectionsBuffer = MakeEntityManagerGeneric(nameof(EntityManager.HasBuffer), modifiedLaneConnectionsType, typeof(Entity));
                 m_AddGeneratedConnectionBuffer = MakeEntityManagerGeneric(nameof(EntityManager.AddBuffer), generatedConnectionType, typeof(Entity));
+                m_GetGeneratedConnectionBuffer = MakeEntityManagerGeneric(nameof(EntityManager.GetBuffer), generatedConnectionType, typeof(Entity), typeof(bool));
+                m_HasGeneratedConnectionBuffer = MakeEntityManagerGeneric(nameof(EntityManager.HasBuffer), generatedConnectionType, typeof(Entity));
                 m_SetDataOwner = MakeEntityManagerGeneric(nameof(EntityManager.SetComponentData), dataOwnerType, typeof(Entity), dataOwnerType);
 
                 m_DataOwnerEntityField = RequireField(dataOwnerType, "entity");
@@ -2819,9 +3443,29 @@ namespace PocketTurnLanes.Systems.Tool
                     : m_AddModifiedLaneConnectionsBuffer.Invoke(entityManager, new object[] { node });
             }
 
+            public bool HasModifiedLaneConnectionsBuffer(EntityManager entityManager, Entity node)
+            {
+                return (bool)m_HasModifiedLaneConnectionsBuffer.Invoke(entityManager, new object[] { node });
+            }
+
+            public object GetModifiedLaneConnectionsBuffer(EntityManager entityManager, Entity node, bool readOnly)
+            {
+                return m_GetModifiedLaneConnectionsBuffer.Invoke(entityManager, new object[] { node, readOnly });
+            }
+
             public object AddGeneratedConnectionBuffer(EntityManager entityManager, Entity entity)
             {
                 return m_AddGeneratedConnectionBuffer.Invoke(entityManager, new object[] { entity });
+            }
+
+            public bool HasGeneratedConnectionBuffer(EntityManager entityManager, Entity entity)
+            {
+                return (bool)m_HasGeneratedConnectionBuffer.Invoke(entityManager, new object[] { entity });
+            }
+
+            public object GetGeneratedConnectionBuffer(EntityManager entityManager, Entity entity, bool readOnly)
+            {
+                return m_GetGeneratedConnectionBuffer.Invoke(entityManager, new object[] { entity, readOnly });
             }
 
             public int GetBufferLength(object buffer)
@@ -2857,6 +3501,31 @@ namespace PocketTurnLanes.Systems.Tool
             public Entity GetModifiedConnectionEntity(object element)
             {
                 return (Entity)m_ModifiedConnectionsField.GetValue(element);
+            }
+
+            public Entity GetGeneratedConnectionSource(object element)
+            {
+                return (Entity)m_GeneratedSourceField.GetValue(element);
+            }
+
+            public Entity GetGeneratedConnectionTarget(object element)
+            {
+                return (Entity)m_GeneratedTargetField.GetValue(element);
+            }
+
+            public int2 GetGeneratedConnectionLaneIndexMap(object element)
+            {
+                return (int2)m_GeneratedLaneIndexMapField.GetValue(element);
+            }
+
+            public PathMethod GetGeneratedConnectionMethod(object element)
+            {
+                return (PathMethod)m_GeneratedMethodField.GetValue(element);
+            }
+
+            public bool GetGeneratedConnectionUnsafe(object element)
+            {
+                return (bool)m_GeneratedUnsafeField.GetValue(element);
             }
 
             public object CreateModifiedLaneConnection(

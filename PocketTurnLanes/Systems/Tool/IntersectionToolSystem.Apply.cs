@@ -59,7 +59,15 @@ namespace PocketTurnLanes.Systems.Tool
         private void CaptureAppliedNodeMergeCandidates()
         {
             m_AppliedNodeMergeCandidates.Clear();
-            m_AppliedNodeMergeCandidates.AddRange(m_PreviewNodeMergeCandidates);
+            for (int i = 0; i < m_PreviewNodeMergeCandidates.Count; i++)
+            {
+                NodeMergeCandidate candidate = m_PreviewNodeMergeCandidates[i];
+                if (candidate.Mode != NodeMergeMode.ShortEdgeReplacementOnly)
+                {
+                    m_AppliedNodeMergeCandidates.Add(candidate);
+                }
+            }
+
             m_VerifyAppliedNodeMerges = m_AppliedNodeMergeCandidates.Count > 0;
         }
 
@@ -160,6 +168,19 @@ namespace PocketTurnLanes.Systems.Tool
                     finalPocketEdge,
                     candidate.SourcePrefab,
                     candidate.TargetPrefab);
+                return;
+            }
+
+            if (candidate.LaneRepairMode == SplitLaneConnectionRepairMode.ShortEdgeTransition)
+            {
+                m_SplitLaneConnectionFixSystem.QueueShortEdgeTransition(
+                    candidate.Node,
+                    candidate.SplitNode,
+                    candidate.TransitionOuterEdge,
+                    finalPocketEdge,
+                    candidate.SourcePrefab,
+                    candidate.TargetPrefab,
+                    candidate.TransitionReverseSnapshot);
                 return;
             }
 
