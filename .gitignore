@@ -1,6 +1,6 @@
 .idea/
 .vs/
-AGENTS.md
+AGENTS*.md
 bin/
 obj/
 Library/
