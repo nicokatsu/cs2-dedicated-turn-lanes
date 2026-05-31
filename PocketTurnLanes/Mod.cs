@@ -17,6 +17,7 @@ namespace PocketTurnLanes
 
         public static readonly ILog log = LogManager.GetLogger(ModId).SetShowsErrorsInUI(false);
 
+        public static bool TrafficModDetected { get; private set; }
         public static bool TrafficLaneConnectionFixEnabled { get; private set; }
 
         public void OnLoad(UpdateSystem updateSystem)
@@ -28,8 +29,11 @@ namespace PocketTurnLanes
                 log.Info($"Current mod asset at {asset.path}");
             }
 
-            bool trafficEnabled = TrafficIntegration.IsTrafficModEnabled();
-            TrafficLaneConnectionFixEnabled = trafficEnabled;
+            bool trafficDetected = TrafficIntegration.IsTrafficModEnabled();
+            bool trafficRepairEnabled = TrafficIntegration.ShouldEnableLaneConnectionRepair(trafficDetected);
+            TrafficModDetected = trafficDetected;
+            TrafficLaneConnectionFixEnabled = trafficRepairEnabled;
+            log.Info($"[SplitLaneConnectionFix] Traffic integration state trafficDetected={TrafficModDetected} repairSystemsEnabled={TrafficLaneConnectionFixEnabled}");
 
             updateSystem.World.GetOrCreateSystemManaged<Game.Tools.NetToolSystem>();
             updateSystem.World.GetOrCreateSystemManaged<IntersectionOverlaySystem>();
@@ -43,7 +47,7 @@ namespace PocketTurnLanes
             }
 
             updateSystem.UpdateAt<IntersectionToolSystem>(SystemUpdatePhase.ToolUpdate);
-            TrafficIntegration.RegisterLaneConnectionSystems(updateSystem, trafficEnabled);
+            TrafficIntegration.RegisterLaneConnectionSystems(updateSystem, trafficRepairEnabled, trafficDetected);
             updateSystem.UpdateAt<PocketTurnLaneUISystem>(SystemUpdatePhase.UIUpdate);
         }
 

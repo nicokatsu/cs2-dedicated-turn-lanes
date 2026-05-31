@@ -102,7 +102,7 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     if (!m_TrafficUnavailableLogged)
                     {
-                        Mod.log.Info($"[SplitLaneConnectionFix] Traffic runtime types are unavailable and Traffic was not detected as enabled; queued split-node connection repairs will be skipped. Install/enable Traffic dependency 80095 to enable this repair path. error={trafficError}");
+                        Mod.log.Info($"[SplitLaneConnectionFix] Traffic runtime types are unavailable and repair systems were not enabled; queued split-node connection repairs will be skipped. Install/enable Traffic dependency 80095 to enable this repair path. trafficDetectedOnLoad={Mod.TrafficModDetected} trafficRepairEnabled={Mod.TrafficLaneConnectionFixEnabled} error={trafficError}");
                         m_TrafficUnavailableLogged = true;
                     }
 
@@ -113,7 +113,7 @@ namespace PocketTurnLanes.Systems.Tool
                 m_TrafficRuntimeWaitFrames++;
                 if (m_TrafficRuntimeWaitFrames > MaxTrafficRuntimeWaitFrames)
                 {
-                    Mod.log.Info($"[SplitLaneConnectionFix] Traffic runtime did not become ready after {m_TrafficRuntimeWaitFrames} frames; skipping queued split-node connection repairs. trafficEnabled={Mod.TrafficLaneConnectionFixEnabled} error={trafficError}");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Traffic runtime did not become ready after {m_TrafficRuntimeWaitFrames} frames; skipping queued split-node connection repairs. trafficDetectedOnLoad={Mod.TrafficModDetected} trafficRepairEnabled={Mod.TrafficLaneConnectionFixEnabled} error={trafficError}");
                     m_Requests.Clear();
                     m_TrafficRuntimeWaitFrames = 0;
                     return;
@@ -121,7 +121,7 @@ namespace PocketTurnLanes.Systems.Tool
 
                 if (!m_TrafficUnavailableLogged || m_TrafficRuntimeWaitFrames % 30 == 0)
                 {
-                    Mod.log.Info($"[SplitLaneConnectionFix] Waiting for Traffic runtime before repairing split-node connections frameWait={m_TrafficRuntimeWaitFrames}/{MaxTrafficRuntimeWaitFrames} trafficEnabled={Mod.TrafficLaneConnectionFixEnabled} missingTypes={missingTrafficTypes} error={trafficError}");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Waiting for Traffic runtime before repairing split-node connections frameWait={m_TrafficRuntimeWaitFrames}/{MaxTrafficRuntimeWaitFrames} trafficDetectedOnLoad={Mod.TrafficModDetected} trafficRepairEnabled={Mod.TrafficLaneConnectionFixEnabled} missingTypes={missingTrafficTypes} error={trafficError}");
                     m_TrafficUnavailableLogged = true;
                 }
 
