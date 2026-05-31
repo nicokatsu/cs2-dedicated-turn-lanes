@@ -20,7 +20,7 @@ namespace PocketTurnLanes.Tool
             }
             catch (Exception ex)
             {
-                Mod.log.Warn(ex, "[SplitLaneConnectionFix] Could not inspect enabled mods for Traffic; assuming Traffic is not enabled.");
+                Mod.log.Info(ex, "[SplitLaneConnectionFix] Could not inspect enabled mods for Traffic; assuming Traffic is not enabled.");
                 return false;
             }
         }
@@ -65,12 +65,12 @@ namespace PocketTurnLanes.Tool
 
             if (registeredBeforeLaneSystem)
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Pre-lane writer scheduled before TrafficLaneSystem in {SystemUpdatePhase.Modification4}, but could not constrain after SyncCustomLaneConnectionsSystem. afterError={afterError}");
+                Mod.log.Info($"[SplitLaneConnectionFix] Pre-lane writer scheduled before TrafficLaneSystem in {SystemUpdatePhase.Modification4}, but could not constrain after SyncCustomLaneConnectionsSystem. afterError={afterError}");
                 return;
             }
 
             updateSystem.UpdateAt<SplitLaneConnectionFixSystem>(SystemUpdatePhase.Modification3);
-            Mod.log.Warn($"[SplitLaneConnectionFix] Traffic is enabled but TrafficLaneSystem ordering was not available; pre-lane writer scheduled at {SystemUpdatePhase.Modification3} fallback so Updated markers are present before TrafficLaneSystem. beforeError={beforeError} afterError={afterError}");
+            Mod.log.Info($"[SplitLaneConnectionFix] Traffic is enabled but TrafficLaneSystem ordering was not available; pre-lane writer scheduled at {SystemUpdatePhase.Modification3} fallback so Updated markers are present before TrafficLaneSystem. beforeError={beforeError} afterError={afterError}");
         }
 
         private static void RegisterSplitLaneConnectionCleanup(UpdateSystem updateSystem, Type modificationDataSyncSystemType)
@@ -88,7 +88,7 @@ namespace PocketTurnLanes.Tool
             }
 
             updateSystem.UpdateAt<SplitLaneConnectionCleanupSystem>(SystemUpdatePhase.Modification4B);
-            Mod.log.Warn($"[SplitLaneConnectionFix] Post-lane cleanup scheduled at {SystemUpdatePhase.Modification4B} fallback. cleanupAfterError={cleanupAfterError}");
+            Mod.log.Info($"[SplitLaneConnectionFix] Post-lane cleanup scheduled at {SystemUpdatePhase.Modification4B} fallback. cleanupAfterError={cleanupAfterError}");
         }
 
         private static bool TryRegisterUpdateOrder(UpdateSystem updateSystem, Type systemType, string methodName, Type otherSystemType, SystemUpdatePhase phase, out string error)

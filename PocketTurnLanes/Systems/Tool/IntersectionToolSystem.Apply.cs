@@ -36,7 +36,7 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             SetVanillaMutationSystemsEnabled(false);
-            Mod.log.Warn($"[IntersectionTool] Vanilla mutation systems were enabled while the tool was active; disabled again to keep split/replacement previews isolated validationWasEnabled={validationWasEnabled} nodeReductionWasEnabled={nodeReductionWasEnabled}.");
+            Mod.log.Info($"[IntersectionTool] Vanilla mutation systems were enabled while the tool was active; disabled again to keep split/replacement previews isolated validationWasEnabled={validationWasEnabled} nodeReductionWasEnabled={nodeReductionWasEnabled}.");
         }
 
         private void CaptureAppliedCandidates()
@@ -90,7 +90,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 missingCount++;
-                Mod.log.Warn($"[IntersectionTool] Pocket lane replacement not visible after apply original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} node={FormatEntity(candidate.Node)} splitNode={FormatEntity(candidate.SplitNode)}.");
+                Mod.log.Info($"[IntersectionTool] Pocket lane replacement not visible after apply original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} node={FormatEntity(candidate.Node)} splitNode={FormatEntity(candidate.SplitNode)}.");
             }
 
             Mod.log.Info($"[IntersectionTool] Pocket lane replacement verification complete verified={verifiedCount}, replacedEntity={replacedEntityCount}, missing={missingCount}.");
@@ -101,7 +101,7 @@ namespace PocketTurnLanes.Systems.Tool
         {
             if (m_SplitLaneConnectionFixSystem == null)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot queue split lane connection fix pocket={FormatEntity(finalPocketEdge)} splitNode={FormatEntity(candidate.SplitNode)}: fix system is not available.");
+                Mod.log.Info($"[IntersectionTool] Cannot queue split lane connection fix pocket={FormatEntity(finalPocketEdge)} splitNode={FormatEntity(candidate.SplitNode)}: fix system is not available.");
                 return;
             }
 
@@ -192,7 +192,7 @@ namespace PocketTurnLanes.Systems.Tool
                 if (candidate.Attempt >= MaxSplitRetryAttempts)
                 {
                     exhaustedCount++;
-                    Mod.log.Warn($"[IntersectionTool] Split still failed edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} after {candidate.Attempt} retry attempt(s); leaving it unchanged.");
+                    Mod.log.Info($"[IntersectionTool] Split still failed edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} after {candidate.Attempt} retry attempt(s); leaving it unchanged.");
                     continue;
                 }
 
@@ -210,14 +210,14 @@ namespace PocketTurnLanes.Systems.Tool
                         retryPocketLength))
                 {
                     exhaustedCount++;
-                    Mod.log.Warn($"[IntersectionTool] Retry split cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} requestedPocket={retryPocketLength:0.##}m.");
+                    Mod.log.Info($"[IntersectionTool] Retry split cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} requestedPocket={retryPocketLength:0.##}m.");
                     continue;
                 }
 
                 if (splitDistance < candidate.SplitDistance + MinimumRetryProgress)
                 {
                     exhaustedCount++;
-                    Mod.log.Warn($"[IntersectionTool] Retry split cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} previous={candidate.SplitDistance:0.##}m next={splitDistance:0.##}m.");
+                    Mod.log.Info($"[IntersectionTool] Retry split cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} previous={candidate.SplitDistance:0.##}m next={splitDistance:0.##}m.");
                     continue;
                 }
 
@@ -344,7 +344,7 @@ namespace PocketTurnLanes.Systems.Tool
                         out float targetDistance))
                 {
                     noRoomCount++;
-                    Mod.log.Warn($"[IntersectionTool] Road-node merge verified but split cannot be prepared mergedEdge={FormatEntity(mergedEdge)} shortEdge={FormatEntity(mergeCandidate.ShortEdge)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} mergedLength={mergedLength:0.##}m expectedLength={mergeCandidate.MergedLength:0.##}m lengthError={mergedLengthError:0.##}m.");
+                    Mod.log.Info($"[IntersectionTool] Road-node merge verified but split cannot be prepared mergedEdge={FormatEntity(mergedEdge)} shortEdge={FormatEntity(mergeCandidate.ShortEdge)} removableNode={FormatEntity(mergeCandidate.RemovableNode)} mergedLength={mergedLength:0.##}m expectedLength={mergeCandidate.MergedLength:0.##}m lengthError={mergedLengthError:0.##}m.");
                     continue;
                 }
 
@@ -416,7 +416,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (!EntityManager.TryGetBuffer(candidate.RemovableNode, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
             {
-                Mod.log.Warn($"[IntersectionTool] Road-node merge postprocess cannot inspect removable node={FormatEntity(candidate.RemovableNode)}: missing ConnectedEdge buffer.");
+                Mod.log.Info($"[IntersectionTool] Road-node merge postprocess cannot inspect removable node={FormatEntity(candidate.RemovableNode)}: missing ConnectedEdge buffer.");
                 return false;
             }
 
@@ -443,7 +443,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (!EntityManager.TryGetBuffer(candidate.Node, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} node={FormatEntity(candidate.Node)}: node has no ConnectedEdge buffer.");
+                Mod.log.Info($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} node={FormatEntity(candidate.Node)}: node has no ConnectedEdge buffer.");
                 return false;
             }
 
@@ -510,7 +510,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (bestEdge == Entity.Null)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} expectedLength={candidate.MergedLength:0.##}m scanned={scannedCount} endpointMatches={endpointMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedError)}.");
+                Mod.log.Info($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} expectedLength={candidate.MergedLength:0.##}m scanned={scannedCount} endpointMatches={endpointMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedError)}.");
                 return false;
             }
 
@@ -551,7 +551,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (splitCandidate.TargetPrefab == Entity.Null)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot queue pocket lane replacement original={FormatEntity(splitCandidate.Edge)}: no target prefab was selected.");
+                Mod.log.Info($"[IntersectionTool] Cannot queue pocket lane replacement original={FormatEntity(splitCandidate.Edge)}: no target prefab was selected.");
                 return false;
             }
 
@@ -643,7 +643,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (!EntityManager.TryGetBuffer(candidate.Node, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot find pocket edge for original={FormatEntity(candidate.Edge)}: node={FormatEntity(candidate.Node)} has no ConnectedEdge buffer.");
+                Mod.log.Info($"[IntersectionTool] Cannot find pocket edge for original={FormatEntity(candidate.Edge)}: node={FormatEntity(candidate.Node)} has no ConnectedEdge buffer.");
                 return false;
             }
 
@@ -717,7 +717,7 @@ namespace PocketTurnLanes.Systems.Tool
                 bestNodeDistance > SplitNodePositionTolerance ||
                 bestLengthError > PocketEdgeLengthTolerance)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot find generated pocket edge original={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} node={FormatEntity(candidate.Node)} expectedSplit=({candidate.HitPosition.x:0.##},{candidate.HitPosition.y:0.##},{candidate.HitPosition.z:0.##}) expectedDistance={candidate.SplitDistance:0.##}m scanned={scannedCount} sourceOrTargetPrefabMatches={prefabMatchCount} allowOriginal={allowOriginalEdgeAsPocket} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedNodeDistance={FormatMeters(bestRejectedNodeDistance)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                Mod.log.Info($"[IntersectionTool] Cannot find generated pocket edge original={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} node={FormatEntity(candidate.Node)} expectedSplit=({candidate.HitPosition.x:0.##},{candidate.HitPosition.y:0.##},{candidate.HitPosition.z:0.##}) expectedDistance={candidate.SplitDistance:0.##}m scanned={scannedCount} sourceOrTargetPrefabMatches={prefabMatchCount} allowOriginal={allowOriginalEdgeAsPocket} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedNodeDistance={FormatMeters(bestRejectedNodeDistance)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
                 return false;
             }
 
@@ -738,13 +738,13 @@ namespace PocketTurnLanes.Systems.Tool
                 !EntityManager.TryGetComponent(candidate.PocketEdge, out Edge edge) ||
                 !EntityManager.TryGetComponent(candidate.PocketEdge, out Curve curve))
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot build replacement definition pocket={FormatEntity(candidate.PocketEdge)}: missing Edge or Curve.");
+                Mod.log.Info($"[IntersectionTool] Cannot build replacement definition pocket={FormatEntity(candidate.PocketEdge)}: missing Edge or Curve.");
                 return false;
             }
 
             if (EntityManager.HasComponent<Owner>(candidate.PocketEdge))
             {
-                Mod.log.Warn($"[IntersectionTool] Skip pocket lane replacement pocket={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)}: owned sub-net edges are not replaced yet.");
+                Mod.log.Info($"[IntersectionTool] Skip pocket lane replacement pocket={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)}: owned sub-net edges are not replaced yet.");
                 return false;
             }
 
@@ -796,7 +796,7 @@ namespace PocketTurnLanes.Systems.Tool
                 !EntityManager.TryGetComponent(sourceEdge, out Edge edge) ||
                 !EntityManager.TryGetComponent(sourceEdge, out Curve curve))
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing Edge or Curve.");
+                Mod.log.Info($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing Edge or Curve.");
                 return false;
             }
 
@@ -809,7 +809,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (prefab == Entity.Null)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing source prefab.");
+                Mod.log.Info($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing source prefab.");
                 return false;
             }
 
@@ -839,7 +839,7 @@ namespace PocketTurnLanes.Systems.Tool
                 startNode == Entity.Null ||
                 endNode == Entity.Null)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing source prefab or endpoints prefab={GetPrefabNameFromPrefab(sourcePrefab)} start={FormatEntity(startNode)} end={FormatEntity(endNode)}.");
+                Mod.log.Info($"[IntersectionTool] Cannot build source preview definition edge={FormatEntity(sourceEdge)}: missing source prefab or endpoints prefab={GetPrefabNameFromPrefab(sourcePrefab)} start={FormatEntity(startNode)} end={FormatEntity(endNode)}.");
                 return false;
             }
 

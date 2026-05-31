@@ -71,7 +71,7 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     if (!m_TrafficUnavailableLogged)
                     {
-                        Mod.log.Warn($"[SplitLaneConnectionFix] Traffic runtime types are unavailable and Traffic was not detected as enabled; queued split-node connection repairs will be skipped. Install/enable Traffic dependency 80095 to enable this repair path. error={trafficError}");
+                        Mod.log.Info($"[SplitLaneConnectionFix] Traffic runtime types are unavailable and Traffic was not detected as enabled; queued split-node connection repairs will be skipped. Install/enable Traffic dependency 80095 to enable this repair path. error={trafficError}");
                         m_TrafficUnavailableLogged = true;
                     }
 
@@ -82,7 +82,7 @@ namespace PocketTurnLanes.Systems.Tool
                 m_TrafficRuntimeWaitFrames++;
                 if (m_TrafficRuntimeWaitFrames > MaxTrafficRuntimeWaitFrames)
                 {
-                    Mod.log.Warn($"[SplitLaneConnectionFix] Traffic runtime did not become ready after {m_TrafficRuntimeWaitFrames} frames; skipping queued split-node connection repairs. trafficEnabled={Mod.TrafficLaneConnectionFixEnabled} error={trafficError}");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Traffic runtime did not become ready after {m_TrafficRuntimeWaitFrames} frames; skipping queued split-node connection repairs. trafficEnabled={Mod.TrafficLaneConnectionFixEnabled} error={trafficError}");
                     m_Requests.Clear();
                     m_TrafficRuntimeWaitFrames = 0;
                     return;
@@ -90,7 +90,7 @@ namespace PocketTurnLanes.Systems.Tool
 
                 if (!m_TrafficUnavailableLogged || m_TrafficRuntimeWaitFrames % 30 == 0)
                 {
-                    Mod.log.Warn($"[SplitLaneConnectionFix] Waiting for Traffic runtime before repairing split-node connections frameWait={m_TrafficRuntimeWaitFrames}/{MaxTrafficRuntimeWaitFrames} trafficEnabled={Mod.TrafficLaneConnectionFixEnabled} missingTypes={missingTrafficTypes} error={trafficError}");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Waiting for Traffic runtime before repairing split-node connections frameWait={m_TrafficRuntimeWaitFrames}/{MaxTrafficRuntimeWaitFrames} trafficEnabled={Mod.TrafficLaneConnectionFixEnabled} missingTypes={missingTrafficTypes} error={trafficError}");
                     m_TrafficUnavailableLogged = true;
                 }
 
@@ -123,7 +123,7 @@ namespace PocketTurnLanes.Systems.Tool
                         request.LaneDataRetries++;
                         if (request.LaneDataRetries > MaxLaneDataRetries)
                         {
-                            Mod.log.Warn($"[SplitLaneConnectionFix] Exhausted lane-data retries splitNode={FormatEntity(request.SplitNode)} intersection={FormatEntity(request.IntersectionNode)} original={FormatEntity(request.OriginalEdge)} pocket={FormatEntity(request.PocketEdge)} sourcePrefab={FormatEntity(request.SourcePrefab)} targetPrefab={FormatEntity(request.TargetPrefab)}.");
+                            Mod.log.Info($"[SplitLaneConnectionFix] Exhausted lane-data retries splitNode={FormatEntity(request.SplitNode)} intersection={FormatEntity(request.IntersectionNode)} original={FormatEntity(request.OriginalEdge)} pocket={FormatEntity(request.PocketEdge)} sourcePrefab={FormatEntity(request.SourcePrefab)} targetPrefab={FormatEntity(request.TargetPrefab)}.");
                             m_Requests.RemoveAt(i);
                             continue;
                         }
@@ -135,7 +135,7 @@ namespace PocketTurnLanes.Systems.Tool
 
                     if (!WriteTrafficMappings(trafficApi, request))
                     {
-                        Mod.log.Warn($"[SplitLaneConnectionFix] Traffic mapping write failed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
+                        Mod.log.Info($"[SplitLaneConnectionFix] Traffic mapping write failed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
                         m_Requests.RemoveAt(i);
                         continue;
                     }
@@ -148,7 +148,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
                 catch (Exception ex)
                 {
-                    Mod.log.Warn(ex, $"[SplitLaneConnectionFix] Unhandled exception while repairing splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
+                    Mod.log.Info(ex, $"[SplitLaneConnectionFix] Unhandled exception while repairing splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
                     m_Requests.RemoveAt(i);
                 }
             }
@@ -202,10 +202,10 @@ namespace PocketTurnLanes.Systems.Tool
                     if (!TryRebuildConnectorLanes(ref request, out DirectRebuildStats retryStats))
                     {
                         request.VerificationAttempts++;
-                        Mod.log.Warn($"[SplitLaneConnectionFix] Post-lane direct connector rebuild retry failed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)} reason={retryStats.Reason} attempt={request.VerificationAttempts}/{MaxVerificationRetries} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
+                        Mod.log.Info($"[SplitLaneConnectionFix] Post-lane direct connector rebuild retry failed splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)} reason={retryStats.Reason} attempt={request.VerificationAttempts}/{MaxVerificationRetries} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
                         if (request.VerificationAttempts > MaxVerificationRetries)
                         {
-                            Mod.log.Warn($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; post-lane direct connector rebuild could not be re-applied.");
+                            Mod.log.Info($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; post-lane direct connector rebuild could not be re-applied.");
                             m_Requests.RemoveAt(i);
                             continue;
                         }
@@ -216,7 +216,7 @@ namespace PocketTurnLanes.Systems.Tool
 
                     if (request.VerificationAttempts > MaxVerificationRetries)
                     {
-                        Mod.log.Warn($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; post-lane direct connector rebuild was applied but verification never stabilized.");
+                        Mod.log.Info($"[SplitLaneConnectionFix] Verification exhausted splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} expected={FormatMappings(request.Mappings)}; post-lane direct connector rebuild was applied but verification never stabilized.");
                         m_Requests.RemoveAt(i);
                         continue;
                     }
@@ -229,7 +229,7 @@ namespace PocketTurnLanes.Systems.Tool
                 }
                 catch (Exception ex)
                 {
-                    Mod.log.Warn(ex, $"[SplitLaneConnectionFix] Unhandled exception during post-lane cleanup splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
+                    Mod.log.Info(ex, $"[SplitLaneConnectionFix] Unhandled exception during post-lane cleanup splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)}.");
                     m_Requests.RemoveAt(i);
                 }
             }
@@ -250,7 +250,7 @@ namespace PocketTurnLanes.Systems.Tool
         {
             if (splitNode == Entity.Null || pocketEdge == Entity.Null)
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Queue skipped: invalid splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)}.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Queue skipped: invalid splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)}.");
                 return;
             }
 
@@ -297,13 +297,13 @@ namespace PocketTurnLanes.Systems.Tool
                 !EntityManager.Exists(request.PocketEdge) ||
                 !EntityManager.TryGetComponent(request.PocketEdge, out NetEdge _))
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Missing split node or pocket edge splitNode={FormatEntity(request.SplitNode)} pocket={FormatEntity(request.PocketEdge)}.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Missing split node or pocket edge splitNode={FormatEntity(request.SplitNode)} pocket={FormatEntity(request.PocketEdge)}.");
                 return false;
             }
 
             if (!TryFindOuterEdge(request, out Entity outerEdge))
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Cannot identify outer edge splitNode={FormatEntity(request.SplitNode)} pocket={FormatEntity(request.PocketEdge)} original={FormatEntity(request.OriginalEdge)} sourcePrefab={FormatEntity(request.SourcePrefab)}.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Cannot identify outer edge splitNode={FormatEntity(request.SplitNode)} pocket={FormatEntity(request.PocketEdge)} original={FormatEntity(request.OriginalEdge)} sourcePrefab={FormatEntity(request.SourcePrefab)}.");
                 return false;
             }
 
@@ -315,13 +315,13 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (m_SourceLanes.Count == 0 || m_TargetLanes.Count == 0)
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Missing lane data splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count}.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Missing lane data splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count}.");
                 return false;
             }
 
             if (m_TargetLanes.Count < m_SourceLanes.Count + 1)
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Cannot apply N->N+1 rule splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count}; expected at least one extra target lane.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Cannot apply N->N+1 rule splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count}; expected at least one extra target lane.");
                 return false;
             }
 
@@ -333,7 +333,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (!TrySelectLaneMapping(m_SourceLanes, m_TargetLanes, out List<LaneEndpoint> selectedTargets, out int extraTargetListIndex, out float mappingScore))
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Cannot select an N->N+1 target subset splitNode={FormatEntity(request.SplitNode)} sourceOrder={FormatLaneOrder(m_SourceLanes)} targetOrder={FormatLaneOrder(m_TargetLanes)}.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Cannot select an N->N+1 target subset splitNode={FormatEntity(request.SplitNode)} sourceOrder={FormatLaneOrder(m_SourceLanes)} targetOrder={FormatLaneOrder(m_TargetLanes)}.");
                 return false;
             }
 
@@ -354,7 +354,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (turn == TurnDirection.Ambiguous)
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Cannot determine turn side splitNode={FormatEntity(request.SplitNode)} selectedTargets={FormatLaneOrder(selectedTargets)} extraIndex={extraTargetListIndex} centerDiagnostics={centerTurnDiagnostic}; leaving connectors unchanged.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Cannot determine turn side splitNode={FormatEntity(request.SplitNode)} selectedTargets={FormatLaneOrder(selectedTargets)} extraIndex={extraTargetListIndex} centerDiagnostics={centerTurnDiagnostic}; leaving connectors unchanged.");
                 return false;
             }
 
@@ -380,7 +380,7 @@ namespace PocketTurnLanes.Systems.Tool
                     out string mappingSource,
                     out string mappingReason))
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Cannot build desired lane mapping splitNode={FormatEntity(request.SplitNode)} sourceOrder={FormatLaneOrder(m_SourceLanes)} selectedTargets={FormatLaneOrder(selectedTargets)} extraTarget={extraTargetLaneIndex} branchSource={branchSourceLaneIndex} existing={FormatConnectorLanes(m_ExistingConnectorLanes)} reason={mappingReason}.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Cannot build desired lane mapping splitNode={FormatEntity(request.SplitNode)} sourceOrder={FormatLaneOrder(m_SourceLanes)} selectedTargets={FormatLaneOrder(selectedTargets)} extraTarget={extraTargetLaneIndex} branchSource={branchSourceLaneIndex} existing={FormatConnectorLanes(m_ExistingConnectorLanes)} reason={mappingReason}.");
                 return false;
             }
 
@@ -393,7 +393,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (!TryPrepareReverseMappings(ref request, outerEdge, out string reverseMappingSource, out string reverseMappingReason))
             {
-                Mod.log.Warn($"[SplitLaneConnectionFix] Cannot prepare reverse split-node mapping splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} reason={reverseMappingReason}; leaving connectors unchanged to avoid partial Traffic data.");
+                Mod.log.Info($"[SplitLaneConnectionFix] Cannot prepare reverse split-node mapping splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} reason={reverseMappingReason}; leaving connectors unchanged to avoid partial Traffic data.");
                 return false;
             }
 
@@ -1331,7 +1331,7 @@ namespace PocketTurnLanes.Systems.Tool
                 if (!TryFindMappingEndpoint(request, mapping.SourceEdge, mapping.SourceLaneIndex, source: true, out _) ||
                     !TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out _))
                 {
-                    Mod.log.Warn($"[SplitLaneConnectionFix] Traffic mapping preflight failed splitNode={FormatEntity(request.SplitNode)} mapping={FormatMapping(mapping)} sourceFound={TryFindMappingEndpoint(request, mapping.SourceEdge, mapping.SourceLaneIndex, source: true, out _)} targetFound={TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out _)}.");
+                    Mod.log.Info($"[SplitLaneConnectionFix] Traffic mapping preflight failed splitNode={FormatEntity(request.SplitNode)} mapping={FormatMapping(mapping)} sourceFound={TryFindMappingEndpoint(request, mapping.SourceEdge, mapping.SourceLaneIndex, source: true, out _)} targetFound={TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out _)}.");
                     return false;
                 }
             }

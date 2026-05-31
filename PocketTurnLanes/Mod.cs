@@ -15,8 +15,7 @@ namespace PocketTurnLanes
         public const string DisplayName = "Dedicated Turn Lanes";
         public const string BindingGroup = ModId;
 
-        public static ILog log = LogManager.GetLogger($"{ModId}.{nameof(Mod)}")
-            .SetShowsErrorsInUI(false);
+        public static readonly ILog log = LogManager.GetLogger(ModId).SetShowsErrorsInUI(false);
 
         public static bool TrafficLaneConnectionFixEnabled { get; private set; }
 

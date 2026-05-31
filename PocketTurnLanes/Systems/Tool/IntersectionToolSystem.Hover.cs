@@ -243,7 +243,7 @@ namespace PocketTurnLanes.Systems.Tool
             if (!EntityManager.TryGetBuffer(nodeEntity, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
             {
                 ResetPreviewState();
-                Mod.log.Warn($"[IntersectionTool] Cannot preview split {FormatEntity(nodeEntity)}: no ConnectedEdge buffer.");
+                Mod.log.Info($"[IntersectionTool] Cannot preview split {FormatEntity(nodeEntity)}: no ConnectedEdge buffer.");
                 return inputDeps;
             }
 

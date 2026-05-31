@@ -33,13 +33,13 @@ namespace PocketTurnLanes.Systems.Tool
                 !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
                 !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: missing Edge, Curve, or PrefabRef.");
+                Mod.log.Info($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: missing Edge, Curve, or PrefabRef.");
                 return false;
             }
 
             if (curve.m_Length <= 0.01f)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: curve length is {curve.m_Length:0.###}.");
+                Mod.log.Info($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: curve length is {curve.m_Length:0.###}.");
                 return false;
             }
 
@@ -47,13 +47,13 @@ namespace PocketTurnLanes.Systems.Tool
             bool nodeIsEnd = edge.m_End == nodeEntity;
             if (!nodeIsStart && !nodeIsEnd)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: node {FormatEntity(nodeEntity)} is not an endpoint.");
+                Mod.log.Info($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: node {FormatEntity(nodeEntity)} is not an endpoint.");
                 return false;
             }
 
             if (!EntityManager.TryGetComponent(prefabRef.m_Prefab, out NetGeometryData geometryData))
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: prefab {FormatEntity(prefabRef.m_Prefab)} has no NetGeometryData.");
+                Mod.log.Info($"[IntersectionTool] Cannot split edge {FormatEntity(edgeEntity)}: prefab {FormatEntity(prefabRef.m_Prefab)} has no NetGeometryData.");
                 return false;
             }
 
@@ -124,7 +124,7 @@ namespace PocketTurnLanes.Systems.Tool
                 !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef) ||
                 !EntityManager.TryGetComponent(prefabRef.m_Prefab, out NetGeometryData geometryData))
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot prepare road-node merge fallback edge={FormatEntity(edgeEntity)}: missing Edge, Curve, PrefabRef, or prefab NetGeometryData.");
+                Mod.log.Info($"[IntersectionTool] Cannot prepare road-node merge fallback edge={FormatEntity(edgeEntity)}: missing Edge, Curve, PrefabRef, or prefab NetGeometryData.");
                 return false;
             }
 
@@ -132,7 +132,7 @@ namespace PocketTurnLanes.Systems.Tool
             bool nodeIsEndOnShortEdge = edge.m_End == nodeEntity;
             if (!nodeIsStartOnShortEdge && !nodeIsEndOnShortEdge)
             {
-                Mod.log.Warn($"[IntersectionTool] Cannot prepare road-node merge fallback edge={FormatEntity(edgeEntity)}: node {FormatEntity(nodeEntity)} is not an endpoint.");
+                Mod.log.Info($"[IntersectionTool] Cannot prepare road-node merge fallback edge={FormatEntity(edgeEntity)}: node {FormatEntity(nodeEntity)} is not an endpoint.");
                 return false;
             }
 
@@ -163,7 +163,7 @@ namespace PocketTurnLanes.Systems.Tool
 
             if (startNode != nodeEntity && endNode != nodeEntity)
             {
-                Mod.log.Warn($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)}: merged edge would not connect hovered node {FormatEntity(nodeEntity)} start={FormatEntity(startNode)} end={FormatEntity(endNode)}.");
+                Mod.log.Info($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)}: merged edge would not connect hovered node {FormatEntity(nodeEntity)} start={FormatEntity(startNode)} end={FormatEntity(endNode)}.");
                 return false;
             }
 

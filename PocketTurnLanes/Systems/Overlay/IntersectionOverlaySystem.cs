@@ -35,7 +35,7 @@ namespace PocketTurnLanes.Systems.Overlay
                             Shader.Find("Hidden/InternalColored");
             if (shader == null)
             {
-                Mod.log.Warn("[IntersectionOverlaySystem] No shader found; hover overlay will not render.");
+                Mod.log.Info("[IntersectionOverlaySystem] No shader found; hover overlay will not render.");
             }
 
             m_Material = shader != null ? new Material(shader) : null;
