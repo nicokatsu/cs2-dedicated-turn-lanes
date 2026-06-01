@@ -1,6 +1,6 @@
 ﻿using Colossal.UI.Binding;
 using Game.UI;
-using PocketTurnLanes.Systems.Tool;
+using PocketTurnLanes.Systems.Tool.IntersectionTool;
 
 namespace PocketTurnLanes.Systems.UI
 {

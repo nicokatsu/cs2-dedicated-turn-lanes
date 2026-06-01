@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 using Game;
 using Game.SceneFlow;
-using PocketTurnLanes.Systems.Tool;
+using PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix;
 
 namespace PocketTurnLanes.Tool
 {

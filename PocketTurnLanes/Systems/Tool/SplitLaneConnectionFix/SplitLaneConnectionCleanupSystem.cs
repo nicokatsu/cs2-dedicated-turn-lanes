@@ -1,6 +1,6 @@
-﻿using Game;
+using Game;
 
-namespace PocketTurnLanes.Systems.Tool
+namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionCleanupSystem : GameSystemBase
     {

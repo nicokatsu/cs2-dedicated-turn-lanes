@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Colossal.Entities;
@@ -8,11 +8,12 @@ using Game.Notifications;
 using Game.Prefabs;
 using Game.Tools;
 using PocketTurnLanes.Systems.Overlay;
+using PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix;
 using PocketTurnLanes.Tool;
 using Unity.Entities;
 using Unity.Jobs;
 
-namespace PocketTurnLanes.Systems.Tool
+namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
     public partial class IntersectionToolSystem : ToolBaseSystem
     {

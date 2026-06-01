@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Colossal.Entities;
 using Colossal.Mathematics;
 using Game.Common;
@@ -10,7 +10,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 
-namespace PocketTurnLanes.Systems.Tool
+namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
     public partial class IntersectionToolSystem
     {

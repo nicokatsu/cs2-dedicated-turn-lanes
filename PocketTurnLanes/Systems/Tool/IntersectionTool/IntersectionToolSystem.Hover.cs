@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Text;
 using Colossal.Entities;
 using Game.Common;
@@ -13,7 +13,7 @@ using PathMethod = Game.Pathfind.PathMethod;
 using NetCarLane = Game.Net.CarLane;
 using NetSubLane = Game.Net.SubLane;
 
-namespace PocketTurnLanes.Systems.Tool
+namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
     public partial class IntersectionToolSystem
     {

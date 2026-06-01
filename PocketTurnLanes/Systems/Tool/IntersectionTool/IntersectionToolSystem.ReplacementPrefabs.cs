@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -14,7 +14,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using static PocketTurnLanes.Tool.RoadLaneCountMatcher;
 
-namespace PocketTurnLanes.Systems.Tool
+namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
     public partial class IntersectionToolSystem
     {
