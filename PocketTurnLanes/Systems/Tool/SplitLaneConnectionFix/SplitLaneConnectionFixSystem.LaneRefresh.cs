@@ -86,6 +86,58 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Mod.LogDiagnostic($"[SplitLaneConnectionFix] Marked lane rebuild neighborhood splitNode={FormatEntity(request.SplitNode)} scannedConnectedEdges={scannedEdges} addedUpdatedNodes={updatedNodes} alreadyUpdatedNodes={alreadyUpdatedNodes} addedUpdatedEdges={updatedEdges} alreadyUpdatedEdges={alreadyUpdatedEdges} pocketEdge={FormatEntity(request.PocketEdge)} outerEdge={FormatEntity(request.OuterEdge)} originalEdge={FormatEntity(request.OriginalEdge)} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
         }
 
+        private void MarkCenterForLaneRebuild(Entity centerNode)
+        {
+            int updatedNodes = MarkUpdatedIfExists(centerNode, out bool centerAlreadyUpdated) ? 1 : 0;
+            int alreadyUpdatedNodes = centerAlreadyUpdated ? 1 : 0;
+            int updatedEdges = 0;
+            int alreadyUpdatedEdges = 0;
+            int scannedEdges = 0;
+
+            if (EntityManager.TryGetBuffer(centerNode, true, out DynamicBuffer<ConnectedEdge> connectedEdges))
+            {
+                scannedEdges = connectedEdges.Length;
+                for (int i = 0; i < connectedEdges.Length; i++)
+                {
+                    Entity edgeEntity = connectedEdges[i].m_Edge;
+                    if (edgeEntity == Entity.Null ||
+                        !EntityManager.Exists(edgeEntity) ||
+                        EntityManager.HasComponent<Deleted>(edgeEntity))
+                    {
+                        continue;
+                    }
+
+                    if (MarkUpdatedIfExists(edgeEntity, out bool edgeAlreadyUpdated))
+                    {
+                        updatedEdges++;
+                    }
+                    else if (edgeAlreadyUpdated)
+                    {
+                        alreadyUpdatedEdges++;
+                    }
+
+                    if (EntityManager.TryGetComponent(edgeEntity, out NetEdge edge))
+                    {
+                        Entity otherNode = edge.m_Start == centerNode
+                            ? edge.m_End
+                            : edge.m_End == centerNode
+                                ? edge.m_Start
+                                : Entity.Null;
+                        if (MarkUpdatedIfExists(otherNode, out bool otherNodeAlreadyUpdated))
+                        {
+                            updatedNodes++;
+                        }
+                        else if (otherNodeAlreadyUpdated)
+                        {
+                            alreadyUpdatedNodes++;
+                        }
+                    }
+                }
+            }
+
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Marked center lane rebuild neighborhood centerNode={FormatEntity(centerNode)} scannedConnectedEdges={scannedEdges} addedUpdatedNodes={updatedNodes} alreadyUpdatedNodes={alreadyUpdatedNodes} addedUpdatedEdges={updatedEdges} alreadyUpdatedEdges={alreadyUpdatedEdges} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
+        }
+
         private bool MarkUpdatedIfExists(Entity entity)
         {
             return MarkUpdatedIfExists(entity, out _);

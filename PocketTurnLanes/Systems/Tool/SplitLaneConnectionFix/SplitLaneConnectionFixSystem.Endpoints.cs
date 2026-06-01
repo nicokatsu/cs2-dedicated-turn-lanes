@@ -113,13 +113,23 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             CollectEdgeLaneEndpoints(edgeEntity, splitNode, role, output, includeTrackOnly: true, trackCandidateMode: true);
         }
 
+        private void CollectEdgeCenterPreservationLaneEndpoints(
+            Entity edgeEntity,
+            Entity splitNode,
+            EndpointRole role,
+            List<LaneEndpoint> output)
+        {
+            CollectEdgeLaneEndpoints(edgeEntity, splitNode, role, output, includeTrackOnly: true, includeNonRoadPathMethods: true);
+        }
+
         private void CollectEdgeLaneEndpoints(
             Entity edgeEntity,
             Entity splitNode,
             EndpointRole role,
             List<LaneEndpoint> output,
             bool includeTrackOnly,
-            bool trackCandidateMode = false)
+            bool trackCandidateMode = false,
+            bool includeNonRoadPathMethods = false)
         {
             output.Clear();
 
@@ -154,7 +164,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 SubLane subLane = subLanes[i];
                 Entity laneEntity = subLane.m_SubLane;
                 if (laneEntity == Entity.Null ||
-                    (subLane.m_PathMethods & (PathMethod.Road | PathMethod.Track)) == 0 ||
+                    (includeNonRoadPathMethods
+                        ? subLane.m_PathMethods == 0
+                        : (subLane.m_PathMethods & (PathMethod.Road | PathMethod.Track)) == 0) ||
                     EntityManager.HasComponent<Deleted>(laneEntity) ||
                     !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
                     !EntityManager.TryGetComponent(laneEntity, out EdgeLane edgeLane) ||
@@ -179,10 +191,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 bool isTrackLane = includeTrackOnly &&
                                    laneFlagsTrack &&
                                    hasTrackEvidence;
-                bool includeLane = trackCandidateMode ? isTrackLane : isCarRoadLane || isTrackLane;
+                bool isNonRoadTrafficLane = includeNonRoadPathMethods &&
+                                            (subLane.m_PathMethods & ~(PathMethod.Road | PathMethod.Track)) != 0;
+                bool includeLane = trackCandidateMode ? isTrackLane : isCarRoadLane || isTrackLane || isNonRoadTrafficLane;
                 if (!includeLane ||
-                    (hasSecondaryLane && !isTrackLane) ||
-                    (laneData.m_Flags & (LaneFlags.Utility | LaneFlags.Pedestrian | LaneFlags.Parking | LaneFlags.ParkingLeft | LaneFlags.ParkingRight)) != 0)
+                    (!includeNonRoadPathMethods && hasSecondaryLane && !isTrackLane) ||
+                    (!includeNonRoadPathMethods &&
+                     (laneData.m_Flags & (LaneFlags.Utility | LaneFlags.Pedestrian | LaneFlags.Parking | LaneFlags.ParkingLeft | LaneFlags.ParkingRight)) != 0))
                 {
                     continue;
                 }
