@@ -3721,6 +3721,85 @@ namespace PocketTurnLanes.Systems.Tool
             int nextNodeLaneIndex = GetNextNodeLaneIndex(request.SplitNode, subLanes);
             m_RemoveSubLaneIndexes.Clear();
 
+            int preflightNextNodeLaneIndex = nextNodeLaneIndex;
+            if (!TryPreflightRebuildConnectorDirection(
+                    request,
+                    subLanes,
+                    request.Mappings,
+                    request.SourceLanes,
+                    request.TargetLanes,
+                    request.OuterEdge,
+                    request.PocketEdge,
+                    "forward",
+                    preflightNextNodeLaneIndex,
+                    out int forwardMissingClones,
+                    out string forwardReason))
+            {
+                stats.Reason = forwardReason;
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct road rebuild preflight skipped before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} forward={forwardReason}.");
+                return false;
+            }
+
+            preflightNextNodeLaneIndex += forwardMissingClones;
+            string reverseReason = request.Mode == RepairMode.ShortEdgeTransition
+                ? "short-edge-transition-reverse-not-restored"
+                : "standard-reverse-not-rebuilt";
+            if (request.Mode == RepairMode.BalancedOppositeTarget)
+            {
+                if (request.ReverseMappings == null || request.ReverseMappings.Length == 0)
+                {
+                    stats.Reason = "balanced reverse mappings missing";
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct road rebuild preflight skipped before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} forward={forwardReason} reverse={stats.Reason}.");
+                    return false;
+                }
+
+                if (!TryPreflightRebuildConnectorDirection(
+                        request,
+                        subLanes,
+                        request.ReverseMappings,
+                        request.ReverseSourceLanes,
+                        request.ReverseTargetLanes,
+                        request.PocketEdge,
+                        request.OuterEdge,
+                        "balanced-reverse",
+                        preflightNextNodeLaneIndex,
+                        out int reverseMissingClones,
+                        out reverseReason))
+                {
+                    stats.Reason = reverseReason;
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct road rebuild preflight skipped before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} forward={forwardReason} reverse={reverseReason}.");
+                    return false;
+                }
+
+                preflightNextNodeLaneIndex += reverseMissingClones;
+            }
+            else if (request.Mode == RepairMode.ShortEdgeTransition &&
+                     request.ReverseMappings != null &&
+                     request.ReverseMappings.Length > 0)
+            {
+                if (!TryPreflightRebuildConnectorDirection(
+                        request,
+                        subLanes,
+                        request.ReverseMappings,
+                        request.ReverseSourceLanes,
+                        request.ReverseTargetLanes,
+                        request.PocketEdge,
+                        request.OuterEdge,
+                        "short-edge-transition-reverse",
+                        preflightNextNodeLaneIndex,
+                        out int reverseMissingClones,
+                        out reverseReason))
+                {
+                    stats.Reason = reverseReason;
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct road rebuild preflight skipped before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} forward={forwardReason} reverse={reverseReason}.");
+                    return false;
+                }
+
+                preflightNextNodeLaneIndex += reverseMissingClones;
+            }
+
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct road rebuild preflight ok splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} forward={forwardReason} reverse={reverseReason} startNodeLaneIndex={nextNodeLaneIndex} preflightNextNodeLaneIndex={preflightNextNodeLaneIndex}.");
+
             if (!TryRebuildConnectorDirection(
                     request,
                     subLanes,
@@ -3732,23 +3811,14 @@ namespace PocketTurnLanes.Systems.Tool
                     "forward",
                     ref nextNodeLaneIndex,
                     ref stats,
-                    out string forwardReason))
+                    out forwardReason))
             {
                 stats.Reason = forwardReason;
                 return false;
             }
 
-            string reverseReason = request.Mode == RepairMode.ShortEdgeTransition
-                ? "short-edge-transition-reverse-not-restored"
-                : "standard-reverse-not-rebuilt";
             if (request.Mode == RepairMode.BalancedOppositeTarget)
             {
-                if (request.ReverseMappings == null || request.ReverseMappings.Length == 0)
-                {
-                    stats.Reason = "balanced reverse mappings missing";
-                    return false;
-                }
-
                 if (!TryRebuildConnectorDirection(
                         request,
                         subLanes,
@@ -3849,6 +3919,82 @@ namespace PocketTurnLanes.Systems.Tool
             }
 
             Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct rebuild result splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} expected={FormatMappings(request.Mappings)} reverseExpected={FormatMappings(request.ReverseMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] staleUturn={m_StaleConnectorLanes.Count} reverseReason={reverseReason} trackForward={trackForwardReason} trackReverse={trackReverseReason} kept={stats.Kept} cloned={stats.Cloned} deleted={stats.Deleted} deletedUturn={stats.DeletedUturn} trackKept={stats.TrackKept} trackCloned={stats.TrackCloned} trackSkipped={stats.TrackSkipped} updated={stats.Updated}.");
+            return true;
+        }
+
+        private bool TryPreflightRebuildConnectorDirection(
+            Request request,
+            DynamicBuffer<SubLane> subLanes,
+            LaneMapping[] mappings,
+            LaneEndpoint[] sourceLanes,
+            LaneEndpoint[] targetLanes,
+            Entity sourceEdge,
+            Entity targetEdge,
+            string direction,
+            int nextNodeLaneIndex,
+            out int missingCloneCount,
+            out string reason)
+        {
+            missingCloneCount = 0;
+            reason = string.Empty;
+            if (mappings == null || mappings.Length == 0)
+            {
+                reason = $"{direction} missing expected mappings";
+                return false;
+            }
+
+            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
+            for (int i = 0; i < mappings.Length; i++)
+            {
+                expected.Add(new ConnectionKey(mappings[i].SourceLaneIndex, mappings[i].TargetLaneIndex));
+            }
+
+            CollectConnectorLanes(request.SplitNode, sourceEdge, targetEdge, subLanes, m_ConnectorLanes);
+            if (m_ConnectorLanes.Count == 0)
+            {
+                reason = $"{direction} no existing connector lanes to use as templates sourceEdge={FormatEntity(sourceEdge)} targetEdge={FormatEntity(targetEdge)}";
+                return false;
+            }
+
+            HashSet<ConnectionKey> existingKeys = new HashSet<ConnectionKey>();
+            for (int i = 0; i < m_ConnectorLanes.Count; i++)
+            {
+                ConnectorLane connector = m_ConnectorLanes[i];
+                existingKeys.Add(new ConnectionKey(connector.SourceLaneIndex, connector.TargetLaneIndex));
+            }
+
+            for (int i = 0; i < mappings.Length; i++)
+            {
+                LaneMapping mapping = mappings[i];
+                ConnectionKey key = new ConnectionKey(mapping.SourceLaneIndex, mapping.TargetLaneIndex);
+                if (existingKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                if (!TryFindLaneEndpoint(sourceLanes, mapping.SourceLaneIndex, out _) ||
+                    !TryFindLaneEndpoint(targetLanes, mapping.TargetLaneIndex, out _))
+                {
+                    reason = $"{direction} missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
+                    return false;
+                }
+
+                if (!TryFindConnectorTemplate(mapping, out _))
+                {
+                    reason = $"{direction} missing clone template source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
+                    return false;
+                }
+
+                missingCloneCount++;
+            }
+
+            if (nextNodeLaneIndex + missingCloneCount > ushort.MaxValue)
+            {
+                reason = $"{direction} node lane index exhausted next={nextNodeLaneIndex} missing={missingCloneCount}";
+                return false;
+            }
+
+            reason = $"{direction} preflight-ok expected={FormatConnectionSet(expected)} existing={existingKeys.Count} missingClones={missingCloneCount}";
             return true;
         }
 
