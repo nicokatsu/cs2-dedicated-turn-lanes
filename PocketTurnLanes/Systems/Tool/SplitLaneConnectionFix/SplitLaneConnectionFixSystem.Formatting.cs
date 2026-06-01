@@ -58,6 +58,26 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return $"{snapshot.Source}/{count} node={FormatEntity(snapshot.Node)} source={FormatEntity(snapshot.SourceEdge)} target={FormatEntity(snapshot.TargetEdge)} detail=({snapshot.Detail})";
         }
 
+        private static string FormatFarSnapshot(FarIntersectionTrafficSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return "<none>";
+            }
+
+            int sourceCount = snapshot.Entries?.Length ?? 0;
+            int connectionCount = 0;
+            if (snapshot.Entries != null)
+            {
+                for (int i = 0; i < snapshot.Entries.Length; i++)
+                {
+                    connectionCount += snapshot.Entries[i].Connections?.Length ?? 0;
+                }
+            }
+
+            return $"{snapshot.Source}/{sourceCount} sources/{connectionCount} connections node={FormatEntity(snapshot.Node)} continuation={FormatEntity(snapshot.ContinuationEdge)} detail=({snapshot.Detail})";
+        }
+
         private static string FormatSnapshotMappings(IReadOnlyList<TransitionConnectionSnapshotMapping> mappings)
         {
             if (mappings == null || mappings.Count == 0)
@@ -126,7 +146,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private void LogCenterRewritePlan(Request request, CenterRewritePlan plan)
         {
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Built center Traffic rewrite plan centerNode={FormatEntity(request.IntersectionNode)} splitNode={FormatEntity(request.SplitNode)} pocketEdge={FormatEntity(request.PocketEdge)} leftHandTraffic={plan.LeftHandTraffic} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} trafficWriteOrder=centerFirstOuterSecond scope=pocketApproachOnly connectorCount={plan.CenterConnectors} approachesScanned={plan.ApproachesScanned} offScopeApproaches={plan.OffScopeApproaches} approachesWithBigTurn={plan.BigTurnApproaches} approachesRewritten={plan.ApproachesRewritten} approachesSkipped={plan.ApproachesSkipped} sourcePlans={plan.BySource.Count} plannedConnections={plan.PlannedConnections} straightConnectionsSafe={plan.StraightConnectionsWrittenSafe} straightUnsafeCleared={plan.StraightUnsafeCleared} smallTurnClearedFromStraightLane={plan.SmallTurnConnectionsClearedFromStraightLane} roadBicycle={plan.BicycleConnectionsWrittenWithRoad} runtimePreserved={plan.PreservedRuntimeConnections} snapshotPreserved={plan.PreservedSnapshotConnections} preservedUturn={plan.PreservedUturnConnections} preservedNonRoad={plan.PreservedNonRoadConnections} preservedUnsafe={plan.PreservedUnsafeConnections} preservationSkipped={plan.PreservationSkipped} legacyOffScopeSourceKeys={FormatSourceLaneKeys(plan.LegacyOffScopeSourceKeys)} diagnostics={FormatStringList(plan.Diagnostics)}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Built center Traffic rewrite plan centerNode={FormatEntity(request.IntersectionNode)} splitNode={FormatEntity(request.SplitNode)} pocketEdge={FormatEntity(request.PocketEdge)} leftHandTraffic={plan.LeftHandTraffic} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} trafficWriteOrder={GetTrafficWriteOrder(request.Mode)} scope=pocketApproachOnly connectorCount={plan.CenterConnectors} approachesScanned={plan.ApproachesScanned} offScopeApproaches={plan.OffScopeApproaches} approachesWithBigTurn={plan.BigTurnApproaches} approachesRewritten={plan.ApproachesRewritten} approachesSkipped={plan.ApproachesSkipped} sourcePlans={plan.BySource.Count} plannedConnections={plan.PlannedConnections} straightConnectionsSafe={plan.StraightConnectionsWrittenSafe} straightUnsafeCleared={plan.StraightUnsafeCleared} smallTurnClearedFromStraightLane={plan.SmallTurnConnectionsClearedFromStraightLane} roadBicycle={plan.BicycleConnectionsWrittenWithRoad} runtimePreserved={plan.PreservedRuntimeConnections} snapshotPreserved={plan.PreservedSnapshotConnections} preservedUturn={plan.PreservedUturnConnections} preservedNonRoad={plan.PreservedNonRoadConnections} preservedUnsafe={plan.PreservedUnsafeConnections} preservationSkipped={plan.PreservationSkipped} legacyOffScopeSourceKeys={FormatSourceLaneKeys(plan.LegacyOffScopeSourceKeys)} diagnostics={FormatStringList(plan.Diagnostics)}.");
         }
 
         private static string FormatCenterSourceMovementSummaries(

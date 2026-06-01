@@ -206,7 +206,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                     TargetForwardLanes = candidate.TargetForwardLanes,
                     TargetBackwardLanes = candidate.TargetBackwardLanes,
-                    Attempt = nextAttempt
+                    Attempt = nextAttempt,
+                    FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
                 });
                 Mod.LogDiagnostic($"[IntersectionTool] Preview split missing edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)}; retry attempt={nextAttempt} {retryDetail} requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m split={splitPosition:0.###} target={targetDistance:0.##}m distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m.");
             }
@@ -449,7 +450,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                     TargetForwardLanes = candidate.TargetForwardLanes,
                     TargetBackwardLanes = candidate.TargetBackwardLanes,
-                    Attempt = candidate.Attempt
+                    Attempt = candidate.Attempt,
+                    FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
                 });
 
                 queuedCount++;
@@ -616,7 +618,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 TargetForwardLanes = candidate.TargetForwardLanes,
                 TargetBackwardLanes = candidate.TargetBackwardLanes,
                 TransitionOuterEdge = candidate.ContinuationEdge,
-                TransitionReverseSnapshot = candidate.TransitionReverseSnapshot
+                TransitionReverseSnapshot = candidate.TransitionReverseSnapshot,
+                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
             };
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest request))
@@ -758,7 +761,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalForwardLanes = candidate.OriginalForwardLanes,
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                 TargetForwardLanes = candidate.TargetForwardLanes,
-                TargetBackwardLanes = candidate.TargetBackwardLanes
+                TargetBackwardLanes = candidate.TargetBackwardLanes,
+                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
             };
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest request))
@@ -1222,7 +1226,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalForwardLanes = candidate.OriginalForwardLanes,
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                 TargetForwardLanes = candidate.TargetForwardLanes,
-                TargetBackwardLanes = candidate.TargetBackwardLanes
+                TargetBackwardLanes = candidate.TargetBackwardLanes,
+                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
             };
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest definitionRequest))

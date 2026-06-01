@@ -167,7 +167,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     candidate.OriginalEdge,
                     finalPocketEdge,
                     candidate.SourcePrefab,
-                    candidate.TargetPrefab);
+                    candidate.TargetPrefab,
+                    candidate.FarIntersectionSnapshot);
                 return;
             }
 
@@ -340,7 +341,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                     TargetForwardLanes = candidate.TargetForwardLanes,
                     TargetBackwardLanes = candidate.TargetBackwardLanes,
-                    Attempt = nextAttempt
+                    Attempt = nextAttempt,
+                    FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
                 });
 
                 retryCount++;
@@ -499,7 +501,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     OriginalBackwardLanes = mergeCandidate.OriginalBackwardLanes,
                     TargetForwardLanes = mergeCandidate.TargetForwardLanes,
                     TargetBackwardLanes = mergeCandidate.TargetBackwardLanes,
-                    Attempt = 0
+                    Attempt = 0,
+                    FarIntersectionSnapshot = mergeCandidate.FarIntersectionSnapshot
                 });
 
                 queuedSplitCount++;
@@ -912,7 +915,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     OriginalForwardLanes = splitCandidate.OriginalForwardLanes,
                     OriginalBackwardLanes = splitCandidate.OriginalBackwardLanes,
                     TargetForwardLanes = splitCandidate.TargetForwardLanes,
-                    TargetBackwardLanes = splitCandidate.TargetBackwardLanes
+                    TargetBackwardLanes = splitCandidate.TargetBackwardLanes,
+                    FarIntersectionSnapshot = splitCandidate.FarIntersectionSnapshot
                 };
                 DeferSplitLaneConnectionFix(alreadyReplacedCandidate, pocketEdge, "already-target-prefab");
 
@@ -940,7 +944,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalForwardLanes = splitCandidate.OriginalForwardLanes,
                 OriginalBackwardLanes = splitCandidate.OriginalBackwardLanes,
                 TargetForwardLanes = splitCandidate.TargetForwardLanes,
-                TargetBackwardLanes = splitCandidate.TargetBackwardLanes
+                TargetBackwardLanes = splitCandidate.TargetBackwardLanes,
+                FarIntersectionSnapshot = splitCandidate.FarIntersectionSnapshot
             };
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest request))

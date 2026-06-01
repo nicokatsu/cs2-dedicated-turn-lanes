@@ -52,6 +52,45 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public bool IsUnsafe;
         }
 
+        public sealed class FarIntersectionTrafficSnapshot
+        {
+            public Entity Node;
+            public Entity ContinuationEdge;
+            public string Source;
+            public string Detail;
+            public FarIntersectionTrafficSnapshotEntry[] Entries;
+        }
+
+        public struct FarIntersectionTrafficSnapshotEntry
+        {
+            public Entity SourceEdge;
+            public int SourceLaneIndex;
+            public int2 SourceCarriagewayAndGroup;
+            public float3 SourceLanePosition;
+            public bool HasSourceEndpoint;
+            public float SourceLateral;
+            public int SourceOrder;
+            public FarIntersectionTrafficSnapshotConnection[] Connections;
+        }
+
+        public struct FarIntersectionTrafficSnapshotConnection
+        {
+            public Entity SourceEdge;
+            public Entity TargetEdge;
+            public int SourceLaneIndex;
+            public int TargetLaneIndex;
+            public float3x2 LanePositionMap;
+            public int4 CarriagewayAndGroupIndexMap;
+            public PathMethod Method;
+            public bool IsUnsafe;
+            public bool HasSourceEndpoint;
+            public bool HasTargetEndpoint;
+            public float SourceLateral;
+            public float TargetLateral;
+            public int SourceOrder;
+            public int TargetOrder;
+        }
+
         private static void ResetRoadPreparation(ref Request request)
         {
             request.ForwardRoadState = RoadDirectionState.Skipped;
@@ -67,6 +106,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             request.BranchSourceLaneIndex = -1;
             request.ExtraTargetLaneIndex = -1;
             request.Turn = TurnDirection.Ambiguous;
+        }
+
+        private static string GetTrafficWriteOrder(RepairMode mode)
+        {
+            return mode == RepairMode.BalancedOppositeTarget
+                ? "farRestoreFirstCenterSecondOuterThird"
+                : "centerFirstOuterSecond";
         }
 
         private static void MarkForwardRoadSkipped(ref Request request, string reason)
@@ -333,6 +379,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public LaneMapping[] TrackReverseMappings;
             public string TrackSkippedReason;
             public TransitionConnectionSnapshot TransitionReverseSnapshot;
+            public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
             public int BranchSourceLaneIndex;
             public int ExtraTargetLaneIndex;
             public TurnDirection Turn;

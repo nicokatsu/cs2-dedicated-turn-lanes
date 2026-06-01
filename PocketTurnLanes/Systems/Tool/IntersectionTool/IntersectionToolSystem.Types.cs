@@ -211,6 +211,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
             public int Attempt;
+            public SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
         }
 
         private struct NodeMergeCandidate
@@ -246,6 +247,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int TargetBackwardLanes;
             public NodeMergeDefinitionRequest MergeRequest;
             public SplitLaneConnectionFixSystem.TransitionConnectionSnapshot TransitionReverseSnapshot;
+            public SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
         }
 
         private struct ReplacementDefinitionRequest
@@ -327,6 +329,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int TargetBackwardLanes;
             public Entity TransitionOuterEdge;
             public SplitLaneConnectionFixSystem.TransitionConnectionSnapshot TransitionReverseSnapshot;
+            public SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
         }
 
         private struct CreateNodeMergeDefinitionJob : IJob

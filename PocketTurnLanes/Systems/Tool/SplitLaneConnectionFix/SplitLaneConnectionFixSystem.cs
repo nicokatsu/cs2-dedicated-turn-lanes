@@ -322,7 +322,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Entity originalEdge,
             Entity pocketEdge,
             Entity sourcePrefab,
-            Entity targetPrefab)
+            Entity targetPrefab,
+            FarIntersectionTrafficSnapshot farIntersectionSnapshot)
         {
             QueueInternal(
                 intersectionNode,
@@ -332,7 +333,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 pocketEdge,
                 sourcePrefab,
                 targetPrefab,
-                RepairMode.BalancedOppositeTarget);
+                RepairMode.BalancedOppositeTarget,
+                farIntersectionSnapshot: farIntersectionSnapshot);
         }
 
         public void QueueShortEdgeTransition(
@@ -367,7 +369,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Entity targetPrefab,
             RepairMode mode,
             Entity explicitOuterEdge = default,
-            TransitionConnectionSnapshot reverseSnapshot = null)
+            TransitionConnectionSnapshot reverseSnapshot = null,
+            FarIntersectionTrafficSnapshot farIntersectionSnapshot = null)
         {
             if (splitNode == Entity.Null || pocketEdge == Entity.Null)
             {
@@ -388,6 +391,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     existing.Mode = mode;
                     existing.OuterEdge = explicitOuterEdge;
                     existing.TransitionReverseSnapshot = reverseSnapshot;
+                    existing.FarIntersectionSnapshot = farIntersectionSnapshot;
                     existing.QueuedFrame = UnityEngine.Time.frameCount;
                     existing.LaneDataRetries = 0;
                     existing.VerificationAttempts = 0;
@@ -397,7 +401,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     ResetRoadPreparation(ref existing);
                     ResetTrackSnapshot(ref existing);
                     m_Requests[i] = existing;
-                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} reverseSnapshot={FormatSnapshot(reverseSnapshot)} frame={UnityEngine.Time.frameCount}.");
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} reverseSnapshot={FormatSnapshot(reverseSnapshot)} farSnapshot={FormatFarSnapshot(farIntersectionSnapshot)} frame={UnityEngine.Time.frameCount}.");
                     return;
                 }
             }
@@ -414,6 +418,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 Mode = mode,
                 OuterEdge = explicitOuterEdge,
                 TransitionReverseSnapshot = reverseSnapshot,
+                FarIntersectionSnapshot = farIntersectionSnapshot,
                 ForwardRoadState = RoadDirectionState.Skipped,
                 ReverseRoadState = RoadDirectionState.Skipped,
                 QueuedFrame = UnityEngine.Time.frameCount
@@ -422,7 +427,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             bool splitUpdated = MarkUpdatedIfExists(splitNode, out bool splitAlreadyUpdated);
             bool pocketUpdated = MarkUpdatedIfExists(pocketEdge, out bool pocketAlreadyUpdated);
             bool originalUpdated = MarkUpdatedIfExists(originalEdge, out bool originalAlreadyUpdated);
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} intersection={FormatEntity(intersectionNode)} farIntersection={FormatEntity(farIntersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} reverseSnapshot={FormatSnapshot(reverseSnapshot)} frame={UnityEngine.Time.frameCount} preMarkedUpdated=split:{FormatUpdateMarker(splitUpdated, splitAlreadyUpdated)},pocket:{FormatUpdateMarker(pocketUpdated, pocketAlreadyUpdated)},original:{FormatUpdateMarker(originalUpdated, originalAlreadyUpdated)}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Queued split-node connection repair splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} intersection={FormatEntity(intersectionNode)} farIntersection={FormatEntity(farIntersectionNode)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} reverseSnapshot={FormatSnapshot(reverseSnapshot)} farSnapshot={FormatFarSnapshot(farIntersectionSnapshot)} frame={UnityEngine.Time.frameCount} preMarkedUpdated=split:{FormatUpdateMarker(splitUpdated, splitAlreadyUpdated)},pocket:{FormatUpdateMarker(pocketUpdated, pocketAlreadyUpdated)},original:{FormatUpdateMarker(originalUpdated, originalAlreadyUpdated)}. Repair waits for post-apply lane generation; preview is intentionally not modified.");
         }
     }
 }

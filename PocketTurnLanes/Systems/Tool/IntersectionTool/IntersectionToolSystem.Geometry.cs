@@ -484,6 +484,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 ? continuationSeed.m_Seed
                 : continuationEdge.Index;
             bool hasMergedUpgraded = EntityManager.TryGetComponent(continuationEdge, out Upgraded mergedUpgraded);
+            SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot farSnapshot = m_SplitLaneConnectionFixSystem != null
+                ? m_SplitLaneConnectionFixSystem.CaptureFarIntersectionTrafficSnapshot(farNode, continuationEdge)
+                : null;
 
             candidate = new NodeMergeCandidate
             {
@@ -516,6 +519,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = continuationRoadCounts.Backward,
                 TargetForwardLanes = prefabMatch.TargetCounts.Forward,
                 TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                FarIntersectionSnapshot = farSnapshot,
                 MergeRequest = new NodeMergeDefinitionRequest
                 {
                     Prefab = prefabMatch.Prefab,
@@ -546,7 +550,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 }
             };
 
-            Mod.LogDiagnostic($"[IntersectionTool] Balanced road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(sourcePrefab)} continuationPrefab={GetPrefabNameFromPrefab(continuationPrefab)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)} mergeDirection={(continuationStartsAtRemovedNode ? "current-to-far" : "far-to-current")} previewShortEdgeOrientation={(prefabMatch.Invert ? "reversed" : "direct")} postMergeCurrentOrientation={(postMergeInvertTarget ? "reversed" : "direct")} currentNodeSideOnShort={(nodeIsStartOnShortEdge ? "start" : "end")} currentNodeSideOnMerged={(nodeIsStartOnMergedEdge ? "start" : "end")} continuationLayout={continuationLayoutDetail} shortLength={candidate.ShortEdgeLength:0.##}m continuationLength={candidate.ContinuationEdgeLength:0.##}m mergedLength={mergedLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m reservedTwice={reservedLength:0.##}m half={halfUsableLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m requestedPocket={targetPocketLength:0.##}m widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} mergeTargetUpgrade={(hasMergedUpgraded ? mergedUpgraded.m_Flags.ToString() : "none")} currentTargetUpgrade={(prefabMatch.HasTargetUpgrade ? prefabMatch.TargetUpgrade.m_Flags.ToString() : "none")} laneRepair=balanced-opposite-target.");
+            string farSnapshotDetail = farSnapshot != null ? farSnapshot.Detail : "unavailable";
+            Mod.LogDiagnostic($"[IntersectionTool] Balanced road-node merge fallback accepted shortEdge={FormatEntity(edgeEntity)} removableNode={FormatEntity(removableNode)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)} sourcePrefab={GetPrefabNameFromPrefab(sourcePrefab)} continuationPrefab={GetPrefabNameFromPrefab(continuationPrefab)} targetPrefab={GetPrefabNameFromPrefab(prefabMatch.Prefab)} mergeDirection={(continuationStartsAtRemovedNode ? "current-to-far" : "far-to-current")} previewShortEdgeOrientation={(prefabMatch.Invert ? "reversed" : "direct")} postMergeCurrentOrientation={(postMergeInvertTarget ? "reversed" : "direct")} currentNodeSideOnShort={(nodeIsStartOnShortEdge ? "start" : "end")} currentNodeSideOnMerged={(nodeIsStartOnMergedEdge ? "start" : "end")} continuationLayout={continuationLayoutDetail} shortLength={candidate.ShortEdgeLength:0.##}m continuationLength={candidate.ContinuationEdgeLength:0.##}m mergedLength={mergedLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m reservedTwice={reservedLength:0.##}m half={halfUsableLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m requestedPocket={targetPocketLength:0.##}m widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} mergeTargetUpgrade={(hasMergedUpgraded ? mergedUpgraded.m_Flags.ToString() : "none")} currentTargetUpgrade={(prefabMatch.HasTargetUpgrade ? prefabMatch.TargetUpgrade.m_Flags.ToString() : "none")} farSnapshot=({farSnapshotDetail}) laneRepair=balanced-opposite-target.");
             return true;
         }
 
