@@ -3256,37 +3256,6 @@ namespace PocketTurnLanes.Systems.Tool
                 return false;
             }
 
-            m_KeptTrafficConnections.Clear();
-
-            int removedExisting = 0;
-            int originalLength = trafficApi.GetBufferLength(modifiedBuffer);
-            bool removePocketExisting = request.Mode != RepairMode.ShortEdgeTransition ||
-                                        (request.ReverseMappings != null && request.ReverseMappings.Length > 0);
-            for (int i = 0; i < originalLength; i++)
-            {
-                object existing = trafficApi.GetBufferItem(modifiedBuffer, i);
-                Entity edge = trafficApi.GetModifiedConnectionEdge(existing);
-                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(existing);
-                if (edge == request.OuterEdge || (removePocketExisting && edge == request.PocketEdge))
-                {
-                    removedExisting++;
-                    if (modifiedEntity != Entity.Null && EntityManager.Exists(modifiedEntity))
-                    {
-                        AddMarkerIfMissing<Deleted>(modifiedEntity);
-                    }
-
-                    continue;
-                }
-
-                m_KeptTrafficConnections.Add(existing);
-            }
-
-            trafficApi.ClearBuffer(modifiedBuffer);
-            for (int i = 0; i < m_KeptTrafficConnections.Count; i++)
-            {
-                trafficApi.AddBufferElement(modifiedBuffer, m_KeptTrafficConnections[i]);
-            }
-
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource = new Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>>();
             for (int i = 0; i < validMappings.Count; i++)
             {
@@ -3310,6 +3279,42 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     byTarget.Add(targetKey, mapping);
                 }
+            }
+
+            m_KeptTrafficConnections.Clear();
+
+            int removedExisting = 0;
+            int originalLength = trafficApi.GetBufferLength(modifiedBuffer);
+            bool removePocketExisting = request.Mode != RepairMode.ShortEdgeTransition ||
+                                        (request.ReverseMappings != null && request.ReverseMappings.Length > 0);
+            for (int i = 0; i < originalLength; i++)
+            {
+                object existing = trafficApi.GetBufferItem(modifiedBuffer, i);
+                Entity edge = trafficApi.GetModifiedConnectionEdge(existing);
+                SourceLaneKey existingKey = new SourceLaneKey(
+                    edge,
+                    trafficApi.GetModifiedConnectionLaneIndex(existing));
+                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(existing);
+                if (edge == request.OuterEdge ||
+                    (removePocketExisting && edge == request.PocketEdge) ||
+                    bySource.ContainsKey(existingKey))
+                {
+                    removedExisting++;
+                    if (modifiedEntity != Entity.Null && EntityManager.Exists(modifiedEntity))
+                    {
+                        AddMarkerIfMissing<Deleted>(modifiedEntity);
+                    }
+
+                    continue;
+                }
+
+                m_KeptTrafficConnections.Add(existing);
+            }
+
+            trafficApi.ClearBuffer(modifiedBuffer);
+            for (int i = 0; i < m_KeptTrafficConnections.Count; i++)
+            {
+                trafficApi.AddBufferElement(modifiedBuffer, m_KeptTrafficConnections[i]);
             }
 
             List<LaneMapping> mergedMappings = bySource.Values.SelectMany(byTarget => byTarget.Values).ToList();
