@@ -282,6 +282,28 @@ namespace PocketTurnLanes.Systems.Tool
                 {
                     if (VerifyConnectorLanes(request))
                     {
+                        if (!request.FinalTrackTrafficWritten &&
+                            HasTrackPreservationMappings(request))
+                        {
+                            bool finalTrackTrafficAvailable = TryGetTrafficApi(out TrafficApi finalTrackTrafficApi, out string finalTrackTrafficError);
+                            if (finalTrackTrafficAvailable &&
+                                TryWriteFinalTrackTrafficMappings(finalTrackTrafficApi, request, out FinalTrackWriteStats finalTrackStats))
+                            {
+                                request.FinalTrackTrafficWritten = true;
+                                request.TrafficWriteFrame = UnityEngine.Time.frameCount;
+                                request.StableVerificationFrames = 0;
+                                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Final track Traffic write completed after road/U-turn/track verification splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trackSources={finalTrackStats.WrittenSources} trackConnections={finalTrackStats.TrackConnections} roadConnectionsPreserved={finalTrackStats.RoadConnectionsPreserved} skipped={finalTrackStats.Skipped} removedExisting={finalTrackStats.RemovedExisting} reason={finalTrackStats.Reason}.");
+                                m_Requests[i] = request;
+                                continue;
+                            }
+
+                            request.FinalTrackTrafficWritten = true;
+                            request.StableVerificationFrames = 0;
+                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Final track Traffic write skipped after verified runtime track connectors splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficAvailable={finalTrackTrafficAvailable} trafficError={finalTrackTrafficError} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}].");
+                            m_Requests[i] = request;
+                            continue;
+                        }
+
                         request.StableVerificationFrames++;
                         if (request.StableVerificationFrames >= RequiredStableVerificationFrames)
                         {
@@ -435,6 +457,7 @@ namespace PocketTurnLanes.Systems.Tool
                     existing.VerificationAttempts = 0;
                     existing.StableVerificationFrames = 0;
                     existing.TrafficWritten = false;
+                    existing.FinalTrackTrafficWritten = false;
                     m_Requests[i] = existing;
                     Mod.LogDiagnostic($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} reverseSnapshot={FormatSnapshot(reverseSnapshot)} frame={UnityEngine.Time.frameCount}.");
                     return;
@@ -3207,14 +3230,13 @@ namespace PocketTurnLanes.Systems.Tool
 
         private bool WriteTrafficMappings(TrafficApi trafficApi, Request request)
         {
-            List<LaneMapping> allMappings = GetAllMappings(request);
+            List<LaneMapping> allMappings = GetRoadFixMappings(request);
             if (allMappings.Count == 0)
             {
                 return false;
             }
 
             List<LaneMapping> validMappings = new List<LaneMapping>(allMappings.Count);
-            int skippedTrackMappings = 0;
             for (int i = 0; i < allMappings.Count; i++)
             {
                 LaneMapping mapping = allMappings[i];
@@ -3222,31 +3244,24 @@ namespace PocketTurnLanes.Systems.Tool
                 bool targetFound = TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out _);
                 if (!sourceFound || !targetFound)
                 {
-                    if (mapping.IsTrackPreservation)
-                    {
-                        skippedTrackMappings++;
-                        Mod.LogDiagnostic($"[SplitLaneConnectionFix] Track mapping preflight skipped splitNode={FormatEntity(request.SplitNode)} mapping={FormatMapping(mapping)} sourceFound={sourceFound} targetFound={targetFound} trackSkippedReason=writeEndpointMissing.");
-                        continue;
-                    }
-
                     Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic mapping preflight failed splitNode={FormatEntity(request.SplitNode)} mapping={FormatMapping(mapping)} sourceFound={sourceFound} targetFound={targetFound}.");
                     return false;
                 }
 
-                mapping.Method = SanitizeTrafficPathMethod(mapping.Method);
+                mapping.Method = GetRoadFixMethod(mapping.Method);
                 validMappings.Add(mapping);
             }
 
             if (validMappings.Count == 0)
             {
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic mapping preflight found no writable mappings splitNode={FormatEntity(request.SplitNode)} allMappings={FormatMappings(allMappings)} skippedTrackMappings={skippedTrackMappings}.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic mapping preflight found no writable road mappings splitNode={FormatEntity(request.SplitNode)} allMappings={FormatMappings(allMappings)}.");
                 return false;
             }
 
             bool hasRoadMappings = validMappings.Any(mapping => !mapping.IsTrackPreservation);
             if (!hasRoadMappings)
             {
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic mapping preflight found only track preservation mappings splitNode={FormatEntity(request.SplitNode)} trackMappings={FormatMappings(validMappings)}; skipping because road repair mapping is required to rewrite the split pair.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic mapping preflight found no road repair mappings splitNode={FormatEntity(request.SplitNode)} mappings={FormatMappings(validMappings)}.");
                 return false;
             }
 
@@ -3270,7 +3285,7 @@ namespace PocketTurnLanes.Systems.Tool
 
                 if (byTarget.TryGetValue(targetKey, out LaneMapping existing))
                 {
-                    existing.Method = SanitizeTrafficPathMethod(existing.Method | mapping.Method);
+                    existing.Method = GetRoadFixMethod(existing.Method | mapping.Method);
                     existing.IsBranch |= mapping.IsBranch;
                     existing.IsTrackPreservation |= mapping.IsTrackPreservation;
                     byTarget[targetKey] = existing;
@@ -3320,9 +3335,6 @@ namespace PocketTurnLanes.Systems.Tool
             List<LaneMapping> mergedMappings = bySource.Values.SelectMany(byTarget => byTarget.Values).ToList();
             int writtenSources = 0;
             int writtenConnections = 0;
-            int trackWrittenConnections = 0;
-            int trackOnlyTargets = 0;
-            int sharedTrackConnections = 0;
             foreach (KeyValuePair<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> pair in bySource)
             {
                 if (!TryFindMappingEndpoint(request, pair.Key.Edge, pair.Key.LaneIndex, source: true, out LaneEndpoint sourceEndpoint))
@@ -3342,7 +3354,7 @@ namespace PocketTurnLanes.Systems.Tool
                         continue;
                     }
 
-                    PathMethod method = SanitizeTrafficPathMethod(mapping.Method);
+                    PathMethod method = GetRoadFixMethod(mapping.Method);
                     trafficApi.AddBufferElement(generatedBuffer, trafficApi.CreateGeneratedConnection(
                         mapping.SourceEdge,
                         mapping.TargetEdge,
@@ -3357,19 +3369,6 @@ namespace PocketTurnLanes.Systems.Tool
                         method,
                         false));
                     writtenConnections++;
-                    if ((method & PathMethod.Track) != 0)
-                    {
-                        trackWrittenConnections++;
-                        if (IsTrackOnlyEndpoint(targetEndpoint))
-                        {
-                            trackOnlyTargets++;
-                        }
-
-                        if ((method & (PathMethod.Road | PathMethod.Track)) == (PathMethod.Road | PathMethod.Track))
-                        {
-                            sharedTrackConnections++;
-                        }
-                    }
                 }
 
                 trafficApi.AddBufferElement(modifiedBuffer, trafficApi.CreateModifiedLaneConnection(
@@ -3383,38 +3382,325 @@ namespace PocketTurnLanes.Systems.Tool
 
             trafficApi.EnsureModifiedConnectionsTag(EntityManager, request.SplitNode);
             MarkForLaneRebuild(request);
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic write counts splitNode={FormatEntity(request.SplitNode)} removedExisting={removedExisting} preservedExisting={m_KeptTrafficConnections.Count} writtenSources={writtenSources} writtenConnections={writtenConnections} trackWrittenConnections={trackWrittenConnections} trackOnlyTargets={trackOnlyTargets} sharedTrackConnections={sharedTrackConnections} skippedTrackMappings={skippedTrackMappings} forwardMappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] mergedMappings={FormatMappings(mergedMappings)} trackSkippedReason={request.TrackSkippedReason}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic road write counts splitNode={FormatEntity(request.SplitNode)} removedExisting={removedExisting} preservedExisting={m_KeptTrafficConnections.Count} writtenSources={writtenSources} writtenConnections={writtenConnections} trackWrittenConnections=0 trackDeferred=True forwardMappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} deferredTrackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] mergedRoadMappings={FormatMappings(mergedMappings)} trackSkippedReason={request.TrackSkippedReason}.");
             return writtenSources > 0 && writtenConnections > 0;
         }
 
-        private static List<LaneMapping> GetAllMappings(Request request)
+        private bool TryWriteFinalTrackTrafficMappings(
+            TrafficApi trafficApi,
+            Request request,
+            out FinalTrackWriteStats stats)
+        {
+            stats = default;
+            List<LaneMapping> trackMappings = GetTrackFixMappings(request);
+            if (trackMappings.Count == 0)
+            {
+                stats.Reason = "noTrackMappings";
+                return false;
+            }
+
+            Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource = new Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>>();
+            HashSet<SourceLaneKey> affectedSources = new HashSet<SourceLaneKey>();
+            for (int i = 0; i < trackMappings.Count; i++)
+            {
+                LaneMapping mapping = trackMappings[i];
+                if (!TryFindMappingEndpoint(request, mapping.SourceEdge, mapping.SourceLaneIndex, source: true, out _) ||
+                    !TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out _))
+                {
+                    stats.Skipped++;
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Final track mapping skipped splitNode={FormatEntity(request.SplitNode)} mapping={FormatMapping(mapping)} trackSkippedReason=finalTrackEndpointMissing.");
+                    continue;
+                }
+
+                SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
+                affectedSources.Add(sourceKey);
+                AddOrMergeFinalTrafficMapping(bySource, mapping);
+            }
+
+            if (affectedSources.Count == 0)
+            {
+                stats.Reason = "noWritableTrackMappings";
+                return false;
+            }
+
+            object modifiedBuffer = trafficApi.GetOrAddModifiedLaneConnectionsBuffer(EntityManager, request.SplitNode);
+            if (modifiedBuffer == null)
+            {
+                stats.Reason = "modifiedLaneConnectionsBufferUnavailable";
+                return false;
+            }
+
+            int originalLength = trafficApi.GetBufferLength(modifiedBuffer);
+            m_KeptTrafficConnections.Clear();
+            for (int i = 0; i < originalLength; i++)
+            {
+                object existing = trafficApi.GetBufferItem(modifiedBuffer, i);
+                SourceLaneKey existingKey = new SourceLaneKey(
+                    trafficApi.GetModifiedConnectionEdge(existing),
+                    trafficApi.GetModifiedConnectionLaneIndex(existing));
+                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(existing);
+                if (!affectedSources.Contains(existingKey))
+                {
+                    m_KeptTrafficConnections.Add(existing);
+                    continue;
+                }
+
+                stats.RemovedExisting++;
+                CopyExistingGeneratedConnectionsForFinalTrack(
+                    trafficApi,
+                    request,
+                    modifiedEntity,
+                    bySource,
+                    ref stats);
+                if (modifiedEntity != Entity.Null && EntityManager.Exists(modifiedEntity))
+                {
+                    AddMarkerIfMissing<Deleted>(modifiedEntity);
+                }
+            }
+
+            List<LaneMapping> roadFallbackMappings = GetRoadFixMappings(request);
+            for (int i = 0; i < roadFallbackMappings.Count; i++)
+            {
+                LaneMapping mapping = roadFallbackMappings[i];
+                SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
+                if (affectedSources.Contains(sourceKey))
+                {
+                    AddOrMergeFinalTrafficMapping(bySource, mapping);
+                }
+            }
+
+            trafficApi.ClearBuffer(modifiedBuffer);
+            for (int i = 0; i < m_KeptTrafficConnections.Count; i++)
+            {
+                trafficApi.AddBufferElement(modifiedBuffer, m_KeptTrafficConnections[i]);
+            }
+
+            foreach (KeyValuePair<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> pair in bySource)
+            {
+                if (!TryFindMappingEndpoint(request, pair.Key.Edge, pair.Key.LaneIndex, source: true, out LaneEndpoint sourceEndpoint))
+                {
+                    stats.Skipped++;
+                    continue;
+                }
+
+                Entity modifiedConnectionEntity = EntityManager.CreateEntity();
+                trafficApi.AddDataOwner(EntityManager, modifiedConnectionEntity, request.SplitNode);
+                trafficApi.AddFakePrefabRef(EntityManager, modifiedConnectionEntity);
+                object generatedBuffer = trafficApi.AddGeneratedConnectionBuffer(EntityManager, modifiedConnectionEntity);
+                int sourceConnectionCount = 0;
+                foreach (LaneMapping mapping in pair.Value.Values)
+                {
+                    if (!TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out LaneEndpoint targetEndpoint))
+                    {
+                        stats.Skipped++;
+                        continue;
+                    }
+
+                    PathMethod method = SanitizeTrafficPathMethod(mapping.Method);
+                    trafficApi.AddBufferElement(generatedBuffer, trafficApi.CreateGeneratedConnection(
+                        mapping.SourceEdge,
+                        mapping.TargetEdge,
+                        mapping.SourceLaneIndex,
+                        mapping.TargetLaneIndex,
+                        new float3x2(
+                            sourceEndpoint.LanePosition,
+                            targetEndpoint.LanePosition),
+                        new int4(
+                            sourceEndpoint.CarriagewayAndGroup,
+                            targetEndpoint.CarriagewayAndGroup),
+                        method,
+                        false));
+                    sourceConnectionCount++;
+                    if ((method & PathMethod.Road) != 0)
+                    {
+                        stats.RoadConnectionsPreserved++;
+                    }
+
+                    if ((method & PathMethod.Track) != 0)
+                    {
+                        stats.TrackConnections++;
+                    }
+                }
+
+                if (sourceConnectionCount == 0)
+                {
+                    stats.Skipped++;
+                    if (modifiedConnectionEntity != Entity.Null && EntityManager.Exists(modifiedConnectionEntity))
+                    {
+                        AddMarkerIfMissing<Deleted>(modifiedConnectionEntity);
+                    }
+
+                    continue;
+                }
+
+                trafficApi.AddBufferElement(modifiedBuffer, trafficApi.CreateModifiedLaneConnection(
+                    pair.Key.LaneIndex,
+                    sourceEndpoint.CarriagewayAndGroup,
+                    sourceEndpoint.LanePosition,
+                    pair.Key.Edge,
+                    modifiedConnectionEntity));
+                stats.WrittenSources++;
+            }
+
+            if (stats.WrittenSources == 0 || stats.TrackConnections == 0)
+            {
+                stats.Reason = $"noFinalTrackWritten sources={stats.WrittenSources} trackConnections={stats.TrackConnections}";
+                return false;
+            }
+
+            trafficApi.EnsureModifiedConnectionsTag(EntityManager, request.SplitNode);
+            MarkForLaneRebuild(request);
+            stats.Reason = "ok";
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Final track Traffic write counts splitNode={FormatEntity(request.SplitNode)} removedExisting={stats.RemovedExisting} preservedExisting={m_KeptTrafficConnections.Count} writtenSources={stats.WrittenSources} roadConnectionsPreserved={stats.RoadConnectionsPreserved} trackConnections={stats.TrackConnections} skipped={stats.Skipped} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}].");
+            return true;
+        }
+
+        private void CopyExistingGeneratedConnectionsForFinalTrack(
+            TrafficApi trafficApi,
+            Request request,
+            Entity modifiedEntity,
+            Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
+            ref FinalTrackWriteStats stats)
+        {
+            if (modifiedEntity == Entity.Null ||
+                !EntityManager.Exists(modifiedEntity) ||
+                !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedEntity))
+            {
+                return;
+            }
+
+            object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedEntity, true);
+            int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
+            for (int i = 0; i < generatedLength; i++)
+            {
+                object generated = trafficApi.GetBufferItem(generatedBuffer, i);
+                Entity sourceEdge = trafficApi.GetGeneratedConnectionSource(generated);
+                Entity targetEdge = trafficApi.GetGeneratedConnectionTarget(generated);
+                int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
+                LaneMapping mapping = new LaneMapping
+                {
+                    SourceEdge = sourceEdge,
+                    TargetEdge = targetEdge,
+                    SourceLaneIndex = laneIndexMap.x & 0xff,
+                    TargetLaneIndex = laneIndexMap.y & 0xff,
+                    Method = SanitizeTrafficPathMethod(trafficApi.GetGeneratedConnectionMethod(generated)),
+                    IsBranch = false,
+                    IsTrackPreservation = false
+                };
+
+                if (!TryFindMappingEndpoint(request, mapping.SourceEdge, mapping.SourceLaneIndex, source: true, out _) ||
+                    !TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out _))
+                {
+                    stats.Skipped++;
+                    continue;
+                }
+
+                AddOrMergeFinalTrafficMapping(bySource, mapping);
+            }
+        }
+
+        private static void AddOrMergeFinalTrafficMapping(
+            Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
+            LaneMapping mapping)
+        {
+            SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
+            TargetLaneKey targetKey = new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex);
+            if (!bySource.TryGetValue(sourceKey, out Dictionary<TargetLaneKey, LaneMapping> byTarget))
+            {
+                byTarget = new Dictionary<TargetLaneKey, LaneMapping>();
+                bySource.Add(sourceKey, byTarget);
+            }
+
+            if (byTarget.TryGetValue(targetKey, out LaneMapping existing))
+            {
+                existing.Method = SanitizeTrafficPathMethod(existing.Method | mapping.Method);
+                existing.IsBranch |= mapping.IsBranch;
+                existing.IsTrackPreservation |= mapping.IsTrackPreservation;
+                byTarget[targetKey] = existing;
+                return;
+            }
+
+            mapping.Method = SanitizeTrafficPathMethod(mapping.Method);
+            byTarget.Add(targetKey, mapping);
+        }
+
+        private static List<LaneMapping> GetRoadFixMappings(Request request)
         {
             List<LaneMapping> allMappings = new List<LaneMapping>(
                 (request.Mappings?.Length ?? 0) +
-                (request.ReverseMappings?.Length ?? 0) +
-                (request.TrackForwardMappings?.Length ?? 0) +
-                (request.TrackReverseMappings?.Length ?? 0));
+                (request.ReverseMappings?.Length ?? 0));
             if (request.Mappings != null)
             {
-                allMappings.AddRange(request.Mappings);
+                AddRoadFixMappings(request.Mappings, allMappings);
             }
 
             if (request.ReverseMappings != null)
             {
-                allMappings.AddRange(request.ReverseMappings);
-            }
-
-            if (request.TrackForwardMappings != null)
-            {
-                allMappings.AddRange(request.TrackForwardMappings);
-            }
-
-            if (request.TrackReverseMappings != null)
-            {
-                allMappings.AddRange(request.TrackReverseMappings);
+                AddRoadFixMappings(request.ReverseMappings, allMappings);
             }
 
             return allMappings;
+        }
+
+        private static bool HasTrackPreservationMappings(Request request)
+        {
+            return (request.TrackForwardMappings != null && request.TrackForwardMappings.Length > 0) ||
+                   (request.TrackReverseMappings != null && request.TrackReverseMappings.Length > 0);
+        }
+
+        private static List<LaneMapping> GetTrackFixMappings(Request request)
+        {
+            List<LaneMapping> mappings = new List<LaneMapping>(
+                (request.TrackForwardMappings?.Length ?? 0) +
+                (request.TrackReverseMappings?.Length ?? 0));
+            AddTrackFixMappings(request.TrackForwardMappings, mappings);
+            AddTrackFixMappings(request.TrackReverseMappings, mappings);
+            return mappings;
+        }
+
+        private static void AddTrackFixMappings(LaneMapping[] mappings, List<LaneMapping> output)
+        {
+            if (mappings == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < mappings.Length; i++)
+            {
+                LaneMapping mapping = mappings[i];
+                mapping.Method = GetTrackFixMethod(mapping.Method);
+                mapping.IsTrackPreservation = true;
+                if (mapping.Method != 0)
+                {
+                    output.Add(mapping);
+                }
+            }
+        }
+
+        private static void AddRoadFixMappings(LaneMapping[] mappings, List<LaneMapping> output)
+        {
+            if (mappings == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < mappings.Length; i++)
+            {
+                LaneMapping mapping = mappings[i];
+                mapping.Method = GetRoadFixMethod(mapping.Method);
+                mapping.IsTrackPreservation = false;
+                output.Add(mapping);
+            }
+        }
+
+        private static PathMethod GetRoadFixMethod(PathMethod method)
+        {
+            return PathMethod.Road;
+        }
+
+        private static PathMethod GetTrackFixMethod(PathMethod method)
+        {
+            return (method & PathMethod.Track) != 0 ? PathMethod.Track : 0;
         }
 
         private bool TryRebuildConnectorLanes(ref Request request, out DirectRebuildStats stats)
@@ -3687,16 +3973,17 @@ namespace PocketTurnLanes.Systems.Tool
                 }
 
                 Entity clone = CloneConnectorLane(request, template, source, target, (ushort)nextNodeLaneIndex++);
+                PathMethod roadOnlyPathMethods = GetRoadFixMethod(template.PathMethods);
                 subLanes.Add(new SubLane
                 {
                     m_SubLane = clone,
-                    m_PathMethods = template.PathMethods
+                    m_PathMethods = roadOnlyPathMethods
                 });
                 kept.Add(key, new ConnectorLane
                 {
                     Entity = clone,
                     SubLaneIndex = subLanes.Length - 1,
-                    PathMethods = template.PathMethods,
+                    PathMethods = roadOnlyPathMethods,
                     SourceLaneIndex = mapping.SourceLaneIndex,
                     TargetLaneIndex = mapping.TargetLaneIndex
                 });
@@ -4743,6 +5030,7 @@ namespace PocketTurnLanes.Systems.Tool
             public int QueuedFrame;
             public int LaneDataRetries;
             public bool TrafficWritten;
+            public bool FinalTrackTrafficWritten;
             public int TrafficWriteFrame;
             public int VerificationAttempts;
             public int StableVerificationFrames;
@@ -4899,6 +5187,16 @@ namespace PocketTurnLanes.Systems.Tool
             public int EndpointMisses;
             public string SourceLanes;
             public string RewriteSourceLanes;
+            public string Reason;
+        }
+
+        private struct FinalTrackWriteStats
+        {
+            public int WrittenSources;
+            public int RoadConnectionsPreserved;
+            public int TrackConnections;
+            public int Skipped;
+            public int RemovedExisting;
             public string Reason;
         }
 
