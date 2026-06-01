@@ -79,7 +79,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     TemplatePathMethods = connector.PathMethods,
                     IsTrackPreservation = true,
                     IsUnsafe = unsafeConnection,
-                    HasTrafficMaps = true
+                    HasTrafficMaps = true,
+                    HasPreservedPathMethods = true
                 };
                 AddOrMergeCenterTrafficMapping(bySource, mapping);
                 targetEndpoints[new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex)] = targetEndpoint;
@@ -106,23 +107,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static PathMethod GetCenterPreservedConnectorMethod(PathMethod method, CenterRewriteMovement movement)
         {
-            if (method == 0)
-            {
-                return 0;
-            }
-
-            if (movement == CenterRewriteMovement.Uturn)
-            {
-                return SanitizeCenterTrafficPathMethod(method);
-            }
-
-            PathMethod preserved = method & PathMethod.Track;
-            if ((method & PathMethod.Road) == 0)
-            {
-                preserved |= method & ~PathMethod.Road;
-            }
-
-            return SanitizeCenterTrafficPathMethod(preserved);
+            return GetLayerPreservationPathMethod(method, movement == CenterRewriteMovement.Uturn);
         }
 
         private CenterPreservationStats CopyExistingCenterPreservedGeneratedConnections(
@@ -165,9 +150,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
                     PathMethod originalMethod = generated.Method;
                     bool isUturn = generated.SourceEdge == generated.TargetEdge;
-                    PathMethod preservedMethod = isUturn
-                        ? SanitizeCenterTrafficPathMethod(originalMethod)
-                        : GetCenterPreservedGeneratedMethod(originalMethod);
+                    PathMethod preservedMethod = GetLayerPreservationPathMethod(originalMethod, isUturn);
                     if (preservedMethod == 0)
                     {
                         continue;
@@ -196,15 +179,5 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return stats;
         }
 
-        private static PathMethod GetCenterPreservedGeneratedMethod(PathMethod method)
-        {
-            PathMethod preserved = method & PathMethod.Track;
-            if ((method & PathMethod.Road) == 0)
-            {
-                preserved |= method & ~PathMethod.Road;
-            }
-
-            return SanitizeCenterTrafficPathMethod(preserved);
-        }
     }
 }

@@ -119,6 +119,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             EndpointRole role,
             List<LaneEndpoint> output)
         {
+            CollectEdgePreservationLaneEndpoints(edgeEntity, splitNode, role, output);
+        }
+
+        private void CollectEdgePreservationLaneEndpoints(
+            Entity edgeEntity,
+            Entity splitNode,
+            EndpointRole role,
+            List<LaneEndpoint> output)
+        {
             CollectEdgeLaneEndpoints(edgeEntity, splitNode, role, output, includeTrackOnly: true, includeNonRoadPathMethods: true);
         }
 

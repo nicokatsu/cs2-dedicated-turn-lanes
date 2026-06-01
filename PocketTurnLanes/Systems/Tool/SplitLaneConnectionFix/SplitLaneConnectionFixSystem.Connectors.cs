@@ -72,6 +72,29 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
         }
 
+        private void CollectSplitPairPreservationConnectorLanes(
+            Entity splitNode,
+            Entity sourceEdge,
+            Entity targetEdge,
+            DynamicBuffer<SubLane> subLanes,
+            List<ConnectorLane> output)
+        {
+            output.Clear();
+            for (int i = 0; i < subLanes.Length; i++)
+            {
+                SubLane subLane = subLanes[i];
+                if (subLane.m_PathMethods == 0 ||
+                    !TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity actualSourceEdge, out Entity actualTargetEdge) ||
+                    actualSourceEdge != sourceEdge ||
+                    actualTargetEdge != targetEdge)
+                {
+                    continue;
+                }
+
+                output.Add(CreateConnectorLane(laneEntity, i, subLane, lane, actualSourceEdge, actualTargetEdge));
+            }
+        }
+
         private void CollectCenterConnectorLanes(
             Entity centerNode,
             DynamicBuffer<SubLane> subLanes,
@@ -200,8 +223,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < subLanes.Length; i++)
             {
                 SubLane subLane = subLanes[i];
-                if ((subLane.m_PathMethods & (PathMethod.Road | PathMethod.Track)) == 0 ||
-                    !TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity sourceEdge, out Entity targetEdge) ||
+                if (!TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity sourceEdge, out Entity targetEdge) ||
+                    (subLane.m_PathMethods == 0 && !IsTrackConnectorCandidate(laneEntity, subLane)) ||
                     (restrictToSplitPair &&
                      (sourceEdge != outerEdge && sourceEdge != pocketEdge ||
                       targetEdge != outerEdge && targetEdge != pocketEdge)))
@@ -240,8 +263,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             {
                 SubLane subLane = subLanes[i];
                 if (!TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity sourceEdge, out Entity targetEdge) ||
-                    ((subLane.m_PathMethods & (PathMethod.Road | PathMethod.Track)) == 0 &&
-                     !IsTrackConnectorCandidate(laneEntity, subLane)) ||
+                    (subLane.m_PathMethods == 0 && !IsTrackConnectorCandidate(laneEntity, subLane)) ||
                     !lane.m_StartNode.OwnerEquals(lane.m_EndNode) ||
                     sourceEdge != targetEdge ||
                     (restrictToSplitPair && sourceEdge != outerEdge && sourceEdge != pocketEdge))

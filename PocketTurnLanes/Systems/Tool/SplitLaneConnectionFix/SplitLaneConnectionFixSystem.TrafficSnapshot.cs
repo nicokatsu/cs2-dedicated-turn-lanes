@@ -270,7 +270,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 IsBranch = false,
                 IsTrackPreservation = true,
                 IsUnsafe = snapshot.IsUnsafe,
-                HasTrafficMaps = true
+                HasTrafficMaps = true,
+                HasPreservedPathMethods = true
             };
         }
 

@@ -83,7 +83,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static string FormatMapping(LaneMapping mapping)
         {
-            return $"{FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}->{FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}[{mapping.Method}]{(mapping.IsBranch ? "*" : string.Empty)}{(mapping.IsTrackPreservation ? "#track" : string.Empty)}{(mapping.IsUnsafe ? "!unsafe" : string.Empty)}";
+            return $"{FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}->{FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}[{mapping.Method}]{(mapping.IsBranch ? "*" : string.Empty)}{(mapping.HasPreservedPathMethods ? "#preserve" : string.Empty)}{(!mapping.HasPreservedPathMethods && mapping.IsTrackPreservation ? "#track" : string.Empty)}{(mapping.IsUnsafe ? "!unsafe" : string.Empty)}";
         }
 
         private static string FormatConnectorLanes(IReadOnlyList<ConnectorLane> connectors)

@@ -737,12 +737,22 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     return true;
                 }
 
+                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.PreservationForwardSourceLanes, laneIndex, out lane))
+                {
+                    return true;
+                }
+
                 if (edge == request.PocketEdge && TryFindLaneEndpoint(request.ReverseSourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
                 if (edge == request.PocketEdge && TryFindLaneEndpoint(request.TrackReverseSourceLanes, laneIndex, out lane))
+                {
+                    return true;
+                }
+
+                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.PreservationReverseSourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
@@ -759,12 +769,22 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     return true;
                 }
 
+                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.PreservationForwardTargetLanes, laneIndex, out lane))
+                {
+                    return true;
+                }
+
                 if (edge == request.OuterEdge && TryFindLaneEndpoint(request.ReverseTargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
                 if (edge == request.OuterEdge && TryFindLaneEndpoint(request.TrackReverseTargetLanes, laneIndex, out lane))
+                {
+                    return true;
+                }
+
+                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.PreservationReverseTargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }

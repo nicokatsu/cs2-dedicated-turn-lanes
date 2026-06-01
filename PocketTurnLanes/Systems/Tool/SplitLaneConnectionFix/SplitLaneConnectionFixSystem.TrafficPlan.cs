@@ -111,7 +111,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     MarkCenterForLaneRebuild(request.IntersectionNode);
                 }
 
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping plan has no writable sources splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} farRestoreSucceeded={farRestoreSucceeded} farRestoreDetail=({farRestoreDetail}) centerRewriteWritten={centerRewriteWritten} centerRewriteWriteSucceeded={centerRewriteWriteSucceeded} centerRewriteSources={centerPlan.BySource.Count} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} roadMappings={FormatMappings(validRoadMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}].");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping plan has no writable sources splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} farRestoreSucceeded={farRestoreSucceeded} farRestoreDetail=({farRestoreDetail}) centerRewriteWritten={centerRewriteWritten} centerRewriteWriteSucceeded={centerRewriteWriteSucceeded} centerRewriteSources={centerPlan.BySource.Count} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} roadMappings={FormatMappings(validRoadMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] preservationSkippedReason={request.PreservationSkippedReason}.");
                 return false;
             }
 
@@ -187,10 +187,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    PathMethod method = RestrictTrafficPathMethodToEndpoints(
-                        SanitizeTrafficPathMethod(mapping.Method),
-                        sourceEndpoint,
-                        targetEndpoint);
+                    PathMethod method = mapping.HasPreservedPathMethods
+                        ? RestrictPreservedTrafficPathMethodToEndpoints(mapping.Method, sourceEndpoint, targetEndpoint)
+                        : RestrictTrafficPathMethodToEndpoints(
+                            SanitizeTrafficPathMethod(mapping.Method),
+                            sourceEndpoint,
+                            targetEndpoint);
 
                     if (method == 0)
                     {
@@ -247,7 +249,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             MarkForLaneRebuild(request);
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping write counts splitNode={FormatEntity(request.SplitNode)} trafficWriteOrder={trafficWriteOrder} farRestoreSucceeded={farRestoreSucceeded} farRestoreDetail=({farRestoreDetail}) centerRewriteWritten={centerRewriteWritten} centerRewriteWriteSucceeded={centerRewriteWriteSucceeded} centerRewriteSources={centerPlan.BySource.Count} centerRewriteConnections={centerPlan.PlannedConnections} centerStraightUnsafeCleared={centerPlan.StraightUnsafeCleared} centerSmallTurnClearedFromStraightLane={centerPlan.SmallTurnConnectionsClearedFromStraightLane} centerRoadBicycle={centerPlan.BicycleConnectionsWrittenWithRoad} centerRuntimePreserved={centerPlan.PreservedRuntimeConnections} centerSnapshotPreserved={centerPlan.PreservedSnapshotConnections} centerPreservedUturn={centerPlan.PreservedUturnConnections} centerPreservedNonRoad={centerPlan.PreservedNonRoadConnections} centerPreservedUnsafe={centerPlan.PreservedUnsafeConnections} centerPreservationSkipped={centerPlan.PreservationSkipped} removedExisting={removedExisting} preservedExisting={m_KeptTrafficConnections.Count} preservedExistingForOverlay={preservedExistingForOverlay} preservedUnsafeForOverlay={preservedUnsafeForOverlay} writtenSources={writtenSources} writtenConnections={writtenConnections} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} roadRepairConnections={plan.RoadRepairConnections} writtenRoadRepairConnections={writtenRoadRepairConnections} preservationTrafficSnapshotConnections={plan.PreservationTrafficSnapshotConnections} preservationRuntimeConnections={plan.PreservationRuntimeConnections} preservationSkipped={plan.PreservationSkipped} forwardPreservationConnections={plan.ForwardPreservationConnections} reversePreservationConnections={plan.ReversePreservationConnections} trackConnectionsPlanned={plan.TrackConnections} writtenTrackConnections={writtenTrackConnections} trackOnlyTargets={plan.TrackOnlyTargets} sharedTrackConnections={plan.SharedTrackConnections} trackSkipped={plan.TrackSkipped} staleUturnConnections={plan.StaleUturnConnections} staleUturnSources={plan.StaleUturnSourceKeys.Count} uturnSourcesCoveredByPlan={plan.UturnSourcesCoveredByPlan} uturnSourcesCoveredByEmptyOverride={plan.UturnSourcesCoveredByEmptyOverride} uturnSourcesLeftForDirectCleanup={plan.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={plan.RuntimeNonUturnSuppressionSkipped} writtenUnsafeConnections={writtenUnsafeConnections} finalTrackInUnifiedWrite=True forwardMappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] mergedMappings={FormatMappings(mergedMappings)} trackSkippedReason={request.TrackSkippedReason}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping write counts splitNode={FormatEntity(request.SplitNode)} trafficWriteOrder={trafficWriteOrder} farRestoreSucceeded={farRestoreSucceeded} farRestoreDetail=({farRestoreDetail}) centerRewriteWritten={centerRewriteWritten} centerRewriteWriteSucceeded={centerRewriteWriteSucceeded} centerRewriteSources={centerPlan.BySource.Count} centerRewriteConnections={centerPlan.PlannedConnections} centerStraightUnsafeCleared={centerPlan.StraightUnsafeCleared} centerSmallTurnClearedFromStraightLane={centerPlan.SmallTurnConnectionsClearedFromStraightLane} centerRoadBicycle={centerPlan.BicycleConnectionsWrittenWithRoad} centerRuntimePreserved={centerPlan.PreservedRuntimeConnections} centerSnapshotPreserved={centerPlan.PreservedSnapshotConnections} centerPreservedUturn={centerPlan.PreservedUturnConnections} centerPreservedNonRoad={centerPlan.PreservedNonRoadConnections} centerPreservedUnsafe={centerPlan.PreservedUnsafeConnections} centerPreservationSkipped={centerPlan.PreservationSkipped} removedExisting={removedExisting} preservedExisting={m_KeptTrafficConnections.Count} preservedExistingForOverlay={preservedExistingForOverlay} preservedUnsafeForOverlay={preservedUnsafeForOverlay} writtenSources={writtenSources} writtenConnections={writtenConnections} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} roadRepairConnections={plan.RoadRepairConnections} writtenRoadRepairConnections={writtenRoadRepairConnections} preservationTrafficSnapshotConnections={plan.PreservationTrafficSnapshotConnections} preservationRuntimeConnections={plan.PreservationRuntimeConnections} preservationOverlaySnapshotConnections={plan.PreservationOverlaySnapshotConnections} preservationOverlayRuntimeConnections={plan.PreservationOverlayRuntimeConnections} preservationNonRoadConnections={plan.PreservationNonRoadConnections} preservationUnsafeConnections={plan.PreservationUnsafeConnections} preservationSuppressedUturnConnections={plan.PreservationSuppressedUturnConnections} preservationSkipped={plan.PreservationSkipped} forwardPreservationConnections={plan.ForwardPreservationConnections} reversePreservationConnections={plan.ReversePreservationConnections} trackConnectionsPlanned={plan.TrackConnections} writtenTrackConnections={writtenTrackConnections} trackOnlyTargets={plan.TrackOnlyTargets} sharedTrackConnections={plan.SharedTrackConnections} trackSkipped={plan.TrackSkipped} staleUturnConnections={plan.StaleUturnConnections} staleUturnSources={plan.StaleUturnSourceKeys.Count} uturnSourcesCoveredByPlan={plan.UturnSourcesCoveredByPlan} uturnSourcesCoveredByEmptyOverride={plan.UturnSourcesCoveredByEmptyOverride} uturnSourcesLeftForDirectCleanup={plan.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={plan.RuntimeNonUturnSuppressionSkipped} writtenUnsafeConnections={writtenUnsafeConnections} finalTrackInUnifiedWrite=True forwardMappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] mergedMappings={FormatMappings(mergedMappings)} trackSkippedReason={request.TrackSkippedReason} preservationSkippedReason={request.PreservationSkippedReason}.");
             return writtenSources > 0;
         }
 
@@ -301,7 +303,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     reverseDirection);
             }
 
+            AddRuntimeOuterPreservationMappingsToPlan(request, plan);
             AddLogicalUturnSuppressionToPlan(request, plan);
+            CopyTrafficSnapshotOuterPreservationOverlayToPlan(trafficApi, request, modifiedBuffer, plan);
 
             List<LaneMapping> trackMappings = GetTrackFixMappings(request);
             for (int i = 0; i < trackMappings.Count; i++)
@@ -328,6 +332,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
                 mapping.Method = method;
                 mapping.IsTrackPreservation = true;
+                mapping.HasPreservedPathMethods = true;
                 AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
                 plan.TrackConnections++;
                 if (IsTrackOnlyEndpoint(targetEndpoint))
@@ -341,8 +346,176 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Built unified logical Traffic mapping plan splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} stageOrder=trackSnapshot,roadRepairOrPreservation,uturnDelete,trackRestore sourcePlans={plan.BySource.Count} roadSources={plan.RoadRepairSourceKeys.Count} roadConnections={plan.RoadRepairConnections} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} preservationTrafficSnapshotConnections={plan.PreservationTrafficSnapshotConnections} preservationRuntimeConnections={plan.PreservationRuntimeConnections} preservationSkipped={plan.PreservationSkipped} forwardPreservationConnections={plan.ForwardPreservationConnections} reversePreservationConnections={plan.ReversePreservationConnections} trackConnections={plan.TrackConnections} trackSkipped={plan.TrackSkipped} staleUturnConnections={plan.StaleUturnConnections} staleUturnSources={plan.StaleUturnSourceKeys.Count} uturnCovered={plan.UturnSourcesCoveredByPlan} uturnEmptyOverrides={plan.UturnSourcesCoveredByEmptyOverride} uturnDirectCleanupFallback={plan.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={plan.RuntimeNonUturnSuppressionSkipped}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Built unified logical Traffic mapping plan splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} stageOrder=trackSnapshot,roadRepairOrPreservation,runtimeOuterPreservation,uturnDelete,snapshotOuterPreservation,trackRestore sourcePlans={plan.BySource.Count} roadSources={plan.RoadRepairSourceKeys.Count} roadConnections={plan.RoadRepairConnections} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} preservationTrafficSnapshotConnections={plan.PreservationTrafficSnapshotConnections} preservationRuntimeConnections={plan.PreservationRuntimeConnections} preservationOverlaySnapshotConnections={plan.PreservationOverlaySnapshotConnections} preservationOverlayRuntimeConnections={plan.PreservationOverlayRuntimeConnections} preservationNonRoadConnections={plan.PreservationNonRoadConnections} preservationUnsafeConnections={plan.PreservationUnsafeConnections} preservationSuppressedUturnConnections={plan.PreservationSuppressedUturnConnections} preservationSkipped={plan.PreservationSkipped} forwardPreservationConnections={plan.ForwardPreservationConnections} reversePreservationConnections={plan.ReversePreservationConnections} trackConnections={plan.TrackConnections} trackSkipped={plan.TrackSkipped} staleUturnConnections={plan.StaleUturnConnections} staleUturnSources={plan.StaleUturnSourceKeys.Count} uturnCovered={plan.UturnSourcesCoveredByPlan} uturnEmptyOverrides={plan.UturnSourcesCoveredByEmptyOverride} uturnDirectCleanupFallback={plan.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={plan.RuntimeNonUturnSuppressionSkipped} preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] preservationSkippedReason={request.PreservationSkippedReason}.");
             return plan;
+        }
+
+        private void AddRuntimeOuterPreservationMappingsToPlan(Request request, TrafficMappingPlan plan)
+        {
+            AddRuntimeOuterPreservationMappingsToPlan(request, plan, request.PreservationForwardMappings, "forward");
+            AddRuntimeOuterPreservationMappingsToPlan(request, plan, request.PreservationReverseMappings, "reverse");
+        }
+
+        private void AddRuntimeOuterPreservationMappingsToPlan(
+            Request request,
+            TrafficMappingPlan plan,
+            IReadOnlyList<LaneMapping> mappings,
+            string direction)
+        {
+            if (mappings == null || mappings.Count == 0)
+            {
+                return;
+            }
+
+            int beforeRuntime = plan.PreservationRuntimeConnections;
+            int beforeSkipped = plan.PreservationSkipped;
+            HashSet<SourceLaneKey> runtimeSources = new HashSet<SourceLaneKey>();
+            for (int i = 0; i < mappings.Count; i++)
+            {
+                LaneMapping mapping = mappings[i];
+                if (mapping.SourceEdge == mapping.TargetEdge)
+                {
+                    plan.PreservationSuppressedUturnConnections++;
+                    continue;
+                }
+
+                if (!TryFindMappingEndpoint(request, mapping.SourceEdge, mapping.SourceLaneIndex, source: true, out LaneEndpoint sourceEndpoint) ||
+                    !TryFindMappingEndpoint(request, mapping.TargetEdge, mapping.TargetLaneIndex, source: false, out LaneEndpoint targetEndpoint))
+                {
+                    plan.PreservationSkipped++;
+                    continue;
+                }
+
+                PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
+                    GetLayerPreservationPathMethod(mapping.Method, preserveUturn: false),
+                    sourceEndpoint,
+                    targetEndpoint);
+                if (method == 0)
+                {
+                    plan.PreservationSkipped++;
+                    continue;
+                }
+
+                mapping.Method = method;
+                mapping.IsTrackPreservation = true;
+                mapping.HasPreservedPathMethods = true;
+                AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
+                SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
+                plan.PreservationSourceKeys.Add(sourceKey);
+                plan.PreservationRuntimeConnections++;
+                plan.PreservationOverlayRuntimeConnections++;
+                runtimeSources.Add(sourceKey);
+                if ((method & ~PathMethod.Road) != 0)
+                {
+                    plan.PreservationNonRoadConnections++;
+                }
+
+                if (mapping.IsUnsafe)
+                {
+                    plan.PreservationUnsafeConnections++;
+                }
+            }
+
+            int added = plan.PreservationRuntimeConnections - beforeRuntime;
+            int skipped = plan.PreservationSkipped - beforeSkipped;
+            if (direction == "forward")
+            {
+                plan.ForwardPreservationConnections += added;
+            }
+            else
+            {
+                plan.ReversePreservationConnections += added;
+            }
+
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Added runtime outer preservation mappings to unified plan splitNode={FormatEntity(request.SplitNode)} direction={direction} runtimeSources={FormatSourceLaneKeys(runtimeSources)} runtimeConnections={added} skipped={skipped} mappings={FormatMappings(mappings)}.");
+        }
+
+        private void CopyTrafficSnapshotOuterPreservationOverlayToPlan(
+            TrafficApi trafficApi,
+            Request request,
+            object modifiedBuffer,
+            TrafficMappingPlan plan)
+        {
+            if (trafficApi == null ||
+                modifiedBuffer == null ||
+                plan.BySource.Count == 0)
+            {
+                return;
+            }
+
+            HashSet<SourceLaneKey> sourceKeys = new HashSet<SourceLaneKey>(plan.BySource.Keys);
+            List<TrafficSourceSnapshot> sourceSnapshots = new List<TrafficSourceSnapshot>(sourceKeys.Count);
+            TrafficSnapshotReadStats readStats = default;
+            ReadTrafficSourceSnapshotsFromBuffer(
+                trafficApi,
+                modifiedBuffer,
+                source => sourceKeys.Contains(new SourceLaneKey(source.SourceEdge, source.SourceLaneIndex)),
+                null,
+                sourceSnapshots,
+                ref readStats);
+            plan.PreservationSkipped += readStats.MissingGeneratedBuffers;
+
+            HashSet<SourceLaneKey> overlaySources = new HashSet<SourceLaneKey>();
+            int beforeSnapshot = plan.PreservationOverlaySnapshotConnections;
+            int beforeSkipped = plan.PreservationSkipped;
+            for (int i = 0; i < sourceSnapshots.Count; i++)
+            {
+                TrafficGeneratedSnapshot[] connections =
+                    sourceSnapshots[i].Connections ?? System.Array.Empty<TrafficGeneratedSnapshot>();
+                for (int generatedIndex = 0; generatedIndex < connections.Length; generatedIndex++)
+                {
+                    TrafficGeneratedSnapshot generated = connections[generatedIndex];
+                    SourceLaneKey sourceKey = new SourceLaneKey(generated.SourceEdge, generated.SourceLaneIndex);
+                    if (!sourceKeys.Contains(sourceKey))
+                    {
+                        continue;
+                    }
+
+                    if (generated.SourceEdge == generated.TargetEdge)
+                    {
+                        plan.PreservationSuppressedUturnConnections++;
+                        continue;
+                    }
+
+                    if (!TryFindMappingEndpoint(request, generated.SourceEdge, generated.SourceLaneIndex, source: true, out LaneEndpoint sourceEndpoint) ||
+                        !TryFindMappingEndpoint(request, generated.TargetEdge, generated.TargetLaneIndex, source: false, out LaneEndpoint targetEndpoint))
+                    {
+                        plan.PreservationSkipped++;
+                        continue;
+                    }
+
+                    PathMethod preservedMethod = plan.RoadRepairSourceKeys.Contains(sourceKey)
+                        ? GetLayerPreservationPathMethod(generated.Method, preserveUturn: false)
+                        : SanitizePreservedTrafficPathMethod(generated.Method);
+                    PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
+                        preservedMethod,
+                        sourceEndpoint,
+                        targetEndpoint);
+                    if (method == 0)
+                    {
+                        continue;
+                    }
+
+                    LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(generated, method);
+                    AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
+                    plan.PreservationSourceKeys.Add(sourceKey);
+                    plan.PreservationOverlaySnapshotConnections++;
+                    overlaySources.Add(sourceKey);
+                    if ((method & ~PathMethod.Road) != 0)
+                    {
+                        plan.PreservationNonRoadConnections++;
+                    }
+
+                    if (mapping.IsUnsafe)
+                    {
+                        plan.PreservationUnsafeConnections++;
+                    }
+                }
+            }
+
+            int snapshotConnections = plan.PreservationOverlaySnapshotConnections - beforeSnapshot;
+            int skipped = plan.PreservationSkipped - beforeSkipped;
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic snapshot outer preservation overlay scan complete splitNode={FormatEntity(request.SplitNode)} sourceKeys={FormatSourceLaneKeys(sourceKeys)} overlaySources={FormatSourceLaneKeys(overlaySources)} snapshotConnections={snapshotConnections} skipped={skipped} suppressedUturn={plan.PreservationSuppressedUturnConnections} readStats=({FormatTrafficSnapshotReadStats(readStats)}).");
         }
 
         private void AddSkippedRoadDirectionPreservationToPlan(
@@ -428,8 +601,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                PathMethod method = RestrictTrafficPathMethodToEndpoints(
-                    SanitizeTrafficPathMethod(connector.PathMethods),
+                PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
+                    SanitizePreservedTrafficPathMethod(connector.PathMethods),
                     sourceEndpoint,
                     targetEndpoint);
                 if (method == 0)
@@ -449,12 +622,22 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     IsTrackPreservation = true,
                     IsUnsafe = (connector.CarFlags & (CarLaneFlags.Unsafe | CarLaneFlags.Forbidden)) != 0,
                     TemplateEntity = connector.Entity,
-                    TemplatePathMethods = connector.PathMethods
+                    TemplatePathMethods = connector.PathMethods,
+                    HasPreservedPathMethods = true
                 };
                 AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
                 plan.PreservationSourceKeys.Add(sourceKey);
                 plan.PreservationRuntimeConnections++;
                 runtimeSources.Add(sourceKey);
+                if ((method & ~PathMethod.Road) != 0)
+                {
+                    plan.PreservationNonRoadConnections++;
+                }
+
+                if (mapping.IsUnsafe)
+                {
+                    plan.PreservationUnsafeConnections++;
+                }
             }
 
             int missingSources = 0;
@@ -543,8 +726,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    PathMethod method = RestrictTrafficPathMethodToEndpoints(
-                        SanitizeTrafficPathMethod(generated.Method),
+                    PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
+                        SanitizePreservedTrafficPathMethod(generated.Method),
                         sourceEndpoint,
                         targetEndpoint);
                     if (method == 0)
@@ -558,6 +741,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     plan.PreservationSourceKeys.Add(sourceKey);
                     plan.PreservationTrafficSnapshotConnections++;
                     trafficSnapshotSources.Add(sourceKey);
+                    if ((method & ~PathMethod.Road) != 0)
+                    {
+                        plan.PreservationNonRoadConnections++;
+                    }
+
+                    if (mapping.IsUnsafe)
+                    {
+                        plan.PreservationUnsafeConnections++;
+                    }
                 }
             }
 
@@ -668,9 +860,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
+                PathMethod preservedMethod = SanitizePreservedTrafficPathMethod(generated.Method);
+                if (preservedMethod == 0)
+                {
+                    continue;
+                }
+
                 LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(
                     generated,
-                    SanitizeTrafficPathMethod(generated.Method));
+                    preservedMethod);
 
                 SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
                 if (!bySource.ContainsKey(sourceKey))
@@ -685,7 +883,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                mapping.Method = RestrictTrafficPathMethodToEndpoints(
+                mapping.Method = RestrictPreservedTrafficPathMethodToEndpoints(
                     mapping.Method,
                     sourceEndpoint,
                     targetEndpoint);
@@ -752,6 +950,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 LaneMapping mapping = mappings[i];
                 mapping.Method = GetTrackFixMethod(mapping.Method);
                 mapping.IsTrackPreservation = true;
+                mapping.HasPreservedPathMethods = true;
                 if (mapping.Method != 0)
                 {
                     output.Add(mapping);

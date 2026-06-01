@@ -376,11 +376,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public LaneEndpoint[] TrackForwardTargetLanes;
             public LaneEndpoint[] TrackReverseSourceLanes;
             public LaneEndpoint[] TrackReverseTargetLanes;
+            public LaneEndpoint[] PreservationForwardSourceLanes;
+            public LaneEndpoint[] PreservationForwardTargetLanes;
+            public LaneEndpoint[] PreservationReverseSourceLanes;
+            public LaneEndpoint[] PreservationReverseTargetLanes;
             public LaneMapping[] Mappings;
             public LaneMapping[] ReverseMappings;
             public LaneMapping[] TrackForwardMappings;
             public LaneMapping[] TrackReverseMappings;
+            public LaneMapping[] PreservationForwardMappings;
+            public LaneMapping[] PreservationReverseMappings;
             public string TrackSkippedReason;
+            public string PreservationSkippedReason;
             public TransitionConnectionSnapshot TransitionReverseSnapshot;
             public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
             public int BranchSourceLaneIndex;
@@ -514,6 +521,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public bool IsTrackPreservation;
             public bool IsUnsafe;
             public bool HasTrafficMaps;
+            public bool HasPreservedPathMethods;
         }
 
         private sealed class TrafficMappingPlan
@@ -528,6 +536,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int PreservationSkipped;
             public int ForwardPreservationConnections;
             public int ReversePreservationConnections;
+            public int PreservationOverlaySnapshotConnections;
+            public int PreservationOverlayRuntimeConnections;
+            public int PreservationNonRoadConnections;
+            public int PreservationUnsafeConnections;
+            public int PreservationSuppressedUturnConnections;
             public int TrackConnections;
             public int TrackSkipped;
             public int TrackOnlyTargets;
@@ -581,6 +594,17 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int Skipped;
             public int TrackOnlyTargets;
             public int SharedTrackConnections;
+        }
+
+        private struct PreservationMappingStats
+        {
+            public int Connectors;
+            public int Mappings;
+            public int EndpointMisses;
+            public int Skipped;
+            public int UturnSuppressed;
+            public int NonRoadConnections;
+            public int UnsafeConnections;
         }
 
         private struct UturnCleanupWriteStats
