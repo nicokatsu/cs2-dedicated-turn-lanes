@@ -122,6 +122,105 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             CollectEdgeLaneEndpoints(edgeEntity, splitNode, role, output, includeTrackOnly: true, includeNonRoadPathMethods: true);
         }
 
+        private bool TryFindCenterTargetEndpoint(
+            Entity centerNode,
+            Entity targetEdge,
+            int laneIndex,
+            Dictionary<Entity, List<LaneEndpoint>> targetEndpointCache,
+            out LaneEndpoint targetEndpoint)
+        {
+            targetEndpoint = default;
+            if (!TryGetCenterTargetEndpoints(centerNode, targetEdge, targetEndpointCache, out List<LaneEndpoint> targetEndpoints))
+            {
+                return false;
+            }
+
+            return TryFindLaneEndpoint(targetEndpoints, laneIndex, out targetEndpoint);
+        }
+
+        private bool TryFindCenterPreservationTargetEndpoint(
+            Entity centerNode,
+            Entity targetEdge,
+            int laneIndex,
+            Dictionary<Entity, List<LaneEndpoint>> roadTargetEndpointCache,
+            Dictionary<Entity, List<LaneEndpoint>> preservationTargetEndpointCache,
+            out LaneEndpoint targetEndpoint)
+        {
+            if (TryFindCenterTargetEndpoint(
+                    centerNode,
+                    targetEdge,
+                    laneIndex,
+                    roadTargetEndpointCache,
+                    out targetEndpoint))
+            {
+                return true;
+            }
+
+            if (!preservationTargetEndpointCache.TryGetValue(targetEdge, out List<LaneEndpoint> targetEndpoints))
+            {
+                targetEndpoints = new List<LaneEndpoint>(8);
+                CollectEdgeCenterPreservationLaneEndpoints(
+                    targetEdge,
+                    centerNode,
+                    EndpointRole.TargetStartAtNode,
+                    targetEndpoints);
+                SortLaneEndpointsByLateral(targetEndpoints);
+                preservationTargetEndpointCache.Add(targetEdge, targetEndpoints);
+            }
+
+            return TryFindLaneEndpoint(targetEndpoints, laneIndex, out targetEndpoint);
+        }
+
+        private bool TryGetCenterTargetEndpoints(
+            Entity centerNode,
+            Entity targetEdge,
+            Dictionary<Entity, List<LaneEndpoint>> targetEndpointCache,
+            out List<LaneEndpoint> targetEndpoints)
+        {
+            if (!targetEndpointCache.TryGetValue(targetEdge, out targetEndpoints))
+            {
+                targetEndpoints = new List<LaneEndpoint>(8);
+                CollectEdgeCarLaneEndpoints(targetEdge, centerNode, EndpointRole.TargetStartAtNode, targetEndpoints);
+                SortLaneEndpointsByLateral(targetEndpoints);
+                targetEndpointCache.Add(targetEdge, targetEndpoints);
+            }
+
+            return targetEndpoints.Count > 0;
+        }
+
+        private static int FindLaneEndpointOrder(IReadOnlyList<LaneEndpoint> lanes, int laneIndex)
+        {
+            if (lanes == null)
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < lanes.Count; i++)
+            {
+                if (lanes[i].LaneIndex == laneIndex)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static void SortLaneEndpointsByLateral(List<LaneEndpoint> lanes)
+        {
+            lanes.Sort((a, b) => a.Lateral.CompareTo(b.Lateral));
+        }
+
+        private bool IsEdgeConnectedToNode(Entity edgeEntity, Entity node)
+        {
+            return edgeEntity != Entity.Null &&
+                   node != Entity.Null &&
+                   EntityManager.Exists(edgeEntity) &&
+                   !EntityManager.HasComponent<Deleted>(edgeEntity) &&
+                   EntityManager.TryGetComponent(edgeEntity, out NetEdge edge) &&
+                   (edge.m_Start == node || edge.m_End == node);
+        }
+
         private void CollectEdgeLaneEndpoints(
             Entity edgeEntity,
             Entity splitNode,

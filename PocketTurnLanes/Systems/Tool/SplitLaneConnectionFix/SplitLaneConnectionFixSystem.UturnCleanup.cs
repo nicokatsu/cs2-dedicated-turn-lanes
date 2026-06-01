@@ -254,10 +254,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < m_UturnCleanupSourcePlans.Count; i++)
             {
                 UturnCleanupSourcePlan sourcePlan = m_UturnCleanupSourcePlans[i];
-                Entity modifiedConnectionEntity = EntityManager.CreateEntity();
-                trafficApi.AddDataOwner(EntityManager, modifiedConnectionEntity, request.SplitNode);
-                trafficApi.AddFakePrefabRef(EntityManager, modifiedConnectionEntity);
-                object generatedBuffer = trafficApi.AddGeneratedConnectionBuffer(EntityManager, modifiedConnectionEntity);
+                Entity modifiedConnectionEntity = CreateTrafficModifiedConnectionEntity(
+                    trafficApi,
+                    request.SplitNode,
+                    out object generatedBuffer);
 
                 for (int j = 0; j < sourcePlan.ConnectionCount; j++)
                 {

@@ -36,15 +36,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < subLanes.Length; i++)
             {
                 SubLane subLane = subLanes[i];
-                Entity laneEntity = subLane.m_SubLane;
                 if ((subLane.m_PathMethods & PathMethod.Road) == 0 ||
-                    laneEntity == Entity.Null ||
-                    !EntityManager.Exists(laneEntity) ||
-                    EntityManager.HasComponent<Deleted>(laneEntity) ||
-                    NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
+                    !TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity sourceEdge, out Entity targetEdge) ||
                     !EntityManager.HasComponent<NetCarLane>(laneEntity) ||
-                    !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
-                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, splitNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
                     sourceEdge != outerEdge ||
                     targetEdge != pocketEdge)
                 {
@@ -66,14 +60,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < subLanes.Length; i++)
             {
                 SubLane subLane = subLanes[i];
-                Entity laneEntity = subLane.m_SubLane;
-                if (laneEntity == Entity.Null ||
-                    !EntityManager.Exists(laneEntity) ||
-                    EntityManager.HasComponent<Deleted>(laneEntity) ||
-                    NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
+                if (!TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity actualSourceEdge, out Entity actualTargetEdge) ||
                     !IsTrackConnectorCandidate(laneEntity, subLane) ||
-                    !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
-                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, splitNode, lane, out Entity actualSourceEdge, out Entity actualTargetEdge) ||
                     actualSourceEdge != sourceEdge ||
                     actualTargetEdge != targetEdge)
                 {
@@ -82,6 +70,52 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
                 output.Add(CreateConnectorLane(laneEntity, i, subLane, lane, actualSourceEdge, actualTargetEdge));
             }
+        }
+
+        private void CollectCenterConnectorLanes(
+            Entity centerNode,
+            DynamicBuffer<SubLane> subLanes,
+            List<ConnectorLane> output,
+            bool roadOnly)
+        {
+            output.Clear();
+            for (int i = 0; i < subLanes.Length; i++)
+            {
+                SubLane subLane = subLanes[i];
+                PathMethod pathMethods = subLane.m_PathMethods;
+                if ((roadOnly ? (pathMethods & PathMethod.Road) == 0 : pathMethods == 0) ||
+                    !TryGetConnectorLaneEdges(centerNode, subLane, out Entity laneEntity, out Lane lane, out Entity sourceEdge, out Entity targetEdge) ||
+                    (roadOnly && !EntityManager.HasComponent<NetCarLane>(laneEntity)) ||
+                    sourceEdge == Entity.Null ||
+                    targetEdge == Entity.Null ||
+                    !IsEdgeConnectedToNode(sourceEdge, centerNode) ||
+                    !IsEdgeConnectedToNode(targetEdge, centerNode))
+                {
+                    continue;
+                }
+
+                output.Add(CreateConnectorLane(laneEntity, i, subLane, lane, sourceEdge, targetEdge));
+            }
+        }
+
+        private bool TryGetConnectorLaneEdges(
+            Entity node,
+            SubLane subLane,
+            out Entity laneEntity,
+            out Lane lane,
+            out Entity sourceEdge,
+            out Entity targetEdge)
+        {
+            laneEntity = subLane.m_SubLane;
+            lane = default;
+            sourceEdge = Entity.Null;
+            targetEdge = Entity.Null;
+            return laneEntity != Entity.Null &&
+                   EntityManager.Exists(laneEntity) &&
+                   !EntityManager.HasComponent<Deleted>(laneEntity) &&
+                   !NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) &&
+                   EntityManager.TryGetComponent(laneEntity, out lane) &&
+                   NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, node, lane, out sourceEdge, out targetEdge);
         }
 
         private ConnectorLane CreateConnectorLane(
@@ -166,14 +200,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < subLanes.Length; i++)
             {
                 SubLane subLane = subLanes[i];
-                Entity laneEntity = subLane.m_SubLane;
                 if ((subLane.m_PathMethods & (PathMethod.Road | PathMethod.Track)) == 0 ||
-                    laneEntity == Entity.Null ||
-                    !EntityManager.Exists(laneEntity) ||
-                    EntityManager.HasComponent<Deleted>(laneEntity) ||
-                    NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
-                    !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
-                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, splitNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
+                    !TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity sourceEdge, out Entity targetEdge) ||
                     (restrictToSplitPair &&
                      (sourceEdge != outerEdge && sourceEdge != pocketEdge ||
                       targetEdge != outerEdge && targetEdge != pocketEdge)))
@@ -211,16 +239,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < subLanes.Length; i++)
             {
                 SubLane subLane = subLanes[i];
-                Entity laneEntity = subLane.m_SubLane;
-                if (laneEntity == Entity.Null ||
-                    !EntityManager.Exists(laneEntity) ||
-                    EntityManager.HasComponent<Deleted>(laneEntity) ||
-                    NetTopologyHelpers.IsMasterConnectorLane(EntityManager, laneEntity) ||
+                if (!TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity sourceEdge, out Entity targetEdge) ||
                     ((subLane.m_PathMethods & (PathMethod.Road | PathMethod.Track)) == 0 &&
                      !IsTrackConnectorCandidate(laneEntity, subLane)) ||
-                    !EntityManager.TryGetComponent(laneEntity, out Lane lane) ||
                     !lane.m_StartNode.OwnerEquals(lane.m_EndNode) ||
-                    !NetTopologyHelpers.TryGetConnectedEdgesFromLane(EntityManager, splitNode, lane, out Entity sourceEdge, out Entity targetEdge) ||
                     sourceEdge != targetEdge ||
                     (restrictToSplitPair && sourceEdge != outerEdge && sourceEdge != pocketEdge))
                 {
