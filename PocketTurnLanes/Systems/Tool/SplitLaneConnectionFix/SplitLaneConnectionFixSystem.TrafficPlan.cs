@@ -816,7 +816,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static PathMethod GetRoadFixMethod(PathMethod method)
         {
-            return PathMethod.Road;
+            return PathMethod.Road | (method & PathMethod.Bicycle);
         }
 
         private static PathMethod GetTrackFixMethod(PathMethod method)

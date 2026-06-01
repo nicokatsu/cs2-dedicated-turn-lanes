@@ -704,6 +704,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
         {
             PathMethod method = snapshotMethod | PathMethod.Road;
             PathMethod compatible = GetMappingMethod(source, target);
+            if ((compatible & PathMethod.Bicycle) != 0)
+            {
+                method |= PathMethod.Bicycle;
+            }
+            else
+            {
+                method &= ~PathMethod.Bicycle;
+            }
+
             if ((method & PathMethod.Track) != 0 && (compatible & PathMethod.Track) == 0)
             {
                 method &= ~PathMethod.Track;
@@ -847,6 +856,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             if (SupportsRoadPath(source) && SupportsRoadPath(target))
             {
                 method |= PathMethod.Road;
+                if (SupportsBicycleRoadPath(source) && SupportsBicycleRoadPath(target))
+                {
+                    method |= PathMethod.Bicycle;
+                }
             }
 
             if (SupportsTrackPath(source) &&
@@ -868,16 +881,23 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static PathMethod SanitizeTrafficPathMethod(PathMethod method)
         {
-            method &= PathMethod.Road | PathMethod.Track;
+            method &= PathMethod.Road | PathMethod.Track | PathMethod.Bicycle;
             return method == 0 ? PathMethod.Road : method;
         }
 
         private static PathMethod RestrictTrafficPathMethodToEndpoints(PathMethod method, LaneEndpoint source, LaneEndpoint target)
         {
-            method &= PathMethod.Road | PathMethod.Track;
+            method &= PathMethod.Road | PathMethod.Track | PathMethod.Bicycle;
             if (!SupportsRoadPath(source) || !SupportsRoadPath(target))
             {
-                method &= ~PathMethod.Road;
+                method &= ~(PathMethod.Road | PathMethod.Bicycle);
+            }
+
+            if ((method & PathMethod.Road) == 0 ||
+                !SupportsBicycleRoadPath(source) ||
+                !SupportsBicycleRoadPath(target))
+            {
+                method &= ~PathMethod.Bicycle;
             }
 
             if (!SupportsTrackPath(source) ||
@@ -895,6 +915,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return (endpoint.PathMethods & PathMethod.Road) != 0 &&
                    (endpoint.LaneFlags & LaneFlags.Road) != 0 &&
                    (endpoint.RoadTypes & RoadTypes.Car) != 0;
+        }
+
+        private static bool SupportsBicycleRoadPath(LaneEndpoint endpoint)
+        {
+            return SupportsRoadPath(endpoint) &&
+                   (endpoint.PathMethods & PathMethod.Bicycle) != 0 &&
+                   (endpoint.RoadTypes & RoadTypes.Bicycle) != 0;
         }
 
         private static bool SupportsTrackPath(LaneEndpoint endpoint)
