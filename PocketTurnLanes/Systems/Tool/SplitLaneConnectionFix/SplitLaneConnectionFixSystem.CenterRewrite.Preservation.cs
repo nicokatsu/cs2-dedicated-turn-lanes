@@ -139,43 +139,32 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return stats;
             }
 
-            int length = trafficApi.GetBufferLength(modifiedBuffer);
-            for (int i = 0; i < length; i++)
+            List<TrafficSourceSnapshot> sourceSnapshots = new List<TrafficSourceSnapshot>(plan.BySource.Count);
+            TrafficSnapshotReadStats readStats = default;
+            ReadTrafficSourceSnapshotsFromBuffer(
+                trafficApi,
+                modifiedBuffer,
+                source => plan.BySource.ContainsKey(new SourceLaneKey(source.SourceEdge, source.SourceLaneIndex)),
+                null,
+                sourceSnapshots,
+                ref readStats);
+            stats.Skipped += readStats.MissingGeneratedBuffers;
+
+            for (int i = 0; i < sourceSnapshots.Count; i++)
             {
-                object modified = trafficApi.GetBufferItem(modifiedBuffer, i);
-                SourceLaneKey modifiedKey = new SourceLaneKey(
-                    trafficApi.GetModifiedConnectionEdge(modified),
-                    trafficApi.GetModifiedConnectionLaneIndex(modified));
-                if (!plan.BySource.ContainsKey(modifiedKey))
+                TrafficGeneratedSnapshot[] connections =
+                    sourceSnapshots[i].Connections ?? System.Array.Empty<TrafficGeneratedSnapshot>();
+                for (int generatedIndex = 0; generatedIndex < connections.Length; generatedIndex++)
                 {
-                    continue;
-                }
-
-                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(modified);
-                if (modifiedEntity == Entity.Null ||
-                    !EntityManager.Exists(modifiedEntity) ||
-                    !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedEntity))
-                {
-                    stats.Skipped++;
-                    continue;
-                }
-
-                object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedEntity, true);
-                int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
-                for (int generatedIndex = 0; generatedIndex < generatedLength; generatedIndex++)
-                {
-                    object generated = trafficApi.GetBufferItem(generatedBuffer, generatedIndex);
-                    Entity sourceEdge = trafficApi.GetGeneratedConnectionSource(generated);
-                    Entity targetEdge = trafficApi.GetGeneratedConnectionTarget(generated);
-                    int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
-                    SourceLaneKey sourceKey = new SourceLaneKey(sourceEdge, laneIndexMap.x & 0xff);
+                    TrafficGeneratedSnapshot generated = connections[generatedIndex];
+                    SourceLaneKey sourceKey = new SourceLaneKey(generated.SourceEdge, generated.SourceLaneIndex);
                     if (!plan.BySource.ContainsKey(sourceKey))
                     {
                         continue;
                     }
 
-                    PathMethod originalMethod = trafficApi.GetGeneratedConnectionMethod(generated);
-                    bool isUturn = sourceEdge == targetEdge;
+                    PathMethod originalMethod = generated.Method;
+                    bool isUturn = generated.SourceEdge == generated.TargetEdge;
                     PathMethod preservedMethod = isUturn
                         ? SanitizeCenterTrafficPathMethod(originalMethod)
                         : GetCenterPreservedGeneratedMethod(originalMethod);
@@ -184,10 +173,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    LaneMapping mapping = CreateLaneMappingFromGeneratedConnection(
-                        trafficApi,
-                        generated,
-                        preservedMethod);
+                    LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(generated, preservedMethod);
                     AddOrMergeCenterTrafficMapping(plan.BySource, mapping);
                     stats.Connections++;
                     if (isUturn)

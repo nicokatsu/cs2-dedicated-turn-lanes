@@ -20,7 +20,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 ContinuationEdge = continuationEdge,
                 Source = "none",
                 Detail = "not-started",
-                Entries = Array.Empty<FarIntersectionTrafficSnapshotEntry>()
+                Entries = Array.Empty<TrafficSourceSnapshot>()
             };
 
             if (farNode == Entity.Null ||
@@ -48,116 +48,69 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return snapshot;
             }
 
-            object modifiedBuffer = trafficApi.GetModifiedLaneConnectionsBuffer(EntityManager, farNode, true);
-            int modifiedLength = trafficApi.GetBufferLength(modifiedBuffer);
-            List<FarIntersectionTrafficSnapshotEntry> entries = new List<FarIntersectionTrafficSnapshotEntry>(modifiedLength);
+            List<TrafficSourceSnapshot> entries = new List<TrafficSourceSnapshot>(8);
+            TryReadTrafficSourceSnapshots(
+                trafficApi,
+                farNode,
+                null,
+                null,
+                entries,
+                out TrafficSnapshotReadStats readStats,
+                out _);
+
             HashSet<Entity> sourceEdges = new HashSet<Entity>();
             HashSet<Entity> targetEdges = new HashSet<Entity>();
             int generatedConnections = 0;
-            int missingGeneratedBuffers = 0;
             int continuationSourceEntries = 0;
             int continuationGeneratedReferences = 0;
 
-            for (int i = 0; i < modifiedLength; i++)
+            for (int i = 0; i < entries.Count; i++)
             {
-                object modified = trafficApi.GetBufferItem(modifiedBuffer, i);
-                Entity sourceEdge = trafficApi.GetModifiedConnectionEdge(modified);
-                int sourceLaneIndex = trafficApi.GetModifiedConnectionLaneIndex(modified);
-                sourceEdges.Add(sourceEdge);
-                TryCaptureFarSnapshotEndpoint(
+                TrafficSourceSnapshot entry = entries[i];
+                sourceEdges.Add(entry.SourceEdge);
+                entry.SourceEndpoint = CaptureFarSnapshotEndpoint(
                     farNode,
-                    sourceEdge,
+                    entry.SourceEdge,
                     EndpointRole.SourceEndAtNode,
-                    sourceLaneIndex,
-                    out bool hasSourceEndpoint,
-                    out float sourceLateral,
-                    out int sourceOrder);
+                    entry.SourceLaneIndex);
 
-                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(modified);
-                List<FarIntersectionTrafficSnapshotConnection> connections = new List<FarIntersectionTrafficSnapshotConnection>(4);
-                if (modifiedEntity == Entity.Null ||
-                    !EntityManager.Exists(modifiedEntity) ||
-                    !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedEntity))
+                TrafficGeneratedSnapshot[] connections =
+                    entry.Connections ?? Array.Empty<TrafficGeneratedSnapshot>();
+                for (int connectionIndex = 0; connectionIndex < connections.Length; connectionIndex++)
                 {
-                    missingGeneratedBuffers++;
-                }
-                else
-                {
-                    object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedEntity, true);
-                    int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
-                    for (int generatedIndex = 0; generatedIndex < generatedLength; generatedIndex++)
+                    TrafficGeneratedSnapshot connection = connections[connectionIndex];
+                    targetEdges.Add(connection.TargetEdge);
+                    connection.SourceEndpoint = CaptureFarSnapshotEndpoint(
+                        farNode,
+                        connection.SourceEdge,
+                        EndpointRole.SourceEndAtNode,
+                        connection.SourceLaneIndex);
+                    connection.TargetEndpoint = CaptureFarSnapshotEndpoint(
+                        farNode,
+                        connection.TargetEdge,
+                        EndpointRole.TargetStartAtNode,
+                        connection.TargetLaneIndex);
+                    connections[connectionIndex] = connection;
+                    generatedConnections++;
+                    if (connection.SourceEdge == continuationEdge ||
+                        connection.TargetEdge == continuationEdge)
                     {
-                        object generated = trafficApi.GetBufferItem(generatedBuffer, generatedIndex);
-                        Entity generatedSource = trafficApi.GetGeneratedConnectionSource(generated);
-                        Entity generatedTarget = trafficApi.GetGeneratedConnectionTarget(generated);
-                        int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
-                        int generatedSourceLane = laneIndexMap.x & 0xff;
-                        int generatedTargetLane = laneIndexMap.y & 0xff;
-                        targetEdges.Add(generatedTarget);
-                        TryCaptureFarSnapshotEndpoint(
-                            farNode,
-                            generatedSource,
-                            EndpointRole.SourceEndAtNode,
-                            generatedSourceLane,
-                            out bool hasGeneratedSourceEndpoint,
-                            out float generatedSourceLateral,
-                            out int generatedSourceOrder);
-                        TryCaptureFarSnapshotEndpoint(
-                            farNode,
-                            generatedTarget,
-                            EndpointRole.TargetStartAtNode,
-                            generatedTargetLane,
-                            out bool hasTargetEndpoint,
-                            out float targetLateral,
-                            out int targetOrder);
-
-                        connections.Add(new FarIntersectionTrafficSnapshotConnection
-                        {
-                            SourceEdge = generatedSource,
-                            TargetEdge = generatedTarget,
-                            SourceLaneIndex = generatedSourceLane,
-                            TargetLaneIndex = generatedTargetLane,
-                            LanePositionMap = trafficApi.GetGeneratedConnectionLanePositionMap(generated),
-                            CarriagewayAndGroupIndexMap = trafficApi.GetGeneratedConnectionCarriagewayAndGroupIndexMap(generated),
-                            Method = trafficApi.GetGeneratedConnectionMethod(generated),
-                            IsUnsafe = trafficApi.GetGeneratedConnectionUnsafe(generated),
-                            HasSourceEndpoint = hasGeneratedSourceEndpoint,
-                            HasTargetEndpoint = hasTargetEndpoint,
-                            SourceLateral = generatedSourceLateral,
-                            TargetLateral = targetLateral,
-                            SourceOrder = generatedSourceOrder,
-                            TargetOrder = targetOrder
-                        });
-                        generatedConnections++;
-                        if (generatedSource == continuationEdge ||
-                            generatedTarget == continuationEdge)
-                        {
-                            continuationGeneratedReferences++;
-                        }
+                        continuationGeneratedReferences++;
                     }
                 }
 
-                if (sourceEdge == continuationEdge)
+                if (entry.SourceEdge == continuationEdge)
                 {
                     continuationSourceEntries++;
                 }
 
-                entries.Add(new FarIntersectionTrafficSnapshotEntry
-                {
-                    SourceEdge = sourceEdge,
-                    SourceLaneIndex = sourceLaneIndex,
-                    SourceCarriagewayAndGroup = trafficApi.GetModifiedConnectionCarriagewayAndGroup(modified),
-                    SourceLanePosition = trafficApi.GetModifiedConnectionLanePosition(modified),
-                    HasSourceEndpoint = hasSourceEndpoint,
-                    SourceLateral = sourceLateral,
-                    SourceOrder = sourceOrder,
-                    Connections = connections.ToArray()
-                });
+                entry.Connections = connections;
+                entries[i] = entry;
             }
 
             snapshot.Source = entries.Count > 0 ? "traffic" : "empty";
             snapshot.Entries = entries.ToArray();
-            snapshot.Detail = $"snapshotSource={snapshot.Source} modifiedSources={entries.Count} generatedConnections={generatedConnections} sourceEdges={sourceEdges.Count} targetEdges={targetEdges.Count} continuationSourceEntries={continuationSourceEntries} continuationGeneratedReferences={continuationGeneratedReferences} missingGeneratedBuffers={missingGeneratedBuffers}";
+            snapshot.Detail = $"snapshotSource={snapshot.Source} modifiedSources={entries.Count} generatedConnections={generatedConnections} sourceEdges={sourceEdges.Count} targetEdges={targetEdges.Count} continuationSourceEntries={continuationSourceEntries} continuationGeneratedReferences={continuationGeneratedReferences} missingGeneratedBuffers={readStats.MissingGeneratedBuffers}";
             Mod.LogDiagnostic($"[SplitLaneConnectionFix] Captured far intersection Traffic snapshot farNode={FormatEntity(farNode)} continuation={FormatEntity(continuationEdge)} {snapshot.Detail}.");
             return snapshot;
         }
@@ -190,28 +143,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            object modifiedBuffer = trafficApi.GetOrAddModifiedLaneConnectionsBuffer(EntityManager, snapshot.Node);
+            object modifiedBuffer = GetOrReplaceTrafficModifiedConnectionsBuffer(
+                trafficApi,
+                snapshot.Node,
+                out int removedExisting);
             if (modifiedBuffer == null)
             {
                 Mod.LogDiagnostic($"[SplitLaneConnectionFix] Far intersection Traffic restore failed before mutation splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(snapshot.Node)} outerEdge={FormatEntity(request.OuterEdge)} reason=modifiedBufferUnavailable snapshot={detail}.");
                 return false;
             }
-
-            int removedExisting = 0;
-            int originalLength = trafficApi.GetBufferLength(modifiedBuffer);
-            for (int i = 0; i < originalLength; i++)
-            {
-                object existing = trafficApi.GetBufferItem(modifiedBuffer, i);
-                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(existing);
-                if (modifiedEntity != Entity.Null && EntityManager.Exists(modifiedEntity))
-                {
-                    AddMarkerIfMissing<Deleted>(modifiedEntity);
-                }
-
-                removedExisting++;
-            }
-
-            trafficApi.ClearBuffer(modifiedBuffer);
 
             int writtenSources = 0;
             int writtenConnections = 0;
@@ -224,7 +164,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             for (int i = 0; i < snapshot.Entries.Length; i++)
             {
-                FarIntersectionTrafficSnapshotEntry entry = snapshot.Entries[i];
+                TrafficSourceSnapshot entry = snapshot.Entries[i];
                 if (!TryMapFarSnapshotEdge(
                         snapshot,
                         request,
@@ -241,6 +181,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 int sourceLaneIndex = entry.SourceLaneIndex;
                 int2 sourceCarriagewayAndGroup = entry.SourceCarriagewayAndGroup;
                 float3 sourceLanePosition = entry.SourceLanePosition;
+                TrafficEndpointSnapshot sourceAnchor = entry.SourceEndpoint;
                 if (sourceEdgeRemapped)
                 {
                     if (!TryResolveFarSnapshotEndpoint(
@@ -248,9 +189,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                             sourceEdge,
                             EndpointRole.SourceEndAtNode,
                             entry.SourceLaneIndex,
-                            entry.HasSourceEndpoint,
-                            entry.SourceLateral,
-                            entry.SourceOrder,
+                            sourceAnchor.HasEndpoint,
+                            sourceAnchor.Lateral,
+                            sourceAnchor.Order,
                             out LaneEndpoint remappedSource,
                             out string sourceRemapDetail))
                     {
@@ -269,16 +210,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
                 }
 
-                Entity modifiedConnectionEntity = CreateTrafficModifiedConnectionEntity(
-                    trafficApi,
-                    snapshot.Node,
-                    out object generatedBuffer);
-
-                FarIntersectionTrafficSnapshotConnection[] connections =
-                    entry.Connections ?? Array.Empty<FarIntersectionTrafficSnapshotConnection>();
+                List<TrafficGeneratedSnapshot> remappedConnections = new List<TrafficGeneratedSnapshot>(
+                    entry.Connections?.Length ?? 0);
+                TrafficGeneratedSnapshot[] connections =
+                    entry.Connections ?? Array.Empty<TrafficGeneratedSnapshot>();
                 for (int connectionIndex = 0; connectionIndex < connections.Length; connectionIndex++)
                 {
-                    FarIntersectionTrafficSnapshotConnection connection = connections[connectionIndex];
+                    TrafficGeneratedSnapshot connection = connections[connectionIndex];
                     if (!TryMapFarSnapshotEdge(
                             snapshot,
                             request,
@@ -311,6 +249,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     LaneEndpoint targetEndpoint = default;
                     bool hasGeneratedSourceEndpoint = false;
                     bool hasTargetEndpoint = false;
+                    TrafficEndpointSnapshot generatedSourceAnchor = connection.SourceEndpoint;
+                    TrafficEndpointSnapshot targetAnchor = connection.TargetEndpoint;
 
                     if (generatedSourceRemapped)
                     {
@@ -319,9 +259,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                                 generatedSourceEdge,
                                 EndpointRole.SourceEndAtNode,
                                 connection.SourceLaneIndex,
-                                connection.HasSourceEndpoint,
-                                connection.SourceLateral,
-                                connection.SourceOrder,
+                                generatedSourceAnchor.HasEndpoint,
+                                generatedSourceAnchor.Lateral,
+                                generatedSourceAnchor.Order,
                                 out generatedSourceEndpoint,
                                 out string generatedSourceRemapDetail))
                         {
@@ -346,9 +286,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                                 targetEdge,
                                 EndpointRole.TargetStartAtNode,
                                 connection.TargetLaneIndex,
-                                connection.HasTargetEndpoint,
-                                connection.TargetLateral,
-                                connection.TargetOrder,
+                                targetAnchor.HasEndpoint,
+                                targetAnchor.Lateral,
+                                targetAnchor.Order,
                                 out targetEndpoint,
                                 out string targetRemapDetail))
                         {
@@ -384,24 +324,38 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                             hasTargetEndpoint ? targetEndpoint.CarriagewayAndGroup : originalTargetCarriagewayAndGroup);
                     }
 
-                    trafficApi.AddBufferElement(generatedBuffer, trafficApi.CreateGeneratedConnection(
-                        generatedSourceEdge,
-                        targetEdge,
-                        generatedSourceLaneIndex,
-                        targetLaneIndex,
-                        lanePositionMap,
-                        carriagewayAndGroupIndexMap,
-                        connection.Method,
-                        connection.IsUnsafe));
-                    writtenConnections++;
+                    remappedConnections.Add(new TrafficGeneratedSnapshot
+                    {
+                        SourceEdge = generatedSourceEdge,
+                        TargetEdge = targetEdge,
+                        SourceLaneIndex = generatedSourceLaneIndex,
+                        TargetLaneIndex = targetLaneIndex,
+                        LanePositionMap = lanePositionMap,
+                        CarriagewayAndGroupIndexMap = carriagewayAndGroupIndexMap,
+                        Method = connection.Method,
+                        IsUnsafe = connection.IsUnsafe
+                    });
                 }
 
-                trafficApi.AddBufferElement(modifiedBuffer, trafficApi.CreateModifiedLaneConnection(
-                    sourceLaneIndex,
-                    sourceCarriagewayAndGroup,
-                    sourceLanePosition,
-                    sourceEdge,
-                    modifiedConnectionEntity));
+                TrafficSourceSnapshot sourceToWrite = entry;
+                sourceToWrite.SourceEdge = sourceEdge;
+                sourceToWrite.SourceLaneIndex = sourceLaneIndex;
+                sourceToWrite.SourceCarriagewayAndGroup = sourceCarriagewayAndGroup;
+                sourceToWrite.SourceLanePosition = sourceLanePosition;
+                sourceToWrite.Connections = remappedConnections.ToArray();
+                if (!TryWriteTrafficSourceSnapshot(
+                        trafficApi,
+                        snapshot.Node,
+                        modifiedBuffer,
+                        sourceToWrite,
+                        out int sourceWrittenConnections))
+                {
+                    skippedSources++;
+                    AddFarSnapshotSkipSample(skipSamples, $"writeSource {FormatEntity(sourceEdge)}:{sourceLaneIndex} failed");
+                    continue;
+                }
+
+                writtenConnections += sourceWrittenConnections;
                 writtenSources++;
             }
 
@@ -410,6 +364,28 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             detail = $"snapshot={FormatFarSnapshot(snapshot)} removedExisting={removedExisting} writtenSources={writtenSources} expectedSources={snapshot.Entries.Length} writtenConnections={writtenConnections} skippedSources={skippedSources} skippedConnections={skippedConnections} remappedSourceEntries={remappedSourceEntries} remappedGeneratedEdges={remappedGeneratedEdges} remappedLaneIndexes={remappedLaneIndexes} skipSamples={FormatStringList(skipSamples)}";
             Mod.LogDiagnostic($"[SplitLaneConnectionFix] Restored far intersection Traffic snapshot splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(snapshot.Node)} continuation={FormatEntity(snapshot.ContinuationEdge)} outerEdge={FormatEntity(request.OuterEdge)} trafficWriteOrder={GetTrafficWriteOrder(request.Mode)} {detail}.");
             return skippedSources == 0 && skippedConnections == 0;
+        }
+
+        private TrafficEndpointSnapshot CaptureFarSnapshotEndpoint(
+            Entity node,
+            Entity edge,
+            EndpointRole role,
+            int laneIndex)
+        {
+            TryCaptureFarSnapshotEndpoint(
+                node,
+                edge,
+                role,
+                laneIndex,
+                out bool hasEndpoint,
+                out float lateral,
+                out int order);
+            return new TrafficEndpointSnapshot
+            {
+                HasEndpoint = hasEndpoint,
+                Lateral = lateral,
+                Order = order
+            };
         }
 
         private void TryCaptureFarSnapshotEndpoint(

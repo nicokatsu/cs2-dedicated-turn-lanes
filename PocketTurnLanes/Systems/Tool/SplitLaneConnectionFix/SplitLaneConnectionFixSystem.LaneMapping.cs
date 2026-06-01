@@ -1306,30 +1306,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return count;
         }
 
-        private static LaneMapping CreateLaneMappingFromGeneratedConnection(
-            TrafficApi trafficApi,
-            object generated,
-            PathMethod method)
-        {
-            Entity sourceEdge = trafficApi.GetGeneratedConnectionSource(generated);
-            Entity targetEdge = trafficApi.GetGeneratedConnectionTarget(generated);
-            int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
-            return new LaneMapping
-            {
-                SourceEdge = sourceEdge,
-                TargetEdge = targetEdge,
-                SourceLaneIndex = laneIndexMap.x & 0xff,
-                TargetLaneIndex = laneIndexMap.y & 0xff,
-                TrafficLanePositionMap = trafficApi.GetGeneratedConnectionLanePositionMap(generated),
-                TrafficCarriagewayAndGroupIndexMap = trafficApi.GetGeneratedConnectionCarriagewayAndGroupIndexMap(generated),
-                Method = method,
-                IsBranch = false,
-                IsTrackPreservation = true,
-                IsUnsafe = trafficApi.GetGeneratedConnectionUnsafe(generated),
-                HasTrafficMaps = true
-            };
-        }
-
         private static void AddOrMergeCenterTrafficMapping(
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
             LaneMapping mapping)

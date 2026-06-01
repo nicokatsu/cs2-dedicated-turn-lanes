@@ -52,28 +52,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public bool IsUnsafe;
         }
 
-        public sealed class FarIntersectionTrafficSnapshot
+        public struct TrafficEndpointSnapshot
         {
-            public Entity Node;
-            public Entity ContinuationEdge;
-            public string Source;
-            public string Detail;
-            public FarIntersectionTrafficSnapshotEntry[] Entries;
+            public bool HasEndpoint;
+            public float Lateral;
+            public int Order;
         }
 
-        public struct FarIntersectionTrafficSnapshotEntry
-        {
-            public Entity SourceEdge;
-            public int SourceLaneIndex;
-            public int2 SourceCarriagewayAndGroup;
-            public float3 SourceLanePosition;
-            public bool HasSourceEndpoint;
-            public float SourceLateral;
-            public int SourceOrder;
-            public FarIntersectionTrafficSnapshotConnection[] Connections;
-        }
-
-        public struct FarIntersectionTrafficSnapshotConnection
+        public struct TrafficGeneratedSnapshot
         {
             public Entity SourceEdge;
             public Entity TargetEdge;
@@ -83,12 +69,29 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int4 CarriagewayAndGroupIndexMap;
             public PathMethod Method;
             public bool IsUnsafe;
-            public bool HasSourceEndpoint;
-            public bool HasTargetEndpoint;
-            public float SourceLateral;
-            public float TargetLateral;
-            public int SourceOrder;
-            public int TargetOrder;
+            public TrafficEndpointSnapshot SourceEndpoint;
+            public TrafficEndpointSnapshot TargetEndpoint;
+        }
+
+        public struct TrafficSourceSnapshot
+        {
+            public Entity SourceEdge;
+            public int SourceLaneIndex;
+            public int2 SourceCarriagewayAndGroup;
+            public float3 SourceLanePosition;
+            public Entity ModifiedConnectionEntity;
+            public bool HasGeneratedBuffer;
+            public TrafficEndpointSnapshot SourceEndpoint;
+            public TrafficGeneratedSnapshot[] Connections;
+        }
+
+        public sealed class FarIntersectionTrafficSnapshot
+        {
+            public Entity Node;
+            public Entity ContinuationEdge;
+            public string Source;
+            public string Detail;
+            public TrafficSourceSnapshot[] Entries;
         }
 
         private static void ResetRoadPreparation(ref Request request)

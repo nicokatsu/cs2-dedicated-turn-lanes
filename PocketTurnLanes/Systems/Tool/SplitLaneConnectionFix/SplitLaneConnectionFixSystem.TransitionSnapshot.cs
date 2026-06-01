@@ -90,53 +90,35 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             out string detail)
         {
             detail = "none";
-            if (!trafficApi.HasModifiedLaneConnectionsBuffer(EntityManager, transitionNode))
+            List<TrafficSourceSnapshot> sourceSnapshots = new List<TrafficSourceSnapshot>(4);
+            if (!TryReadTrafficSourceSnapshots(
+                    trafficApi,
+                    transitionNode,
+                    source => source.SourceEdge == sourceEdge,
+                    (source, generated) => generated.SourceEdge == sourceEdge && generated.TargetEdge == targetEdge,
+                    sourceSnapshots,
+                    out TrafficSnapshotReadStats readStats,
+                    out string readDetail))
             {
-                detail = "trafficBuffer=missing";
+                detail = readDetail;
                 return false;
             }
 
-            object modifiedBuffer = trafficApi.GetModifiedLaneConnectionsBuffer(EntityManager, transitionNode, true);
-            int sourceEntries = 0;
-            int generatedEntries = 0;
             int accepted = 0;
-            int length = trafficApi.GetBufferLength(modifiedBuffer);
-            for (int i = 0; i < length; i++)
+            int generatedEntries = 0;
+            for (int i = 0; i < sourceSnapshots.Count; i++)
             {
-                object modified = trafficApi.GetBufferItem(modifiedBuffer, i);
-                Entity edge = trafficApi.GetModifiedConnectionEdge(modified);
-                if (edge != sourceEdge)
+                TrafficGeneratedSnapshot[] connections =
+                    sourceSnapshots[i].Connections ?? System.Array.Empty<TrafficGeneratedSnapshot>();
+                generatedEntries += connections.Length;
+                for (int generatedIndex = 0; generatedIndex < connections.Length; generatedIndex++)
                 {
-                    continue;
-                }
-
-                sourceEntries++;
-                Entity modifiedConnectionEntity = trafficApi.GetModifiedConnectionEntity(modified);
-                if (modifiedConnectionEntity == Entity.Null ||
-                    !EntityManager.Exists(modifiedConnectionEntity) ||
-                    !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedConnectionEntity))
-                {
-                    continue;
-                }
-
-                object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedConnectionEntity, true);
-                int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
-                for (int generatedIndex = 0; generatedIndex < generatedLength; generatedIndex++)
-                {
-                    object generated = trafficApi.GetBufferItem(generatedBuffer, generatedIndex);
-                    if (trafficApi.GetGeneratedConnectionSource(generated) != sourceEdge ||
-                        trafficApi.GetGeneratedConnectionTarget(generated) != targetEdge)
-                    {
-                        continue;
-                    }
-
-                    generatedEntries++;
-                    int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
+                    TrafficGeneratedSnapshot generated = connections[generatedIndex];
                     if (!TryBuildSnapshotMapping(
-                            laneIndexMap.x & 0xff,
-                            laneIndexMap.y & 0xff,
-                            trafficApi.GetGeneratedConnectionMethod(generated),
-                            trafficApi.GetGeneratedConnectionUnsafe(generated),
+                            generated.SourceLaneIndex,
+                            generated.TargetLaneIndex,
+                            generated.Method,
+                            generated.IsUnsafe,
                             sourceLanes,
                             targetLanes,
                             out TransitionConnectionSnapshotMapping mapping))
@@ -149,7 +131,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            detail = $"trafficSources={sourceEntries} generatedMatches={generatedEntries} accepted={accepted}";
+            detail = $"trafficSources={readStats.AcceptedSources} generatedMatches={generatedEntries} accepted={accepted}";
             return accepted > 0;
         }
 

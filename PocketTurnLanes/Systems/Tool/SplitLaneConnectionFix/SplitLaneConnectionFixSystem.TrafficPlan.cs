@@ -505,56 +505,46 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return;
             }
 
-            int length = trafficApi.GetBufferLength(modifiedBuffer);
-            for (int i = 0; i < length; i++)
+            List<TrafficSourceSnapshot> sourceSnapshots = new List<TrafficSourceSnapshot>(sourceKeys.Count);
+            TrafficSnapshotReadStats readStats = default;
+            ReadTrafficSourceSnapshotsFromBuffer(
+                trafficApi,
+                modifiedBuffer,
+                source =>
+                {
+                    SourceLaneKey modifiedKey = new SourceLaneKey(source.SourceEdge, source.SourceLaneIndex);
+                    return sourceKeys.Contains(modifiedKey) && !plan.RoadRepairSourceKeys.Contains(modifiedKey);
+                },
+                null,
+                sourceSnapshots,
+                ref readStats);
+            plan.PreservationSkipped += readStats.MissingGeneratedBuffers;
+
+            for (int i = 0; i < sourceSnapshots.Count; i++)
             {
-                object modified = trafficApi.GetBufferItem(modifiedBuffer, i);
-                SourceLaneKey modifiedKey = new SourceLaneKey(
-                    trafficApi.GetModifiedConnectionEdge(modified),
-                    trafficApi.GetModifiedConnectionLaneIndex(modified));
-                if (!sourceKeys.Contains(modifiedKey) ||
-                    plan.RoadRepairSourceKeys.Contains(modifiedKey))
+                TrafficGeneratedSnapshot[] connections =
+                    sourceSnapshots[i].Connections ?? System.Array.Empty<TrafficGeneratedSnapshot>();
+                for (int generatedIndex = 0; generatedIndex < connections.Length; generatedIndex++)
                 {
-                    continue;
-                }
-
-                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(modified);
-                if (modifiedEntity == Entity.Null ||
-                    !EntityManager.Exists(modifiedEntity) ||
-                    !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedEntity))
-                {
-                    plan.PreservationSkipped++;
-                    continue;
-                }
-
-                object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedEntity, true);
-                int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
-                for (int generatedIndex = 0; generatedIndex < generatedLength; generatedIndex++)
-                {
-                    object generated = trafficApi.GetBufferItem(generatedBuffer, generatedIndex);
-                    Entity generatedSourceEdge = trafficApi.GetGeneratedConnectionSource(generated);
-                    Entity generatedTargetEdge = trafficApi.GetGeneratedConnectionTarget(generated);
-                    int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
-                    int sourceLaneIndex = laneIndexMap.x & 0xff;
-                    int targetLaneIndex = laneIndexMap.y & 0xff;
-                    SourceLaneKey sourceKey = new SourceLaneKey(generatedSourceEdge, sourceLaneIndex);
-                    if (generatedSourceEdge != sourceEdge ||
-                        generatedTargetEdge != targetEdge ||
-                        generatedTargetEdge == generatedSourceEdge ||
+                    TrafficGeneratedSnapshot generated = connections[generatedIndex];
+                    SourceLaneKey sourceKey = new SourceLaneKey(generated.SourceEdge, generated.SourceLaneIndex);
+                    if (generated.SourceEdge != sourceEdge ||
+                        generated.TargetEdge != targetEdge ||
+                        generated.TargetEdge == generated.SourceEdge ||
                         !sourceKeys.Contains(sourceKey))
                     {
                         continue;
                     }
 
-                    if (!TryFindMappingEndpoint(request, generatedSourceEdge, sourceLaneIndex, source: true, out LaneEndpoint sourceEndpoint) ||
-                        !TryFindMappingEndpoint(request, generatedTargetEdge, targetLaneIndex, source: false, out LaneEndpoint targetEndpoint))
+                    if (!TryFindMappingEndpoint(request, generated.SourceEdge, generated.SourceLaneIndex, source: true, out LaneEndpoint sourceEndpoint) ||
+                        !TryFindMappingEndpoint(request, generated.TargetEdge, generated.TargetLaneIndex, source: false, out LaneEndpoint targetEndpoint))
                     {
                         plan.PreservationSkipped++;
                         continue;
                     }
 
                     PathMethod method = RestrictTrafficPathMethodToEndpoints(
-                        SanitizeTrafficPathMethod(trafficApi.GetGeneratedConnectionMethod(generated)),
+                        SanitizeTrafficPathMethod(generated.Method),
                         sourceEndpoint,
                         targetEndpoint);
                     if (method == 0)
@@ -563,10 +553,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    LaneMapping mapping = CreateLaneMappingFromGeneratedConnection(
-                        trafficApi,
-                        generated,
-                        method);
+                    LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(generated, method);
                     AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
                     plan.PreservationSourceKeys.Add(sourceKey);
                     plan.PreservationTrafficSnapshotConnections++;
@@ -665,31 +652,25 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             ref int skipped,
             ref int unsafePreserved)
         {
-            if (modifiedEntity == Entity.Null ||
-                !EntityManager.Exists(modifiedEntity) ||
-                !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedEntity))
+            List<TrafficGeneratedSnapshot> generatedSnapshots = new List<TrafficGeneratedSnapshot>(4);
+            if (!TryReadTrafficGeneratedSnapshots(trafficApi, modifiedEntity, generatedSnapshots))
             {
                 return 0;
             }
 
             int copied = 0;
-            object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedEntity, true);
-            int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
-            for (int i = 0; i < generatedLength; i++)
+            for (int i = 0; i < generatedSnapshots.Count; i++)
             {
-                object generated = trafficApi.GetBufferItem(generatedBuffer, i);
-                Entity sourceEdge = trafficApi.GetGeneratedConnectionSource(generated);
-                Entity targetEdge = trafficApi.GetGeneratedConnectionTarget(generated);
-                if (targetEdge == sourceEdge)
+                TrafficGeneratedSnapshot generated = generatedSnapshots[i];
+                if (generated.TargetEdge == generated.SourceEdge)
                 {
                     skipped++;
                     continue;
                 }
 
-                LaneMapping mapping = CreateLaneMappingFromGeneratedConnection(
-                    trafficApi,
+                LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(
                     generated,
-                    SanitizeTrafficPathMethod(trafficApi.GetGeneratedConnectionMethod(generated)));
+                    SanitizeTrafficPathMethod(generated.Method));
 
                 SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
                 if (!bySource.ContainsKey(sourceKey))

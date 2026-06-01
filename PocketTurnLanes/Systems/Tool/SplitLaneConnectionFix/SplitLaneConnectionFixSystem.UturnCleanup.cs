@@ -316,35 +316,34 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             ref UturnCleanupWriteStats stats)
         {
             sourcePlan = default;
-            if (!trafficApi.HasModifiedLaneConnectionsBuffer(EntityManager, request.SplitNode))
+            List<TrafficSourceSnapshot> sourceSnapshots = new List<TrafficSourceSnapshot>(2);
+            if (!TryReadTrafficSourceSnapshots(
+                    trafficApi,
+                    request.SplitNode,
+                    source => source.SourceEdge == sourceKey.Edge && source.SourceLaneIndex == sourceKey.LaneIndex,
+                    null,
+                    sourceSnapshots,
+                    out TrafficSnapshotReadStats readStats,
+                    out _))
             {
                 stats.MissingTrafficSnapshotSources++;
                 return false;
             }
 
-            object modifiedBuffer = trafficApi.GetModifiedLaneConnectionsBuffer(EntityManager, request.SplitNode, true);
-            int length = trafficApi.GetBufferLength(modifiedBuffer);
-            bool sawSourceEntry = false;
+            if (readStats.AcceptedSources == 0)
+            {
+                stats.MissingTrafficSnapshotSources++;
+                return false;
+            }
+
+            stats.MissingGeneratedBufferSources += readStats.MissingGeneratedBuffers;
             bool copiedReadableSnapshot = false;
             int firstConnection = m_UturnCleanupConnectionPlans.Count;
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < sourceSnapshots.Count; i++)
             {
-                object modified = trafficApi.GetBufferItem(modifiedBuffer, i);
-                SourceLaneKey existingKey = new SourceLaneKey(
-                    trafficApi.GetModifiedConnectionEdge(modified),
-                    trafficApi.GetModifiedConnectionLaneIndex(modified));
-                if (!existingKey.Equals(sourceKey))
+                TrafficSourceSnapshot sourceSnapshot = sourceSnapshots[i];
+                if (!sourceSnapshot.HasGeneratedBuffer)
                 {
-                    continue;
-                }
-
-                sawSourceEntry = true;
-                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(modified);
-                if (modifiedEntity == Entity.Null ||
-                    !EntityManager.Exists(modifiedEntity) ||
-                    !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedEntity))
-                {
-                    stats.MissingGeneratedBufferSources++;
                     continue;
                 }
 
@@ -353,50 +352,44 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     sourcePlan = new UturnCleanupSourcePlan
                     {
                         Key = sourceKey,
-                        SourceCarriagewayAndGroup = trafficApi.GetModifiedConnectionCarriagewayAndGroup(modified),
-                        SourceLanePosition = trafficApi.GetModifiedConnectionLanePosition(modified),
+                        SourceCarriagewayAndGroup = sourceSnapshot.SourceCarriagewayAndGroup,
+                        SourceLanePosition = sourceSnapshot.SourceLanePosition,
                         FirstConnection = firstConnection
                     };
                     copiedReadableSnapshot = true;
                 }
 
-                object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedEntity, true);
-                int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
-                for (int generatedIndex = 0; generatedIndex < generatedLength; generatedIndex++)
+                TrafficGeneratedSnapshot[] connections =
+                    sourceSnapshot.Connections ?? System.Array.Empty<TrafficGeneratedSnapshot>();
+                for (int generatedIndex = 0; generatedIndex < connections.Length; generatedIndex++)
                 {
-                    object generated = trafficApi.GetBufferItem(generatedBuffer, generatedIndex);
-                    Entity sourceEdge = trafficApi.GetGeneratedConnectionSource(generated);
-                    Entity targetEdge = trafficApi.GetGeneratedConnectionTarget(generated);
-                    int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
-                    int sourceLaneIndex = laneIndexMap.x & 0xff;
-                    int targetLaneIndex = laneIndexMap.y & 0xff;
-                    if (sourceEdge != sourceKey.Edge || sourceLaneIndex != sourceKey.LaneIndex)
+                    TrafficGeneratedSnapshot generated = connections[generatedIndex];
+                    if (generated.SourceEdge != sourceKey.Edge || generated.SourceLaneIndex != sourceKey.LaneIndex)
                     {
                         continue;
                     }
 
-                    if (targetEdge == sourceKey.Edge)
+                    if (generated.TargetEdge == sourceKey.Edge)
                     {
                         stats.SuppressedTrafficUturnConnections++;
                         continue;
                     }
 
-                    PathMethod originalMethod = trafficApi.GetGeneratedConnectionMethod(generated);
+                    PathMethod originalMethod = generated.Method;
                     PathMethod method = SanitizeTrafficPathMethod(originalMethod);
                     if (method != originalMethod)
                     {
                         stats.NormalizedMethods++;
                     }
 
-                    bool isUnsafe = trafficApi.GetGeneratedConnectionUnsafe(generated);
                     m_UturnCleanupConnectionPlans.Add(new UturnCleanupConnectionPlan
                     {
-                        TargetEdge = targetEdge,
-                        TargetLaneIndex = targetLaneIndex,
-                        LanePositionMap = trafficApi.GetGeneratedConnectionLanePositionMap(generated),
-                        CarriagewayAndGroupIndexMap = trafficApi.GetGeneratedConnectionCarriagewayAndGroupIndexMap(generated),
+                        TargetEdge = generated.TargetEdge,
+                        TargetLaneIndex = generated.TargetLaneIndex,
+                        LanePositionMap = generated.LanePositionMap,
+                        CarriagewayAndGroupIndexMap = generated.CarriagewayAndGroupIndexMap,
                         Method = method,
-                        IsUnsafe = isUnsafe
+                        IsUnsafe = generated.IsUnsafe
                     });
                     stats.PreservedTrafficSnapshotConnections++;
                     if ((method & PathMethod.Track) != 0)
@@ -404,17 +397,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         stats.PreservedTrackConnections++;
                     }
 
-                    if (isUnsafe)
+                    if (generated.IsUnsafe)
                     {
                         stats.UnsafePreservedConnections++;
                     }
                 }
-            }
-
-            if (!sawSourceEntry)
-            {
-                stats.MissingTrafficSnapshotSources++;
-                return false;
             }
 
             if (!copiedReadableSnapshot)

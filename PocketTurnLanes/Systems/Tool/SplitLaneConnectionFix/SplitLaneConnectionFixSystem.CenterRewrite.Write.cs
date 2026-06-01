@@ -191,31 +191,28 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             object modifiedConnection,
             SourceLaneKey sourceKey)
         {
-            Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(modifiedConnection);
-            if (modifiedEntity == Entity.Null ||
-                !EntityManager.Exists(modifiedEntity) ||
-                !trafficApi.HasGeneratedConnectionBuffer(EntityManager, modifiedEntity))
+            List<TrafficGeneratedSnapshot> generatedSnapshots = new List<TrafficGeneratedSnapshot>(4);
+            if (!TryReadTrafficGeneratedSnapshots(
+                    trafficApi,
+                    trafficApi.GetModifiedConnectionEntity(modifiedConnection),
+                    generatedSnapshots))
             {
                 return false;
             }
 
-            object generatedBuffer = trafficApi.GetGeneratedConnectionBuffer(EntityManager, modifiedEntity, true);
-            int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
-            if (generatedLength <= 0 || generatedLength > 4)
+            if (generatedSnapshots.Count <= 0 || generatedSnapshots.Count > 4)
             {
                 return false;
             }
 
-            for (int i = 0; i < generatedLength; i++)
+            for (int i = 0; i < generatedSnapshots.Count; i++)
             {
-                object generated = trafficApi.GetBufferItem(generatedBuffer, i);
-                Entity generatedSource = trafficApi.GetGeneratedConnectionSource(generated);
-                int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
-                PathMethod method = SanitizeCenterTrafficPathMethod(trafficApi.GetGeneratedConnectionMethod(generated));
-                if (generatedSource != sourceKey.Edge ||
-                    (laneIndexMap.x & 0xff) != sourceKey.LaneIndex ||
+                TrafficGeneratedSnapshot generated = generatedSnapshots[i];
+                PathMethod method = SanitizeCenterTrafficPathMethod(generated.Method);
+                if (generated.SourceEdge != sourceKey.Edge ||
+                    generated.SourceLaneIndex != sourceKey.LaneIndex ||
                     (method & ~PathMethod.Road) != 0 ||
-                    trafficApi.GetGeneratedConnectionUnsafe(generated))
+                    generated.IsUnsafe)
                 {
                     return false;
                 }
