@@ -411,8 +411,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             List<LaneEndpoint> endpoints = new List<LaneEndpoint>(8);
             CollectEdgePreservationLaneEndpoints(edge, node, role, endpoints);
-            SortLaneEndpointsByLateral(endpoints);
-            order = FindLaneEndpointOrder(endpoints, laneIndex);
+            TrafficLaneEndpointHelpers.SortByLateral(endpoints);
+            order = TrafficLaneEndpointHelpers.FindOrder(endpoints, laneIndex);
             if (order < 0)
             {
                 return;
@@ -475,14 +475,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             detail = string.Empty;
             List<LaneEndpoint> endpoints = new List<LaneEndpoint>(8);
             CollectEdgePreservationLaneEndpoints(edge, node, role, endpoints);
-            SortLaneEndpointsByLateral(endpoints);
+            TrafficLaneEndpointHelpers.SortByLateral(endpoints);
             if (endpoints.Count == 0)
             {
                 detail = $"noEndpoints edge={FormatEntity(edge)} node={FormatEntity(node)} role={role}";
                 return false;
             }
 
-            if (TryFindLaneEndpoint(endpoints, snapshotLaneIndex, out endpoint))
+            if (TrafficLaneEndpointHelpers.TryFind(endpoints, snapshotLaneIndex, out endpoint))
             {
                 detail = $"sameLaneIndex {snapshotLaneIndex}->{endpoint.LaneIndex}";
                 return true;

@@ -35,29 +35,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             CollectEdgeLaneEndpoints(edgeEntity, splitNode, role, output, includeTrackOnly: true, includeNonRoadPathMethods: true);
         }
 
-        private static int FindLaneEndpointOrder(IReadOnlyList<LaneEndpoint> lanes, int laneIndex)
-        {
-            if (lanes == null)
-            {
-                return -1;
-            }
-
-            for (int i = 0; i < lanes.Count; i++)
-            {
-                if (lanes[i].LaneIndex == laneIndex)
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        private static void SortLaneEndpointsByLateral(List<LaneEndpoint> lanes)
-        {
-            lanes.Sort((a, b) => a.Lateral.CompareTo(b.Lateral));
-        }
-
         private bool IsEdgeConnectedToNode(Entity edgeEntity, Entity node)
         {
             return edgeEntity != Entity.Null &&
@@ -307,15 +284,5 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return true;
         }
 
-        private static float2 GetAveragePosition(List<LaneEndpoint> lanes)
-        {
-            float2 origin = default;
-            for (int i = 0; i < lanes.Count; i++)
-            {
-                origin += lanes[i].Position.xz;
-            }
-
-            return origin / math.max(1, lanes.Count);
-        }
     }
 }

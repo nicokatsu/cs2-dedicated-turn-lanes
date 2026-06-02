@@ -19,7 +19,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            return TryFindLaneEndpoint(targetEndpoints, laneIndex, out targetEndpoint);
+            return TrafficLaneEndpointHelpers.TryFind(targetEndpoints, laneIndex, out targetEndpoint);
         }
 
         private bool TryFindCenterPreservationTargetEndpoint(
@@ -48,11 +48,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     centerNode,
                     EndpointRole.TargetStartAtNode,
                     targetEndpoints);
-                SortLaneEndpointsByLateral(targetEndpoints);
+                TrafficLaneEndpointHelpers.SortByLateral(targetEndpoints);
                 preservationTargetEndpointCache.Add(targetEdge, targetEndpoints);
             }
 
-            return TryFindLaneEndpoint(targetEndpoints, laneIndex, out targetEndpoint);
+            return TrafficLaneEndpointHelpers.TryFind(targetEndpoints, laneIndex, out targetEndpoint);
         }
 
         private bool TryGetCenterTargetEndpoints(
@@ -65,7 +65,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             {
                 targetEndpoints = new List<LaneEndpoint>(8);
                 CollectEdgeCarLaneEndpoints(targetEdge, centerNode, EndpointRole.TargetStartAtNode, targetEndpoints);
-                SortLaneEndpointsByLateral(targetEndpoints);
+                TrafficLaneEndpointHelpers.SortByLateral(targetEndpoints);
                 targetEndpointCache.Add(targetEdge, targetEndpoints);
             }
 

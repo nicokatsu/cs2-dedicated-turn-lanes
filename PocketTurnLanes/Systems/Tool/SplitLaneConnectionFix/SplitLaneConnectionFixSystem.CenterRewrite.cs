@@ -142,7 +142,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             List<LaneEndpoint> sourceEndpoints = new List<LaneEndpoint>(8);
             CollectEdgeCarLaneEndpoints(sourceEdge, centerNode, EndpointRole.SourceEndAtNode, sourceEndpoints);
-            SortLaneEndpointsByLateral(sourceEndpoints);
+            TrafficLaneEndpointHelpers.SortByLateral(sourceEndpoints);
             if (sourceEndpoints.Count == 0)
             {
                 AddCenterApproachSkip(plan, sourceEdge, "noSourceEndpoints", approachConnectors, "<none>");

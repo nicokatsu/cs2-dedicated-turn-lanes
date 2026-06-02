@@ -212,8 +212,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                if (!TryFindLaneEndpoint(sourceLanes, mapping.SourceLaneIndex, out _) ||
-                    !TryFindLaneEndpoint(targetLanes, mapping.TargetLaneIndex, out _))
+                if (!TrafficLaneEndpointHelpers.TryFind(sourceLanes, mapping.SourceLaneIndex, out _) ||
+                    !TrafficLaneEndpointHelpers.TryFind(targetLanes, mapping.TargetLaneIndex, out _))
                 {
                     reason = $"{direction} missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
                     return false;
@@ -310,8 +310,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                if (!TryFindLaneEndpoint(sourceLanes, mapping.SourceLaneIndex, out _) ||
-                    !TryFindLaneEndpoint(targetLanes, mapping.TargetLaneIndex, out _))
+                if (!TrafficLaneEndpointHelpers.TryFind(sourceLanes, mapping.SourceLaneIndex, out _) ||
+                    !TrafficLaneEndpointHelpers.TryFind(targetLanes, mapping.TargetLaneIndex, out _))
                 {
                     reason = $"{direction} missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
                     return false;
@@ -361,8 +361,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                if (!TryFindLaneEndpoint(sourceLanes, mapping.SourceLaneIndex, out LaneEndpoint source) ||
-                    !TryFindLaneEndpoint(targetLanes, mapping.TargetLaneIndex, out LaneEndpoint target))
+                if (!TrafficLaneEndpointHelpers.TryFind(sourceLanes, mapping.SourceLaneIndex, out LaneEndpoint source) ||
+                    !TrafficLaneEndpointHelpers.TryFind(targetLanes, mapping.TargetLaneIndex, out LaneEndpoint target))
                 {
                     reason = $"{direction} missing endpoint source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex}";
                     return false;
@@ -419,7 +419,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             if (EntityManager.TryGetComponent(clone, out Curve curve))
             {
-                curve.m_Bezier = BuildConnectorCurve(source, target);
+                curve.m_Bezier = TrafficLaneEndpointHelpers.BuildConnectorCurve(source, target);
                 curve.m_Length = MathUtils.Length(curve.m_Bezier);
                 EntityManager.SetComponentData(clone, curve);
             }
@@ -438,15 +438,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             AddMarkerIfMissing<Updated>(clone);
             Mod.LogDiagnostic($"[SplitLaneConnectionFix] Cloned connector lane clone={FormatEntity(clone)} template={FormatEntity(template.Entity)} splitNode={FormatEntity(request.SplitNode)} source={source.LaneIndex}/{FormatEntity(source.LaneEntity)} target={target.LaneIndex}/{FormatEntity(target.LaneEntity)} middleIndex={middleLaneIndex}.");
             return clone;
-        }
-
-        private static Bezier4x3 BuildConnectorCurve(LaneEndpoint source, LaneEndpoint target)
-        {
-            float distance = math.max(1f, math.distance(source.Position.xz, target.Position.xz));
-            float tangentLength = math.min(12f, distance * 0.5f);
-            float3 sourceTangent = new float3(source.TravelDirection.x, 0f, source.TravelDirection.y) * tangentLength;
-            float3 targetTangent = new float3(target.TravelDirection.x, 0f, target.TravelDirection.y) * tangentLength;
-            return NetUtils.FitCurve(source.Position, sourceTangent, -targetTangent, target.Position);
         }
 
         private bool TryFindConnectorTemplate(LaneMapping mapping, out ConnectorLane template)
@@ -475,66 +466,48 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return template.Entity != Entity.Null;
         }
 
-        private static bool TryFindLaneEndpoint(IReadOnlyList<LaneEndpoint> lanes, int laneIndex, out LaneEndpoint lane)
-        {
-            if (lanes != null)
-            {
-                for (int i = 0; i < lanes.Count; i++)
-                {
-                    if (lanes[i].LaneIndex == laneIndex)
-                    {
-                        lane = lanes[i];
-                        return true;
-                    }
-                }
-            }
-
-            lane = default;
-            return false;
-        }
-
         private static bool TryFindMappingEndpoint(Request request, Entity edge, int laneIndex, bool source, out LaneEndpoint lane)
         {
             if (source)
             {
-                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.SourceLanes, laneIndex, out lane))
+                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.SourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
-                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.PreservationForwardSourceLanes, laneIndex, out lane))
+                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationForwardSourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
-                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.ReverseSourceLanes, laneIndex, out lane))
+                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.ReverseSourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
-                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.PreservationReverseSourceLanes, laneIndex, out lane))
+                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationReverseSourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
             }
             else
             {
-                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.TargetLanes, laneIndex, out lane))
+                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.TargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
-                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.PreservationForwardTargetLanes, laneIndex, out lane))
+                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationForwardTargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
-                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.ReverseTargetLanes, laneIndex, out lane))
+                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.ReverseTargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
-                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.PreservationReverseTargetLanes, laneIndex, out lane))
+                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationReverseTargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }

@@ -57,9 +57,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             float2 travelDirection = m_ReverseSourceLanes[0].TravelDirection;
             float2 right = new float2(travelDirection.y, -travelDirection.x);
-            float2 sourceOrigin = GetAveragePosition(m_ReverseSourceLanes);
-            AssignLaneLaterals(m_ReverseSourceLanes, sourceOrigin, right);
-            AssignLaneLaterals(m_ReverseTargetLanes, sourceOrigin, right);
+            float2 sourceOrigin = TrafficLaneEndpointHelpers.GetAveragePosition(m_ReverseSourceLanes);
+            TrafficLaneEndpointHelpers.AssignLaterals(m_ReverseSourceLanes, sourceOrigin, right);
+            TrafficLaneEndpointHelpers.AssignLaterals(m_ReverseTargetLanes, sourceOrigin, right);
 
             if (request.Mode == RepairMode.BalancedOppositeTarget)
             {

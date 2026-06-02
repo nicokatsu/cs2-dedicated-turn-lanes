@@ -146,8 +146,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             out TransitionConnectionSnapshotMapping mapping)
         {
             mapping = default;
-            if (!TryFindLaneEndpoint(sourceLanes, sourceLaneIndex, out LaneEndpoint source) ||
-                !TryFindLaneEndpoint(targetLanes, targetLaneIndex, out LaneEndpoint target))
+            if (!TrafficLaneEndpointHelpers.TryFind(sourceLanes, sourceLaneIndex, out LaneEndpoint source) ||
+                !TrafficLaneEndpointHelpers.TryFind(targetLanes, targetLaneIndex, out LaneEndpoint target))
             {
                 return false;
             }

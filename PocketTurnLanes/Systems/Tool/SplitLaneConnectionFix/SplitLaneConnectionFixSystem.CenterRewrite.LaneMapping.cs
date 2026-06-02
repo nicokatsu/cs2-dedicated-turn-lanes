@@ -456,8 +456,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            int middleTargetOrder = FindLaneEndpointOrder(targetEndpoints, middleCurrentStraight.Connector.TargetLaneIndex);
-            int bigTargetOrder = FindLaneEndpointOrder(targetEndpoints, bigCurrentStraight.Connector.TargetLaneIndex);
+            int middleTargetOrder = TrafficLaneEndpointHelpers.FindOrder(targetEndpoints, middleCurrentStraight.Connector.TargetLaneIndex);
+            int bigTargetOrder = TrafficLaneEndpointHelpers.FindOrder(targetEndpoints, bigCurrentStraight.Connector.TargetLaneIndex);
             if (middleTargetOrder < 0 || bigTargetOrder < 0)
             {
                 detail = $"straight target order missing middleLane={middleCurrentStraight.Connector.TargetLaneIndex} bigLane={bigCurrentStraight.Connector.TargetLaneIndex} targets={FormatLaneOrder(targetEndpoints)}";
@@ -524,8 +524,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            int smallTargetOrder = FindLaneEndpointOrder(targetEndpoints, smallCurrentStraight.Connector.TargetLaneIndex);
-            int middleTargetOrder = FindLaneEndpointOrder(targetEndpoints, middleCurrentStraight.Connector.TargetLaneIndex);
+            int smallTargetOrder = TrafficLaneEndpointHelpers.FindOrder(targetEndpoints, smallCurrentStraight.Connector.TargetLaneIndex);
+            int middleTargetOrder = TrafficLaneEndpointHelpers.FindOrder(targetEndpoints, middleCurrentStraight.Connector.TargetLaneIndex);
             if (smallTargetOrder < 0 || middleTargetOrder < 0)
             {
                 detail = $"straight target order missing smallLane={smallCurrentStraight.Connector.TargetLaneIndex} middleLane={middleCurrentStraight.Connector.TargetLaneIndex} targets={FormatLaneOrder(targetEndpoints)}";
@@ -567,9 +567,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             out string detail)
         {
             detail = string.Empty;
-            int smallOrder = FindLaneEndpointOrder(sourceEndpoints, smallSource.LaneIndex);
-            int middleOrder = FindLaneEndpointOrder(sourceEndpoints, middleSource.LaneIndex);
-            int bigOrder = FindLaneEndpointOrder(sourceEndpoints, bigSource.LaneIndex);
+            int smallOrder = TrafficLaneEndpointHelpers.FindOrder(sourceEndpoints, smallSource.LaneIndex);
+            int middleOrder = TrafficLaneEndpointHelpers.FindOrder(sourceEndpoints, middleSource.LaneIndex);
+            int bigOrder = TrafficLaneEndpointHelpers.FindOrder(sourceEndpoints, bigSource.LaneIndex);
             if (smallOrder < 0 || middleOrder < 0 || bigOrder < 0)
             {
                 detail = $"source order missing small={smallSource.LaneIndex}:{smallOrder} middle={middleSource.LaneIndex}:{middleOrder} big={bigSource.LaneIndex}:{bigOrder}";

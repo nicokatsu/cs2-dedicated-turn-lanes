@@ -8,18 +8,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
-        private static void AssignLaneLaterals(List<LaneEndpoint> lanes, float2 origin, float2 right)
-        {
-            for (int i = 0; i < lanes.Count; i++)
-            {
-                LaneEndpoint lane = lanes[i];
-                lane.Lateral = math.dot(lane.Position.xz - origin, right);
-                lanes[i] = lane;
-            }
-
-            lanes.Sort((a, b) => a.Lateral.CompareTo(b.Lateral));
-        }
-
         private static bool TrySelectLaneMapping(
             List<LaneEndpoint> sourceLanes,
             List<LaneEndpoint> targetLanes,
@@ -134,7 +122,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         if (connector.SourceLaneIndex != source.LaneIndex ||
                             connector.TargetLaneIndex == extraTargetLaneIndex ||
                             usedTargets.Contains(connector.TargetLaneIndex) ||
-                            !TryFindLaneEndpoint(originalTargets, connector.TargetLaneIndex, out LaneEndpoint target))
+                            !TrafficLaneEndpointHelpers.TryFind(originalTargets, connector.TargetLaneIndex, out LaneEndpoint target))
                         {
                             continue;
                         }
@@ -194,7 +182,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             m_Mappings.Clear();
             for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
             {
-                if (!TryFindLaneEndpoint(selectedTargets, assignedTargets[sourceIndex], out LaneEndpoint target))
+                if (!TrafficLaneEndpointHelpers.TryFind(selectedTargets, assignedTargets[sourceIndex], out LaneEndpoint target))
                 {
                     reason = $"assigned target missing source={sourceLanes[sourceIndex].LaneIndex} target={assignedTargets[sourceIndex]}";
                     return false;
@@ -211,8 +199,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 });
             }
 
-            if (!TryFindLaneEndpoint(sourceLanes, branchSourceLaneIndex, out LaneEndpoint branchSource) ||
-                !TryFindLaneEndpoint(selectedTargets, extraTargetLaneIndex, out LaneEndpoint branchTarget))
+            if (!TrafficLaneEndpointHelpers.TryFind(sourceLanes, branchSourceLaneIndex, out LaneEndpoint branchSource) ||
+                !TrafficLaneEndpointHelpers.TryFind(selectedTargets, extraTargetLaneIndex, out LaneEndpoint branchTarget))
             {
                 reason = $"branch endpoint missing source={branchSourceLaneIndex} target={extraTargetLaneIndex}";
                 return false;
@@ -350,9 +338,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             float2 right = new float2(travelDirection.y, -travelDirection.x);
-            float2 sourceOrigin = GetAveragePosition(sourceLanes);
-            AssignLaneLaterals(sourceLanes, sourceOrigin, right);
-            AssignLaneLaterals(targetLanes, sourceOrigin, right);
+            float2 sourceOrigin = TrafficLaneEndpointHelpers.GetAveragePosition(sourceLanes);
+            TrafficLaneEndpointHelpers.AssignLaterals(sourceLanes, sourceOrigin, right);
+            TrafficLaneEndpointHelpers.AssignLaterals(targetLanes, sourceOrigin, right);
         }
 
         private static bool TryBuildSnapshotLaneRemap(
@@ -568,7 +556,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         ConnectorLane connector = existingConnectors[connectorIndex];
                         if (connector.SourceLaneIndex != source.LaneIndex ||
                             usedTargets.Contains(connector.TargetLaneIndex) ||
-                            !TryFindLaneEndpoint(targetLanes, connector.TargetLaneIndex, out LaneEndpoint target))
+                            !TrafficLaneEndpointHelpers.TryFind(targetLanes, connector.TargetLaneIndex, out LaneEndpoint target))
                         {
                             continue;
                         }
@@ -628,7 +616,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             LaneMapping[] result = new LaneMapping[sourceLanes.Count];
             for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
             {
-                if (!TryFindLaneEndpoint(targetLanes, assignedTargets[sourceIndex], out LaneEndpoint target))
+                if (!TrafficLaneEndpointHelpers.TryFind(targetLanes, assignedTargets[sourceIndex], out LaneEndpoint target))
                 {
                     reason = $"assigned reverse target missing source={sourceLanes[sourceIndex].LaneIndex} target={assignedTargets[sourceIndex]}";
                     return false;

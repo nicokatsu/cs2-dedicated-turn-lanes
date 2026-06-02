@@ -111,7 +111,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 ConnectorLane connector = m_ConnectorLanes[i];
                 bool sameEdgeUturn = connector.SourceEdge == connector.TargetEdge;
 
-                if (!TryFindLaneEndpoint(sourceEndpoints, connector.SourceLaneIndex, out LaneEndpoint sourceEndpoint))
+                if (!TrafficLaneEndpointHelpers.TryFind(sourceEndpoints, connector.SourceLaneIndex, out LaneEndpoint sourceEndpoint))
                 {
                     stats.EndpointMisses++;
                     skipped.Add($"{direction}:preservationSkippedReason=sourceEndpointMissing edge={FormatEntity(sourceEdge)} lane={connector.SourceLaneIndex} connector={FormatEntity(connector.Entity)}");
@@ -121,7 +121,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 IReadOnlyList<LaneEndpoint> candidateTargetEndpoints = sameEdgeUturn
                     ? sameEdgeTargetEndpoints
                     : targetEndpoints;
-                if (!TryFindLaneEndpoint(candidateTargetEndpoints, connector.TargetLaneIndex, out LaneEndpoint targetEndpoint))
+                if (!TrafficLaneEndpointHelpers.TryFind(candidateTargetEndpoints, connector.TargetLaneIndex, out LaneEndpoint targetEndpoint))
                 {
                     stats.EndpointMisses++;
                     skipped.Add($"{direction}:preservationSkippedReason=targetEndpointMissing edge={FormatEntity(connector.TargetEdge)} lane={connector.TargetLaneIndex} sameEdgeUturn={sameEdgeUturn} connector={FormatEntity(connector.Entity)}");
