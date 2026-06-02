@@ -76,18 +76,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     centerSourceEdge,
                     targetEdge,
                     carLane.m_Flags);
-                if (connectorTurn == TurnDirection.Left)
-                {
-                    leftCounts[targetListIndex]++;
-                }
-                else if (connectorTurn == TurnDirection.Right)
-                {
-                    rightCounts[targetListIndex]++;
-                }
-                else
-                {
-                    straightCounts[targetListIndex]++;
-                }
+                TrafficCenterTurnTargetSelector.AddTurnCount(
+                    connectorTurn,
+                    targetListIndex,
+                    leftCounts,
+                    rightCounts,
+                    straightCounts);
 
                 m_CenterTurnCandidates.Add(new CenterTurnCandidate
                 {

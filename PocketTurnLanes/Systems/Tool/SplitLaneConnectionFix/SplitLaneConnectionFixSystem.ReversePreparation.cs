@@ -117,29 +117,33 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             TurnDirection turn = TrafficLaneTargetSelector.DetermineTurn(selectedReverseTargets, extraTargetListIndex);
-            string centerTurnDiagnostic = "not-run";
-            bool centerTurnEvidence = false;
-            if (TryRefineExtraTargetFromCenterConnectors(
-                    request.FarIntersectionNode,
+            string turnDiagnostic = "not-run";
+            bool farSnapshotTurnEvidence = false;
+            if (TryRefineBalancedReverseExtraTargetFromFarSnapshot(
+                    request,
                     outerEdge,
                     selectedReverseTargets,
-                    out int centerExtraTargetListIndex,
-                    out TurnDirection centerTurn,
-                    out centerTurnDiagnostic))
+                    out int snapshotExtraTargetListIndex,
+                    out TurnDirection snapshotTurn,
+                    out turnDiagnostic))
             {
-                centerTurnEvidence = true;
-                if (centerExtraTargetListIndex != extraTargetListIndex || centerTurn != turn)
+                farSnapshotTurnEvidence = true;
+                if (snapshotExtraTargetListIndex != extraTargetListIndex || snapshotTurn != turn)
                 {
-                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Far-center connector turn target overrides balanced reverse split lateral target splitNode={FormatEntity(request.SplitNode)} oldExtra={selectedReverseTargets[extraTargetListIndex].LaneIndex}/{turn} newExtra={selectedReverseTargets[centerExtraTargetListIndex].LaneIndex}/{centerTurn} diagnostics={centerTurnDiagnostic}.");
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Far snapshot turn target overrides balanced reverse split lateral target splitNode={FormatEntity(request.SplitNode)} oldExtra={selectedReverseTargets[extraTargetListIndex].LaneIndex}/{turn} newExtra={selectedReverseTargets[snapshotExtraTargetListIndex].LaneIndex}/{snapshotTurn} diagnostics={turnDiagnostic}.");
                 }
 
-                extraTargetListIndex = centerExtraTargetListIndex;
-                turn = centerTurn;
+                extraTargetListIndex = snapshotExtraTargetListIndex;
+                turn = snapshotTurn;
+            }
+            else
+            {
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Balanced reverse far snapshot turn evidence unavailable; using lateral fallback and not scanning live far connectors splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(request.FarIntersectionNode)} outerEdge={FormatEntity(outerEdge)} selectedTargets={FormatLaneOrder(selectedReverseTargets)} lateralExtra={selectedReverseTargets[extraTargetListIndex].LaneIndex}/{turn} diagnostics={turnDiagnostic}.");
             }
 
             if (turn == TurnDirection.Ambiguous)
             {
-                reason = $"roadMappingSkipped=balancedReverseAmbiguousTurn extraIndex={extraTargetListIndex} centerDiagnostics={centerTurnDiagnostic}";
+                reason = $"roadMappingSkipped=balancedReverseAmbiguousTurn extraIndex={extraTargetListIndex} turnDiagnostics={turnDiagnostic}";
                 request.ReverseSourceLanes = m_ReverseSourceLanes.ToArray();
                 request.ReverseTargetLanes = m_ReverseTargetLanes.ToArray();
                 MarkReverseRoadSkipped(ref request, reason);
@@ -170,7 +174,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     extraTargetListIndex,
                     branchSourceLaneIndex,
                     m_ExistingConnectorLanes,
-                    preferExistingConnectors: !centerTurnEvidence,
+                    preferExistingConnectors: !farSnapshotTurnEvidence,
                     FormatLaneOrder,
                     out LaneMapping[] balancedReverseMappings,
                     out string balancedMappingSource,
@@ -189,7 +193,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             request.ReverseTargetLanes = selectedReverseTargets.ToArray();
             request.ReverseMappings = balancedReverseMappings;
             MarkReverseRoadPrepared(ref request);
-            mappingSource = $"balanced-reverse-N->N+1-{balancedMappingSource}; score={mappingScore:0.###}; turn={turn}; branchSource={branchSourceLaneIndex}; extraTarget={extraTargetLaneIndex}; centerDiagnostics={centerTurnDiagnostic}";
+            mappingSource = $"balanced-reverse-N->N+1-{balancedMappingSource}; score={mappingScore:0.###}; turn={turn}; branchSource={branchSourceLaneIndex}; extraTarget={extraTargetLaneIndex}; turnEvidence={(farSnapshotTurnEvidence ? "far-snapshot" : "lateral-fallback")}; turnDiagnostics={turnDiagnostic}";
             return true;
         }
 

@@ -50,8 +50,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             IReadOnlyList<int> straightCounts,
             IReadOnlyList<CenterTurnCandidate> candidates)
         {
-            string targetSummary = string.Join("|", Enumerable.Range(0, targets.Count)
-                .Select(i => $"target{targets[i].LaneIndex}/center{targets[i].OppositeLaneIndex}:L{leftCounts[i]} R{rightCounts[i]} S{straightCounts[i]}"));
+            string targetSummary = TrafficCenterTurnTargetSelector.FormatTargetTurnCounts(
+                targets,
+                leftCounts,
+                rightCounts,
+                straightCounts);
             string candidateSummary = candidates == null || candidates.Count == 0
                 ? "none"
                 : string.Join(",", candidates.Select(candidate => $"{candidate.SourceLaneIndex}->{candidate.TargetLaneIndex}/{candidate.Turn}/{FormatEntity(candidate.TargetEdge)}/{candidate.Flags}/{FormatEntity(candidate.LaneEntity)}"));

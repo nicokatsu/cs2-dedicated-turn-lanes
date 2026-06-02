@@ -114,6 +114,188 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return snapshot;
         }
 
+        private bool TryRefineBalancedReverseExtraTargetFromFarSnapshot(
+            Request request,
+            Entity outerEdge,
+            IReadOnlyList<LaneEndpoint> selectedTargets,
+            out int extraTargetIndex,
+            out TurnDirection turn,
+            out string diagnostics)
+        {
+            extraTargetIndex = -1;
+            turn = TurnDirection.Ambiguous;
+
+            FarIntersectionTrafficSnapshot snapshot = request.FarIntersectionSnapshot;
+            string snapshotSummary = FormatFarSnapshot(snapshot);
+            if (selectedTargets == null || selectedTargets.Count == 0)
+            {
+                diagnostics = $"farSnapshotSelection=skipped reason=noSelectedTargets snapshot=({snapshotSummary}) liveFarConnectorDetection=disabled";
+                return false;
+            }
+
+            if (snapshot == null ||
+                snapshot.Entries == null ||
+                snapshot.Entries.Length == 0)
+            {
+                diagnostics = $"farSnapshotSelection=skipped reason=emptySnapshot snapshot=({snapshotSummary}) liveFarConnectorDetection=disabled";
+                return false;
+            }
+
+            if (snapshot.Node == Entity.Null ||
+                !EntityManager.Exists(snapshot.Node) ||
+                snapshot.ContinuationEdge == Entity.Null)
+            {
+                diagnostics = $"farSnapshotSelection=skipped reason=invalidSnapshotNodeOrContinuation snapshot=({snapshotSummary}) farNode={FormatEntity(snapshot?.Node ?? Entity.Null)} continuation={FormatEntity(snapshot?.ContinuationEdge ?? Entity.Null)} liveFarConnectorDetection=disabled";
+                return false;
+            }
+
+            int[] leftCounts = new int[selectedTargets.Count];
+            int[] rightCounts = new int[selectedTargets.Count];
+            int[] straightCounts = new int[selectedTargets.Count];
+            int continuationSourceEntries = 0;
+            int nonContinuationSourceEntries = 0;
+            int continuationGeneratedSources = 0;
+            int generatedSourceNotContinuation = 0;
+            int resolvedSources = 0;
+            int mappedSelectedTargets = 0;
+            int classifiedConnections = 0;
+            int skippedConnections = 0;
+            int skippedSelfReferences = 0;
+            List<string> evidenceSamples = new List<string>(8);
+            List<string> skipSamples = new List<string>(8);
+
+            for (int entryIndex = 0; entryIndex < snapshot.Entries.Length; entryIndex++)
+            {
+                TrafficSourceSnapshot entry = snapshot.Entries[entryIndex];
+                if (entry.SourceEdge != snapshot.ContinuationEdge)
+                {
+                    nonContinuationSourceEntries++;
+                    continue;
+                }
+
+                continuationSourceEntries++;
+                TrafficGeneratedSnapshot[] connections = entry.Connections ?? Array.Empty<TrafficGeneratedSnapshot>();
+                for (int connectionIndex = 0; connectionIndex < connections.Length; connectionIndex++)
+                {
+                    TrafficGeneratedSnapshot connection = connections[connectionIndex];
+                    if (connection.SourceEdge != snapshot.ContinuationEdge)
+                    {
+                        generatedSourceNotContinuation++;
+                        continue;
+                    }
+
+                    continuationGeneratedSources++;
+                    if (!TryMapFarSnapshotEdge(
+                            snapshot,
+                            request,
+                            connection.SourceEdge,
+                            out Entity sourceEdge,
+                            out _,
+                            out string sourceEdgeReason))
+                    {
+                        skippedConnections++;
+                        AddFarSnapshotSkipSample(skipSamples, $"sourceEdge {FormatEntity(connection.SourceEdge)}:{connection.SourceLaneIndex} {sourceEdgeReason}");
+                        continue;
+                    }
+
+                    if (sourceEdge != outerEdge)
+                    {
+                        AddFarSnapshotSkipSample(skipSamples, $"sourceEdgeMappedUnexpected {FormatEntity(connection.SourceEdge)}->{FormatEntity(sourceEdge)} expectedOuter={FormatEntity(outerEdge)}");
+                    }
+
+                    TrafficEndpointSnapshot sourceAnchor = connection.SourceEndpoint;
+                    if (!TryResolveFarSnapshotEndpoint(
+                            snapshot.Node,
+                            sourceEdge,
+                            EndpointRole.SourceEndAtNode,
+                            connection.SourceLaneIndex,
+                            sourceAnchor.HasEndpoint,
+                            sourceAnchor.Lateral,
+                            sourceAnchor.Order,
+                            out LaneEndpoint resolvedSource,
+                            out string sourceResolveDetail))
+                    {
+                        skippedConnections++;
+                        AddFarSnapshotSkipSample(skipSamples, $"sourceResolve {FormatEntity(connection.SourceEdge)}:{connection.SourceLaneIndex}->{FormatEntity(sourceEdge)} {sourceResolveDetail}");
+                        continue;
+                    }
+
+                    resolvedSources++;
+                    if (!TrafficCenterTurnTargetSelector.TryFindTargetByEndpointLaneIndexes(
+                        selectedTargets,
+                        resolvedSource,
+                        out int targetListIndex,
+                        out string selectedTargetMatch))
+                    {
+                        skippedConnections++;
+                        AddFarSnapshotSkipSample(skipSamples, $"sourceTargetMap {FormatEntity(sourceEdge)}:{resolvedSource.LaneIndex}/C{resolvedSource.OppositeLaneIndex} {selectedTargetMatch} selectedTargets={FormatLaneOrder(selectedTargets)}");
+                        continue;
+                    }
+
+                    mappedSelectedTargets++;
+                    if (!TryMapFarSnapshotEdge(
+                            snapshot,
+                            request,
+                            connection.TargetEdge,
+                            out Entity targetEdge,
+                            out _,
+                            out string targetEdgeReason))
+                    {
+                        skippedConnections++;
+                        AddFarSnapshotSkipSample(skipSamples, $"targetEdge {FormatEntity(connection.TargetEdge)}:{connection.TargetLaneIndex} {targetEdgeReason}");
+                        continue;
+                    }
+
+                    if (targetEdge == sourceEdge)
+                    {
+                        skippedConnections++;
+                        skippedSelfReferences++;
+                        AddFarSnapshotSkipSample(skipSamples, $"selfReference source={FormatEntity(sourceEdge)}:{resolvedSource.LaneIndex} target={FormatEntity(targetEdge)}:{connection.TargetLaneIndex}");
+                        continue;
+                    }
+
+                    TurnDirection connectorTurn = TrafficConnectorMovementClassifier.ClassifyCenterConnectorTurn(
+                        EntityManager,
+                        snapshot.Node,
+                        sourceEdge,
+                        targetEdge,
+                        default);
+                    TrafficCenterTurnTargetSelector.AddTurnCount(
+                        connectorTurn,
+                        targetListIndex,
+                        leftCounts,
+                        rightCounts,
+                        straightCounts);
+                    classifiedConnections++;
+                    AddFarSnapshotSkipSample(
+                        evidenceSamples,
+                        $"{resolvedSource.LaneIndex}->target{selectedTargets[targetListIndex].LaneIndex}/{connectorTurn}/{FormatEntity(targetEdge)}/{selectedTargetMatch}");
+                }
+            }
+
+            string countDiagnostics = FormatCenterTurnDiagnostics(
+                selectedTargets,
+                leftCounts,
+                rightCounts,
+                straightCounts,
+                null);
+            if (!TrafficCenterTurnTargetSelector.TrySelectExtraTarget(
+                    selectedTargets,
+                    leftCounts,
+                    rightCounts,
+                    straightCounts,
+                    out extraTargetIndex,
+                    out turn,
+                    out string selectionDiagnostic))
+            {
+                diagnostics = $"farSnapshotSelection=failed snapshot=({snapshotSummary}) continuationSourceEntries={continuationSourceEntries} nonContinuationSourceEntries={nonContinuationSourceEntries} continuationGeneratedSources={continuationGeneratedSources} generatedSourceNotContinuation={generatedSourceNotContinuation} resolvedSources={resolvedSources} mappedSelectedTargets={mappedSelectedTargets} classifiedConnections={classifiedConnections} skippedConnections={skippedConnections} skippedSelfReferences={skippedSelfReferences} counts=({countDiagnostics}) {selectionDiagnostic} evidenceSamples={FormatStringList(evidenceSamples)} skipSamples={FormatStringList(skipSamples)} liveFarConnectorDetection=disabled";
+                return false;
+            }
+
+            diagnostics = $"farSnapshotSelection=selected snapshot=({snapshotSummary}) continuationSourceEntries={continuationSourceEntries} nonContinuationSourceEntries={nonContinuationSourceEntries} continuationGeneratedSources={continuationGeneratedSources} generatedSourceNotContinuation={generatedSourceNotContinuation} resolvedSources={resolvedSources} mappedSelectedTargets={mappedSelectedTargets} classifiedConnections={classifiedConnections} skippedConnections={skippedConnections} skippedSelfReferences={skippedSelfReferences} selectedExtra={selectedTargets[extraTargetIndex].LaneIndex}/{turn} counts=({countDiagnostics}) {selectionDiagnostic} evidenceSamples={FormatStringList(evidenceSamples)} skipSamples={FormatStringList(skipSamples)} liveFarConnectorDetection=disabled";
+            return true;
+        }
+
         private bool TryRestoreFarIntersectionTrafficSnapshot(
             TrafficApi trafficApi,
             Request request,
