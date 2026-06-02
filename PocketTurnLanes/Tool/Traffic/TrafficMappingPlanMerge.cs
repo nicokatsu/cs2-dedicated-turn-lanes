@@ -1,0 +1,73 @@
+using System.Collections.Generic;
+using Game.Pathfind;
+
+namespace PocketTurnLanes.Tool.Traffic
+{
+    internal static class TrafficMappingPlanMerge
+    {
+        public static void AddOrMergeFinal(
+            Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
+            LaneMapping mapping)
+        {
+            AddOrMerge(bySource, mapping, TrafficPathMethodMergeMode.FinalRepair);
+        }
+
+        public static void AddOrMergeCenterRewrite(
+            Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
+            LaneMapping mapping)
+        {
+            AddOrMerge(bySource, mapping, TrafficPathMethodMergeMode.CenterRewrite);
+        }
+
+        public static void AddOrMerge(
+            Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
+            LaneMapping mapping,
+            TrafficPathMethodMergeMode mode)
+        {
+            SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
+            TargetLaneKey targetKey = new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex);
+            if (!bySource.TryGetValue(sourceKey, out Dictionary<TargetLaneKey, LaneMapping> byTarget))
+            {
+                byTarget = new Dictionary<TargetLaneKey, LaneMapping>();
+                bySource.Add(sourceKey, byTarget);
+            }
+
+            PathMethod mergeMethod = TrafficPathMethods.SanitizeMappingMethod(
+                mapping.Method,
+                mode,
+                mapping.HasPreservedPathMethods || mode == TrafficPathMethodMergeMode.CenterRewrite);
+            if (mergeMethod == 0)
+            {
+                return;
+            }
+
+            if (byTarget.TryGetValue(targetKey, out LaneMapping existing))
+            {
+                bool preserveUnsafe = existing.IsPreservationOnly && mapping.IsPreservationOnly;
+                bool hasPreservedPathMethods = existing.HasPreservedPathMethods || mapping.HasPreservedPathMethods;
+                existing.Method = TrafficPathMethods.SanitizeMappingMethod(
+                    existing.Method | mergeMethod,
+                    mode,
+                    hasPreservedPathMethods || mode == TrafficPathMethodMergeMode.CenterRewrite);
+                existing.IsBranch |= mapping.IsBranch;
+                existing.IsPreservationOnly &= mapping.IsPreservationOnly;
+                existing.HasPreservedPathMethods = hasPreservedPathMethods;
+                existing.IsUnsafe = mode == TrafficPathMethodMergeMode.CenterRewrite
+                    ? existing.IsUnsafe || mapping.IsUnsafe
+                    : preserveUnsafe && (existing.IsUnsafe || mapping.IsUnsafe);
+                if (!existing.HasTrafficMaps && mapping.HasTrafficMaps)
+                {
+                    existing.TrafficLanePositionMap = mapping.TrafficLanePositionMap;
+                    existing.TrafficCarriagewayAndGroupIndexMap = mapping.TrafficCarriagewayAndGroupIndexMap;
+                    existing.HasTrafficMaps = true;
+                }
+
+                byTarget[targetKey] = existing;
+                return;
+            }
+
+            mapping.Method = mergeMethod;
+            byTarget.Add(targetKey, mapping);
+        }
+    }
+}

@@ -51,7 +51,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 mapping.Method = method;
                 mapping.IsPreservationOnly = true;
                 mapping.HasPreservedPathMethods = true;
-                AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
+                TrafficMappingPlanMerge.AddOrMergeFinal(plan.BySource, mapping);
                 SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
                 plan.PreservationSourceKeys.Add(sourceKey);
                 plan.PreservationRuntimeConnections++;
@@ -154,7 +154,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     LaneMapping mapping = TrafficMappingPlanPreservation.CreatePreservationMapping(generated, method);
-                    AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
+                    TrafficMappingPlanMerge.AddOrMergeFinal(plan.BySource, mapping);
                     plan.PreservationSourceKeys.Add(sourceKey);
                     plan.PreservationOverlaySnapshotConnections++;
                     overlaySources.Add(sourceKey);

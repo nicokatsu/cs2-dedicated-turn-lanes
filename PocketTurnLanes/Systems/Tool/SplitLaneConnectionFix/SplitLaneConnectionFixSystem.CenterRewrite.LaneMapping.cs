@@ -250,7 +250,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 IsUnsafe = unsafeConnection,
                 HasTrafficMaps = true
             };
-            AddOrMergeCenterTrafficMapping(bySource, mapping);
+            TrafficMappingPlanMerge.AddOrMergeCenterRewrite(bySource, mapping);
             sourceEndpoints[new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex)] = sourceEndpoint;
             targetEndpoints[new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex)] = targetEndpoint;
             return true;
@@ -290,7 +290,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 IsUnsafe = false,
                 HasTrafficMaps = true
             };
-            AddOrMergeCenterTrafficMapping(bySource, mapping);
+            TrafficMappingPlanMerge.AddOrMergeCenterRewrite(bySource, mapping);
             sourceEndpoints[new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex)] = smallSourceEndpoint;
             targetEndpoints[new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex)] = shiftedTargetEndpoint;
             return true;
@@ -643,13 +643,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return count;
         }
 
-        private static void AddOrMergeCenterTrafficMapping(
-            Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
-            LaneMapping mapping)
-        {
-            AddOrMergeTrafficMapping(bySource, mapping, TrafficPathMethodMergeMode.CenterRewrite);
-        }
-
         private void MergeCenterApproachPlan(
             CenterRewritePlan plan,
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> approachBySource,
@@ -660,7 +653,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             {
                 foreach (LaneMapping mapping in sourcePair.Value.Values)
                 {
-                    AddOrMergeCenterTrafficMapping(plan.BySource, mapping);
+                    TrafficMappingPlanMerge.AddOrMergeCenterRewrite(plan.BySource, mapping);
                 }
             }
 

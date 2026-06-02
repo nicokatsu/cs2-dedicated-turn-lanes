@@ -277,7 +277,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 LaneMapping mapping = validRoadMappings[i];
                 SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
                 plan.RoadRepairSourceKeys.Add(sourceKey);
-                AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
+                TrafficMappingPlanMerge.AddOrMergeFinal(plan.BySource, mapping);
                 plan.RoadRepairConnections++;
             }
 
@@ -374,7 +374,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
+                TrafficMappingPlanMerge.AddOrMergeFinal(plan.BySource, mapping);
                 TrafficMappingPlanPreservation.CountTrackStats(plan, mapping.Method, targetEndpoint);
                 copied++;
                 if (mapping.IsUnsafe)

@@ -85,7 +85,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     HasTrafficMaps = true,
                     HasPreservedPathMethods = true
                 };
-                AddOrMergeCenterTrafficMapping(bySource, mapping);
+                TrafficMappingPlanMerge.AddOrMergeCenterRewrite(bySource, mapping);
                 targetEndpoints[new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex)] = targetEndpoint;
                 stats.Connections++;
 
@@ -155,7 +155,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     LaneMapping mapping = TrafficMappingPlanPreservation.CreatePreservationMapping(generated, preservedMethod);
-                    AddOrMergeCenterTrafficMapping(plan.BySource, mapping);
+                    TrafficMappingPlanMerge.AddOrMergeCenterRewrite(plan.BySource, mapping);
                     stats.Connections++;
                     if (isUturn)
                     {
