@@ -432,7 +432,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             for (int i = 0; i < smallLane.SmallTurn.Count; i++)
             {
-                if (!TryAddCenterCandidateMapping(
+                if (!TrafficCenterRewriteMappingBuilder.TryAddCandidateMapping(
                         approachBySource,
                         approachSourceEndpoints,
                         approachTargetEndpoints,
@@ -448,7 +448,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            if (!TryAddCenterShiftedStraightMapping(
+            if (!TrafficCenterRewriteMappingBuilder.TryAddShiftedStraightMapping(
                     approachBySource,
                     approachSourceEndpoints,
                     approachTargetEndpoints,
@@ -463,7 +463,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             if (middleLane != null)
             {
-                if (!TryAddCenterShiftedStraightMapping(
+                if (!TrafficCenterRewriteMappingBuilder.TryAddShiftedStraightMapping(
                         approachBySource,
                         approachSourceEndpoints,
                         approachTargetEndpoints,
@@ -479,7 +479,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             for (int i = 0; i < bigLane.BigTurn.Count; i++)
             {
-                if (!TryAddCenterCandidateMapping(
+                if (!TrafficCenterRewriteMappingBuilder.TryAddCandidateMapping(
                         approachBySource,
                         approachSourceEndpoints,
                         approachTargetEndpoints,
@@ -495,7 +495,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            int roadBicycleConnections = CountRoadBicycleMappings(approachBySource);
+            int roadBicycleConnections = TrafficCenterRewriteMappingBuilder.CountRoadBicycleMappings(approachBySource);
             CenterPreservationStats preservationStats = AddCenterRuntimePreservationMappings(
                 centerNode,
                 plan,
@@ -505,14 +505,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 approachTargetEndpoints,
                 targetEndpointCache);
 
-            int connectionCount = CountTrafficPlanConnections(approachBySource);
+            int connectionCount = TrafficCenterRewriteMappingBuilder.CountTrafficPlanConnections(approachBySource);
             if (connectionCount == 0)
             {
                 AddCenterApproachSkip(plan, sourceEdge, "noWritableConnections", approachConnectors, sourceClass);
                 return;
             }
 
-            MergeCenterApproachPlan(plan, approachBySource, approachSourceEndpoints, approachTargetEndpoints);
+            TrafficCenterRewriteMappingBuilder.MergeApproachPlan(plan, approachBySource, approachSourceEndpoints, approachTargetEndpoints);
             plan.ApproachesRewritten++;
             plan.PlannedConnections += connectionCount;
             plan.StraightConnectionsWrittenSafe += straightMappingsWritten;

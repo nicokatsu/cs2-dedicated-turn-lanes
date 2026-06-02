@@ -57,7 +57,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 null,
                 null,
                 null);
-            plan.PlannedConnections = CountTrafficPlanConnections(plan.BySource);
+            plan.PlannedConnections = TrafficCenterRewriteMappingBuilder.CountTrafficPlanConnections(plan.BySource);
 
             foreach (KeyValuePair<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> pair in plan.BySource)
             {
