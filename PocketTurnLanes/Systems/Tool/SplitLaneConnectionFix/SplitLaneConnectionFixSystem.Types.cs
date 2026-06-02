@@ -219,6 +219,29 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             CenterRewrite
         }
 
+        private enum TrafficPlanUturnPolicy
+        {
+            Preserve,
+            Suppress
+        }
+
+        private struct TrafficPlanAuditPolicy
+        {
+            public string Name;
+            public TrafficPlanUturnPolicy UturnPolicy;
+            public bool AllowEmptyUturnSuppression;
+
+            public TrafficPlanAuditPolicy(
+                string name,
+                TrafficPlanUturnPolicy uturnPolicy,
+                bool allowEmptyUturnSuppression)
+            {
+                Name = name;
+                UturnPolicy = uturnPolicy;
+                AllowEmptyUturnSuppression = allowEmptyUturnSuppression;
+            }
+        }
+
         private sealed class CenterRewritePlan
         {
             public readonly Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> BySource = new Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>>();
@@ -246,6 +269,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public bool LeftHandTraffic;
             public TurnDirection BigTurn;
             public TurnDirection SmallTurn;
+            public TrafficPlanAuditStats AuditStats;
         }
 
         private struct CenterPreservationStats
@@ -521,6 +545,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public readonly HashSet<SourceLaneKey> RoadRepairSourceKeys = new HashSet<SourceLaneKey>();
             public readonly HashSet<SourceLaneKey> PreservationSourceKeys = new HashSet<SourceLaneKey>();
             public readonly HashSet<SourceLaneKey> StaleUturnSourceKeys = new HashSet<SourceLaneKey>();
+            public readonly HashSet<SourceLaneKey> RuntimeNonUturnSourceKeys = new HashSet<SourceLaneKey>();
             public int RoadRepairConnections;
             public int PreservationTrafficSnapshotConnections;
             public int PreservationRuntimeConnections;
@@ -540,6 +565,30 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int UturnSourcesCoveredByEmptyOverride;
             public int UturnSourcesLeftForDirectCleanup;
             public int RuntimeNonUturnSuppressionSkipped;
+            public TrafficPlanAuditStats AuditStats;
+        }
+
+        private struct TrafficPlanAuditStats
+        {
+            public string Policy;
+            public int InitialSources;
+            public int FinalSources;
+            public int RoadSources;
+            public int PreservationSources;
+            public int RoadConnections;
+            public int PreservationConnections;
+            public int PreservedUturnConnections;
+            public int SuppressedUturnConnections;
+            public int EmptyOverrideSources;
+            public int RemovedEmptySources;
+            public int SkippedSources;
+            public int UnsafeConnections;
+            public int TrackConnections;
+            public int UturnSourcesCoveredByPlan;
+            public int UturnSourcesCoveredByEmptyOverride;
+            public int UturnSourcesLeftForDirectCleanup;
+            public int RuntimeNonUturnSuppressionSkipped;
+            public string SourceDecisions;
         }
 
         private struct SnapshotLaneOrder
@@ -579,7 +628,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int Mappings;
             public int EndpointMisses;
             public int Skipped;
-            public int UturnSuppressed;
+            public int UturnConnections;
             public int NonRoadConnections;
             public int UnsafeConnections;
             public int TrackConnections;

@@ -52,6 +52,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 request.PocketEdge,
                 m_PreservationSourceLanes,
                 m_PreservationTargetLanes,
+                m_PreservationReverseTargetLanes,
                 "preservationForward",
                 preservationSkipped,
                 out LaneMapping[] preservationForwardMappings);
@@ -61,6 +62,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 outerEdge,
                 m_PreservationReverseSourceLanes,
                 m_PreservationReverseTargetLanes,
+                m_PreservationTargetLanes,
                 "preservationReverse",
                 preservationSkipped,
                 out LaneMapping[] preservationReverseMappings);
@@ -82,6 +84,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Entity targetEdge,
             IReadOnlyList<LaneEndpoint> sourceEndpoints,
             IReadOnlyList<LaneEndpoint> targetEndpoints,
+            IReadOnlyList<LaneEndpoint> sameEdgeTargetEndpoints,
             string direction,
             List<string> skipped,
             out LaneMapping[] mappings)
@@ -105,12 +108,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < m_ConnectorLanes.Count; i++)
             {
                 ConnectorLane connector = m_ConnectorLanes[i];
-                if (connector.SourceEdge == connector.TargetEdge)
-                {
-                    stats.UturnSuppressed++;
-                    skipped.Add($"{direction}:preservationSkippedReason=uturnSuppressed source={connector.SourceLaneIndex} target={connector.TargetLaneIndex} methods=[{connector.PathMethods}] entity={FormatEntity(connector.Entity)}");
-                    continue;
-                }
+                bool sameEdgeUturn = connector.SourceEdge == connector.TargetEdge;
 
                 if (!TryFindLaneEndpoint(sourceEndpoints, connector.SourceLaneIndex, out LaneEndpoint sourceEndpoint))
                 {
@@ -119,15 +117,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                if (!TryFindLaneEndpoint(targetEndpoints, connector.TargetLaneIndex, out LaneEndpoint targetEndpoint))
+                IReadOnlyList<LaneEndpoint> candidateTargetEndpoints = sameEdgeUturn
+                    ? sameEdgeTargetEndpoints
+                    : targetEndpoints;
+                if (!TryFindLaneEndpoint(candidateTargetEndpoints, connector.TargetLaneIndex, out LaneEndpoint targetEndpoint))
                 {
                     stats.EndpointMisses++;
-                    skipped.Add($"{direction}:preservationSkippedReason=targetEndpointMissing edge={FormatEntity(targetEdge)} lane={connector.TargetLaneIndex} connector={FormatEntity(connector.Entity)}");
+                    skipped.Add($"{direction}:preservationSkippedReason=targetEndpointMissing edge={FormatEntity(connector.TargetEdge)} lane={connector.TargetLaneIndex} sameEdgeUturn={sameEdgeUturn} connector={FormatEntity(connector.Entity)}");
                     continue;
                 }
 
                 PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
-                    GetLayerPreservationPathMethod(connector.PathMethods, preserveUturn: false),
+                    GetLayerPreservationPathMethod(connector.PathMethods, preserveUturn: sameEdgeUturn),
                     sourceEndpoint,
                     targetEndpoint);
                 if (method == 0)
@@ -139,8 +140,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 bool unsafeConnection = (connector.CarFlags & (CarLaneFlags.Unsafe | CarLaneFlags.Forbidden)) != 0;
                 m_PreservationMappings.Add(new LaneMapping
                 {
-                    SourceEdge = sourceEdge,
-                    TargetEdge = targetEdge,
+                    SourceEdge = connector.SourceEdge,
+                    TargetEdge = connector.TargetEdge,
                     SourceLaneIndex = connector.SourceLaneIndex,
                     TargetLaneIndex = connector.TargetLaneIndex,
                     Method = method,
@@ -152,6 +153,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     HasPreservedPathMethods = true
                 });
                 stats.Mappings++;
+                if (sameEdgeUturn)
+                {
+                    stats.UturnConnections++;
+                }
+
                 if ((method & ~PathMethod.Road) != 0)
                 {
                     stats.NonRoadConnections++;
@@ -187,7 +193,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             PreservationMappingStats preservationForwardStats,
             PreservationMappingStats preservationReverseStats)
         {
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Outer preservation snapshot audit splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} preservationForwardSource=({FormatLaneOrder(request.PreservationForwardSourceLanes)}) preservationForwardTarget=({FormatLaneOrder(request.PreservationForwardTargetLanes)}) preservationReverseSource=({FormatLaneOrder(request.PreservationReverseSourceLanes)}) preservationReverseTarget=({FormatLaneOrder(request.PreservationReverseTargetLanes)}) preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] preservationSkippedReason={request.PreservationSkippedReason} preservationForwardStats=connectors:{preservationForwardStats.Connectors},mappings:{preservationForwardStats.Mappings},endpointMisses:{preservationForwardStats.EndpointMisses},skipped:{preservationForwardStats.Skipped},uturnSuppressed:{preservationForwardStats.UturnSuppressed},nonRoad:{preservationForwardStats.NonRoadConnections},unsafe:{preservationForwardStats.UnsafeConnections},preservationTrackConnections:{preservationForwardStats.TrackConnections},preservationTrackOnlyTargets:{preservationForwardStats.TrackOnlyTargets},preservationSharedTrackConnections:{preservationForwardStats.SharedTrackConnections} preservationReverseStats=connectors:{preservationReverseStats.Connectors},mappings:{preservationReverseStats.Mappings},endpointMisses:{preservationReverseStats.EndpointMisses},skipped:{preservationReverseStats.Skipped},uturnSuppressed:{preservationReverseStats.UturnSuppressed},nonRoad:{preservationReverseStats.NonRoadConnections},unsafe:{preservationReverseStats.UnsafeConnections},preservationTrackConnections:{preservationReverseStats.TrackConnections},preservationTrackOnlyTargets:{preservationReverseStats.TrackOnlyTargets},preservationSharedTrackConnections:{preservationReverseStats.SharedTrackConnections}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Outer preservation snapshot audit splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} preservationPolicy=captureAllSplitPairSources finalUturnPolicy=outerAuditSuppress preservationForwardSource=({FormatLaneOrder(request.PreservationForwardSourceLanes)}) preservationForwardTarget=({FormatLaneOrder(request.PreservationForwardTargetLanes)}) preservationReverseSource=({FormatLaneOrder(request.PreservationReverseSourceLanes)}) preservationReverseTarget=({FormatLaneOrder(request.PreservationReverseTargetLanes)}) preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] preservationSkippedReason={request.PreservationSkippedReason} preservationForwardStats=connectors:{preservationForwardStats.Connectors},mappings:{preservationForwardStats.Mappings},endpointMisses:{preservationForwardStats.EndpointMisses},skipped:{preservationForwardStats.Skipped},uturnCaptured:{preservationForwardStats.UturnConnections},nonRoad:{preservationForwardStats.NonRoadConnections},unsafe:{preservationForwardStats.UnsafeConnections},preservationTrackConnections:{preservationForwardStats.TrackConnections},preservationTrackOnlyTargets:{preservationForwardStats.TrackOnlyTargets},preservationSharedTrackConnections:{preservationForwardStats.SharedTrackConnections} preservationReverseStats=connectors:{preservationReverseStats.Connectors},mappings:{preservationReverseStats.Mappings},endpointMisses:{preservationReverseStats.EndpointMisses},skipped:{preservationReverseStats.Skipped},uturnCaptured:{preservationReverseStats.UturnConnections},nonRoad:{preservationReverseStats.NonRoadConnections},unsafe:{preservationReverseStats.UnsafeConnections},preservationTrackConnections:{preservationReverseStats.TrackConnections},preservationTrackOnlyTargets:{preservationReverseStats.TrackOnlyTargets},preservationSharedTrackConnections:{preservationReverseStats.SharedTrackConnections}.");
         }
     }
 }

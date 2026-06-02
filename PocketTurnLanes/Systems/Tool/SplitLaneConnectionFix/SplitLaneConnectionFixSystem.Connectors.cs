@@ -63,7 +63,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 if (subLane.m_PathMethods == 0 ||
                     !TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity actualSourceEdge, out Entity actualTargetEdge) ||
                     actualSourceEdge != sourceEdge ||
-                    actualTargetEdge != targetEdge)
+                    (actualTargetEdge != targetEdge &&
+                     actualTargetEdge != sourceEdge))
                 {
                     continue;
                 }
