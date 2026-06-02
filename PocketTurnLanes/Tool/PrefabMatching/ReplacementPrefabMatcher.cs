@@ -30,6 +30,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         private readonly Func<BufferLookup<NetSectionPiece>> m_GetNetSectionPieceLookup;
         private readonly Func<ComponentLookup<NetLaneData>> m_GetNetLaneDataLookup;
         private readonly Func<BufferLookup<NetPieceLane>> m_GetNetPieceLaneLookup;
+        private readonly RoadPrefabEligibility m_RoadPrefabEligibility;
         private readonly RoadBuilderPrefabSemantics m_RoadBuilderPrefabSemantics;
 
         internal ReplacementPrefabMatcher(
@@ -48,6 +49,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             m_GetNetSectionPieceLookup = getNetSectionPieceLookup;
             m_GetNetLaneDataLookup = getNetLaneDataLookup;
             m_GetNetPieceLaneLookup = getNetPieceLaneLookup;
+            m_RoadPrefabEligibility = new RoadPrefabEligibility(entityManager, prefabSystem);
             m_RoadBuilderPrefabSemantics = new RoadBuilderPrefabSemantics(entityManager, prefabSystem);
         }
 
@@ -108,14 +110,14 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
-            GetRoadContentProfile(sourcePrefabRef.m_Prefab, out bool sourceIsDlc, out string sourceContentDetail);
-            if (IsBridgeRoadPrefab(sourcePrefabRef.m_Prefab, out string sourceBridgeDetail))
+            m_RoadPrefabEligibility.GetRoadContentProfile(sourcePrefabRef.m_Prefab, out bool sourceIsDlc, out string sourceContentDetail);
+            if (m_RoadPrefabEligibility.IsBridgeRoadPrefab(sourcePrefabRef.m_Prefab, out string sourceBridgeDetail))
             {
                 Mod.LogDiagnostic($"[IntersectionTool] Skip replacement prefab search sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail}: source road prefab is a bridge and bridge roads are excluded from selection and replacement matching. {sourceBridgeDetail}");
                 return false;
             }
 
-            if (IsHighwayRoadPrefab(sourcePrefabRef.m_Prefab, out string sourceHighwayDetail))
+            if (m_RoadPrefabEligibility.IsHighwayRoadPrefab(sourcePrefabRef.m_Prefab, out string sourceHighwayDetail))
             {
                 Mod.LogDiagnostic($"[IntersectionTool] Skip replacement prefab search sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail}: source road prefab uses highway rules and highway roads are excluded from selection and replacement matching. {sourceHighwayDetail}");
                 return false;
@@ -210,7 +212,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                         continue;
                     }
 
-                    if (IsHighwayRoadData(candidateRoadData))
+                    if (RoadPrefabEligibility.IsHighwayRoadData(candidateRoadData))
                     {
                         stats.HighwayExcluded++;
                         continue;
@@ -267,7 +269,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                         continue;
                     }
 
-                    GetRoadContentProfile(candidatePrefab, out bool candidateIsDlc, out string candidateContentDetail);
+                    m_RoadPrefabEligibility.GetRoadContentProfile(candidatePrefab, out bool candidateIsDlc, out string candidateContentDetail);
                     if (!sourceIsDlc && candidateIsDlc)
                     {
                         stats.DlcBlocked++;
@@ -423,89 +425,12 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         internal bool IsBridgeRoadEdge(Entity edgeEntity, out string detail)
         {
-            if (edgeEntity == Entity.Null ||
-                !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
-            {
-                detail = "prefabRef=missing";
-                return false;
-            }
-
-            return IsBridgeRoadPrefab(prefabRef.m_Prefab, out detail);
-        }
-
-        private bool IsBridgeRoadPrefab(Entity prefabEntity, out string detail)
-        {
-            if (prefabEntity == Entity.Null)
-            {
-                detail = "prefab=<null> bridgeData=False";
-                return false;
-            }
-
-            bool isBridge = EntityManager.HasComponent<BridgeData>(prefabEntity);
-            detail = $"prefab={GetPrefabNameFromPrefab(prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} bridgeData={isBridge}";
-            return isBridge;
+            return m_RoadPrefabEligibility.IsBridgeRoadEdge(edgeEntity, out detail);
         }
 
         internal bool IsHighwayRoadEdge(Entity edgeEntity, out string detail)
         {
-            if (edgeEntity == Entity.Null ||
-                !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
-            {
-                detail = "prefabRef=missing";
-                return false;
-            }
-
-            return IsHighwayRoadPrefab(prefabRef.m_Prefab, out detail);
-        }
-
-        private bool IsHighwayRoadPrefab(Entity prefabEntity, out string detail)
-        {
-            if (prefabEntity == Entity.Null)
-            {
-                detail = "prefab=<null> roadData=missing useHighwayRules=False";
-                return false;
-            }
-
-            if (!EntityManager.TryGetComponent(prefabEntity, out RoadData roadData))
-            {
-                detail = $"prefab={GetPrefabNameFromPrefab(prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} roadData=missing useHighwayRules=False";
-                return false;
-            }
-
-            bool isHighway = IsHighwayRoadData(roadData);
-            detail = $"prefab={GetPrefabNameFromPrefab(prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} roadFlags={roadData.m_Flags} useHighwayRules={isHighway}";
-            return isHighway;
-        }
-
-        private static bool IsHighwayRoadData(RoadData roadData)
-        {
-            return (roadData.m_Flags & Game.Prefabs.RoadFlags.UseHighwayRules) != 0;
-        }
-
-        private void GetRoadContentProfile(Entity prefabEntity, out bool isDlc, out string detail)
-        {
-            isDlc = false;
-            detail = "contentPrerequisite=<none> contentType=base";
-
-            if (prefabEntity == Entity.Null ||
-                !EntityManager.TryGetComponent(prefabEntity, out ContentPrerequisiteData prerequisiteData) ||
-                prerequisiteData.m_ContentPrerequisite == Entity.Null)
-            {
-                return;
-            }
-
-            Entity contentEntity = prerequisiteData.m_ContentPrerequisite;
-            string contentName = GetPrefabNameFromPrefab(contentEntity);
-            string contentFlags = "<missing ContentData>";
-            string dlcId = "<missing>";
-            if (EntityManager.TryGetComponent(contentEntity, out ContentData contentData))
-            {
-                contentFlags = contentData.m_Flags.ToString();
-                dlcId = contentData.m_DlcID.ToString();
-                isDlc = (contentData.m_Flags & ContentFlags.RequireDlc) != 0;
-            }
-
-            detail = $"contentPrerequisite={contentName} contentEntity={FormatEntity(contentEntity)} contentFlags={contentFlags} dlcId={dlcId} contentType={(isDlc ? "dlc" : "base")}";
+            return m_RoadPrefabEligibility.IsHighwayRoadEdge(edgeEntity, out detail);
         }
 
         private struct CandidateLaneMatch
