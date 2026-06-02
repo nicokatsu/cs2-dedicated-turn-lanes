@@ -468,53 +468,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static bool TryFindMappingEndpoint(Request request, Entity edge, int laneIndex, bool source, out LaneEndpoint lane)
         {
-            if (source)
-            {
-                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.SourceLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationForwardSourceLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.ReverseSourceLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationReverseSourceLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.TargetLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.PocketEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationForwardTargetLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.ReverseTargetLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.OuterEdge && TrafficLaneEndpointHelpers.TryFind(request.PreservationReverseTargetLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-            }
-
-            lane = default;
-            return false;
+            TrafficSplitPairEndpointLookup lookup = new TrafficSplitPairEndpointLookup(
+                request.OuterEdge,
+                request.PocketEdge,
+                request.SourceLanes,
+                request.TargetLanes,
+                request.ReverseSourceLanes,
+                request.ReverseTargetLanes,
+                request.PreservationForwardSourceLanes,
+                request.PreservationForwardTargetLanes,
+                request.PreservationReverseSourceLanes,
+                request.PreservationReverseTargetLanes);
+            return lookup.TryFind(edge, laneIndex, source, out lane);
         }
 
         private int GetNextNodeLaneIndex(Entity node, DynamicBuffer<SubLane> subLanes)
