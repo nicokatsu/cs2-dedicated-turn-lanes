@@ -556,15 +556,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int PreservationOverlayRuntimeConnections;
             public int PreservationNonRoadConnections;
             public int PreservationUnsafeConnections;
-            public int PreservationSuppressedUturnConnections;
             public int PreservationTrackConnections;
             public int PreservationTrackOnlyTargets;
             public int PreservationSharedTrackConnections;
             public int StaleUturnConnections;
-            public int UturnSourcesCoveredByPlan;
-            public int UturnSourcesCoveredByEmptyOverride;
-            public int UturnSourcesLeftForDirectCleanup;
-            public int RuntimeNonUturnSuppressionSkipped;
             public TrafficPlanAuditStats AuditStats;
         }
 

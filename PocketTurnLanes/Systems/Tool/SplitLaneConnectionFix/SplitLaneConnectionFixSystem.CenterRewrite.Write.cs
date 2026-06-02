@@ -47,10 +47,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 plan.PreservedNonRoadConnections += snapshotPreservation.NonRoadConnections;
                 plan.PreservedUnsafeConnections += snapshotPreservation.UnsafeConnections;
                 plan.PreservationSkipped += snapshotPreservation.Skipped;
-                plan.PlannedConnections = CountTrafficPlanConnections(plan.BySource);
             }
 
-            plan.AuditStats = AuditTrafficMappingPlan(
+            plan.AuditStats = AuditAndNormalizeTrafficMappingPlan(
                 plan.BySource,
                 CenterTrafficPlanAuditPolicy,
                 null,

@@ -11,7 +11,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
         private static readonly TrafficPlanAuditPolicy CenterTrafficPlanAuditPolicy =
             new TrafficPlanAuditPolicy("centerPreserveUturns", TrafficPlanUturnPolicy.Preserve, false);
 
-        private static TrafficPlanAuditStats AuditTrafficMappingPlan(
+        private static TrafficPlanAuditStats AuditAndNormalizeTrafficMappingPlan(
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
             TrafficPlanAuditPolicy policy,
             HashSet<SourceLaneKey> roadRepairSourceKeys,
@@ -31,7 +31,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             stats.InitialSources = bySource.Count;
             List<string> decisions = new List<string>(bySource.Count);
             List<SourceLaneKey> sourceKeys = new List<SourceLaneKey>(bySource.Keys);
-            HashSet<SourceLaneKey> auditedSources = new HashSet<SourceLaneKey>();
+            HashSet<SourceLaneKey> auditedSources = uturnSuppressionSourceKeys == null
+                ? null
+                : new HashSet<SourceLaneKey>();
             for (int sourceIndex = 0; sourceIndex < sourceKeys.Count; sourceIndex++)
             {
                 SourceLaneKey sourceKey = sourceKeys[sourceIndex];
@@ -40,43 +42,27 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                auditedSources.Add(sourceKey);
+                auditedSources?.Add(sourceKey);
                 bool staleUturnSource = uturnSuppressionSourceKeys != null &&
                                         uturnSuppressionSourceKeys.Contains(sourceKey);
                 bool runtimeNonUturnSource = runtimeNonUturnSourceKeys != null &&
                                              runtimeNonUturnSourceKeys.Contains(sourceKey);
                 int initialConnections = byTarget.Count;
-                int suppressedUturns = 0;
-                if (policy.UturnPolicy == TrafficPlanUturnPolicy.Suppress && byTarget.Count > 0)
-                {
-                    List<TargetLaneKey> removeTargets = new List<TargetLaneKey>(2);
-                    foreach (KeyValuePair<TargetLaneKey, LaneMapping> targetPair in byTarget)
-                    {
-                        if (targetPair.Value.SourceEdge == targetPair.Value.TargetEdge)
-                        {
-                            removeTargets.Add(targetPair.Key);
-                        }
-                    }
-
-                    for (int i = 0; i < removeTargets.Count; i++)
-                    {
-                        byTarget.Remove(removeTargets[i]);
-                        suppressedUturns++;
-                    }
-                }
-
+                int suppressedUturns = policy.UturnPolicy == TrafficPlanUturnPolicy.Suppress
+                    ? SuppressTrafficPlanUturnMappings(byTarget)
+                    : 0;
                 stats.SuppressedUturnConnections += suppressedUturns;
 
-                bool emptyOverride = false;
-                bool removedEmpty = false;
+                bool emptyOverride = ShouldKeepEmptyTrafficPlanSource(
+                    policy,
+                    staleUturnSource,
+                    runtimeNonUturnSource,
+                    byTarget.Count);
+                bool removedEmpty = byTarget.Count == 0 && !emptyOverride;
                 if (byTarget.Count == 0)
                 {
-                    if (policy.UturnPolicy == TrafficPlanUturnPolicy.Suppress &&
-                        policy.AllowEmptyUturnSuppression &&
-                        staleUturnSource &&
-                        !runtimeNonUturnSource)
+                    if (emptyOverride)
                     {
-                        emptyOverride = true;
                         stats.EmptyOverrideSources++;
                     }
                     else
@@ -88,132 +74,258 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
                 }
 
-                int roadConnections = 0;
-                int preservationConnections = 0;
-                int unsafeConnections = 0;
-                int trackConnections = 0;
-                int preservedUturns = 0;
+                TrafficPlanSourceAuditStats sourceStats = default;
                 if (!removedEmpty)
                 {
-                    foreach (LaneMapping mapping in byTarget.Values)
-                    {
-                        if (mapping.IsPreservationOnly)
-                        {
-                            preservationConnections++;
-                        }
-                        else
-                        {
-                            roadConnections++;
-                        }
-
-                        if (mapping.SourceEdge == mapping.TargetEdge)
-                        {
-                            preservedUturns++;
-                        }
-
-                        if (mapping.IsUnsafe)
-                        {
-                            unsafeConnections++;
-                        }
-
-                        if ((mapping.Method & PathMethod.Track) != 0)
-                        {
-                            trackConnections++;
-                        }
-                    }
-
-                    if (roadConnections > 0)
-                    {
-                        stats.RoadSources++;
-                    }
-
-                    if (preservationConnections > 0)
-                    {
-                        stats.PreservationSources++;
-                    }
-
-                    if (staleUturnSource)
-                    {
-                        stats.UturnSourcesCoveredByPlan++;
-                        if (emptyOverride)
-                        {
-                            stats.UturnSourcesCoveredByEmptyOverride++;
-                        }
-                    }
+                    sourceStats = CountTrafficPlanSourceMappings(byTarget);
+                    AddTrafficPlanSourceAuditStats(
+                        ref stats,
+                        sourceStats,
+                        staleUturnSource,
+                        emptyOverride);
                 }
                 else if (staleUturnSource)
                 {
-                    stats.UturnSourcesLeftForDirectCleanup++;
-                    if (runtimeNonUturnSource)
-                    {
-                        stats.RuntimeNonUturnSuppressionSkipped++;
-                    }
+                    AddTrafficPlanDirectCleanupStats(ref stats, runtimeNonUturnSource);
                 }
-
-                stats.RoadConnections += roadConnections;
-                stats.PreservationConnections += preservationConnections;
-                stats.PreservedUturnConnections += preservedUturns;
-                stats.UnsafeConnections += unsafeConnections;
-                stats.TrackConnections += trackConnections;
 
                 bool roadSourceKey = roadRepairSourceKeys != null && roadRepairSourceKeys.Contains(sourceKey);
                 bool preservationSourceKey = preservationSourceKeys != null && preservationSourceKeys.Contains(sourceKey);
-                string decision = removedEmpty
-                    ? "removedEmpty"
-                    : emptyOverride
-                        ? "emptyOverride"
-                        : roadConnections > 0 && preservationConnections > 0
-                            ? "road+preserve"
-                            : roadConnections > 0
-                                ? "road"
-                                : preservationConnections > 0
-                                    ? "preserve"
-                                    : "empty";
-                decisions.Add(
-                    $"{FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex}" +
-                    $" decision={decision}" +
-                    $" initial={initialConnections}" +
-                    $" final={(removedEmpty ? 0 : byTarget.Count)}" +
-                    $" road={roadConnections}" +
-                    $" preserved={preservationConnections}" +
-                    $" preservedUturn={preservedUturns}" +
-                    $" suppressedUturn={suppressedUturns}" +
-                    $" unsafe={unsafeConnections}" +
-                    $" track={trackConnections}" +
-                    $" roadKey={roadSourceKey}" +
-                    $" preservationKey={preservationSourceKey}" +
-                    $" staleUturnKey={staleUturnSource}" +
-                    $" runtimeNonUturn={runtimeNonUturnSource}");
+                decisions.Add(FormatTrafficPlanSourceDecision(
+                    sourceKey,
+                    GetTrafficPlanSourceDecision(removedEmpty, emptyOverride, sourceStats),
+                    initialConnections,
+                    removedEmpty ? 0 : byTarget.Count,
+                    sourceStats,
+                    suppressedUturns,
+                    roadSourceKey,
+                    preservationSourceKey,
+                    staleUturnSource,
+                    runtimeNonUturnSource));
             }
 
-            if (uturnSuppressionSourceKeys != null)
-            {
-                foreach (SourceLaneKey sourceKey in uturnSuppressionSourceKeys)
-                {
-                    if (auditedSources.Contains(sourceKey))
-                    {
-                        continue;
-                    }
-
-                    bool runtimeNonUturnSource = runtimeNonUturnSourceKeys != null &&
-                                                 runtimeNonUturnSourceKeys.Contains(sourceKey);
-                    stats.UturnSourcesLeftForDirectCleanup++;
-                    if (runtimeNonUturnSource)
-                    {
-                        stats.RuntimeNonUturnSuppressionSkipped++;
-                    }
-
-                    decisions.Add(
-                        $"{FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex}" +
-                        $" decision=directCleanupOnly" +
-                        $" initial=0 final=0 road=0 preserved=0 preservedUturn=0 suppressedUturn=0 unsafe=0 track=0" +
-                        $" roadKey=False preservationKey=False staleUturnKey=True runtimeNonUturn={runtimeNonUturnSource}");
-                }
-            }
+            AddUnauditedUturnSuppressionDecisions(
+                uturnSuppressionSourceKeys,
+                runtimeNonUturnSourceKeys,
+                auditedSources,
+                decisions,
+                ref stats);
 
             stats.FinalSources = bySource.Count;
             stats.SourceDecisions = decisions.Count == 0 ? "<none>" : string.Join(" | ", decisions);
             return stats;
+        }
+
+        private static int SuppressTrafficPlanUturnMappings(
+            Dictionary<TargetLaneKey, LaneMapping> byTarget)
+        {
+            if (byTarget == null || byTarget.Count == 0)
+            {
+                return 0;
+            }
+
+            List<TargetLaneKey> removeTargets = new List<TargetLaneKey>(2);
+            foreach (KeyValuePair<TargetLaneKey, LaneMapping> targetPair in byTarget)
+            {
+                if (IsSameEdgeTrafficMapping(targetPair.Value))
+                {
+                    removeTargets.Add(targetPair.Key);
+                }
+            }
+
+            for (int i = 0; i < removeTargets.Count; i++)
+            {
+                byTarget.Remove(removeTargets[i]);
+            }
+
+            return removeTargets.Count;
+        }
+
+        private static bool ShouldKeepEmptyTrafficPlanSource(
+            TrafficPlanAuditPolicy policy,
+            bool staleUturnSource,
+            bool runtimeNonUturnSource,
+            int connectionCount)
+        {
+            return connectionCount == 0 &&
+                   policy.UturnPolicy == TrafficPlanUturnPolicy.Suppress &&
+                   policy.AllowEmptyUturnSuppression &&
+                   staleUturnSource &&
+                   !runtimeNonUturnSource;
+        }
+
+        private static TrafficPlanSourceAuditStats CountTrafficPlanSourceMappings(
+            Dictionary<TargetLaneKey, LaneMapping> byTarget)
+        {
+            TrafficPlanSourceAuditStats stats = default;
+            foreach (LaneMapping mapping in byTarget.Values)
+            {
+                if (mapping.IsPreservationOnly)
+                {
+                    stats.PreservationConnections++;
+                }
+                else
+                {
+                    stats.RoadConnections++;
+                }
+
+                if (IsSameEdgeTrafficMapping(mapping))
+                {
+                    stats.PreservedUturnConnections++;
+                }
+
+                if (mapping.IsUnsafe)
+                {
+                    stats.UnsafeConnections++;
+                }
+
+                if ((mapping.Method & PathMethod.Track) != 0)
+                {
+                    stats.TrackConnections++;
+                }
+            }
+
+            return stats;
+        }
+
+        private static void AddTrafficPlanSourceAuditStats(
+            ref TrafficPlanAuditStats stats,
+            TrafficPlanSourceAuditStats sourceStats,
+            bool staleUturnSource,
+            bool emptyOverride)
+        {
+            if (sourceStats.RoadConnections > 0)
+            {
+                stats.RoadSources++;
+            }
+
+            if (sourceStats.PreservationConnections > 0)
+            {
+                stats.PreservationSources++;
+            }
+
+            if (staleUturnSource)
+            {
+                stats.UturnSourcesCoveredByPlan++;
+                if (emptyOverride)
+                {
+                    stats.UturnSourcesCoveredByEmptyOverride++;
+                }
+            }
+
+            stats.RoadConnections += sourceStats.RoadConnections;
+            stats.PreservationConnections += sourceStats.PreservationConnections;
+            stats.PreservedUturnConnections += sourceStats.PreservedUturnConnections;
+            stats.UnsafeConnections += sourceStats.UnsafeConnections;
+            stats.TrackConnections += sourceStats.TrackConnections;
+        }
+
+        private static void AddTrafficPlanDirectCleanupStats(
+            ref TrafficPlanAuditStats stats,
+            bool runtimeNonUturnSource)
+        {
+            stats.UturnSourcesLeftForDirectCleanup++;
+            if (runtimeNonUturnSource)
+            {
+                stats.RuntimeNonUturnSuppressionSkipped++;
+            }
+        }
+
+        private static void AddUnauditedUturnSuppressionDecisions(
+            HashSet<SourceLaneKey> uturnSuppressionSourceKeys,
+            HashSet<SourceLaneKey> runtimeNonUturnSourceKeys,
+            HashSet<SourceLaneKey> auditedSources,
+            List<string> decisions,
+            ref TrafficPlanAuditStats stats)
+        {
+            if (uturnSuppressionSourceKeys == null)
+            {
+                return;
+            }
+
+            foreach (SourceLaneKey sourceKey in uturnSuppressionSourceKeys)
+            {
+                if (auditedSources != null && auditedSources.Contains(sourceKey))
+                {
+                    continue;
+                }
+
+                bool runtimeNonUturnSource = runtimeNonUturnSourceKeys != null &&
+                                             runtimeNonUturnSourceKeys.Contains(sourceKey);
+                AddTrafficPlanDirectCleanupStats(ref stats, runtimeNonUturnSource);
+                decisions.Add(FormatTrafficPlanSourceDecision(
+                    sourceKey,
+                    "directCleanupOnly",
+                    0,
+                    0,
+                    default,
+                    0,
+                    false,
+                    false,
+                    true,
+                    runtimeNonUturnSource));
+            }
+        }
+
+        private static string GetTrafficPlanSourceDecision(
+            bool removedEmpty,
+            bool emptyOverride,
+            TrafficPlanSourceAuditStats sourceStats)
+        {
+            if (removedEmpty)
+            {
+                return "removedEmpty";
+            }
+
+            if (emptyOverride)
+            {
+                return "emptyOverride";
+            }
+
+            if (sourceStats.RoadConnections > 0 && sourceStats.PreservationConnections > 0)
+            {
+                return "road+preserve";
+            }
+
+            if (sourceStats.RoadConnections > 0)
+            {
+                return "road";
+            }
+
+            return sourceStats.PreservationConnections > 0 ? "preserve" : "empty";
+        }
+
+        private static string FormatTrafficPlanSourceDecision(
+            SourceLaneKey sourceKey,
+            string decision,
+            int initialConnections,
+            int finalConnections,
+            TrafficPlanSourceAuditStats sourceStats,
+            int suppressedUturns,
+            bool roadSourceKey,
+            bool preservationSourceKey,
+            bool staleUturnSource,
+            bool runtimeNonUturnSource)
+        {
+            return $"{FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex}" +
+                   $" decision={decision}" +
+                   $" initial={initialConnections}" +
+                   $" final={finalConnections}" +
+                   $" road={sourceStats.RoadConnections}" +
+                   $" preserved={sourceStats.PreservationConnections}" +
+                   $" preservedUturn={sourceStats.PreservedUturnConnections}" +
+                   $" suppressedUturn={suppressedUturns}" +
+                   $" unsafe={sourceStats.UnsafeConnections}" +
+                   $" track={sourceStats.TrackConnections}" +
+                   $" roadKey={roadSourceKey}" +
+                   $" preservationKey={preservationSourceKey}" +
+                   $" staleUturnKey={staleUturnSource}" +
+                   $" runtimeNonUturn={runtimeNonUturnSource}";
+        }
+
+        private static bool IsSameEdgeTrafficMapping(LaneMapping mapping)
+        {
+            return mapping.SourceEdge == mapping.TargetEdge;
         }
 
         private static string FormatTrafficPlanAuditStats(TrafficPlanAuditStats stats)
@@ -221,6 +333,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             string policy = string.IsNullOrEmpty(stats.Policy) ? "notRun" : stats.Policy;
             string sourceDecisions = string.IsNullOrEmpty(stats.SourceDecisions) ? "<none>" : stats.SourceDecisions;
             return $"policy={policy} initialSources={stats.InitialSources} finalSources={stats.FinalSources} roadSources={stats.RoadSources} preservationSources={stats.PreservationSources} roadConnections={stats.RoadConnections} preservationConnections={stats.PreservationConnections} preservedUturn={stats.PreservedUturnConnections} suppressedUturn={stats.SuppressedUturnConnections} emptyOverrideSources={stats.EmptyOverrideSources} removedEmptySources={stats.RemovedEmptySources} skippedSources={stats.SkippedSources} unsafeConnections={stats.UnsafeConnections} trackConnections={stats.TrackConnections} uturnSourcesCovered={stats.UturnSourcesCoveredByPlan} uturnEmptyOverrides={stats.UturnSourcesCoveredByEmptyOverride} uturnDirectCleanupFallback={stats.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={stats.RuntimeNonUturnSuppressionSkipped} sourceDecisions=({sourceDecisions})";
+        }
+
+        private struct TrafficPlanSourceAuditStats
+        {
+            public int RoadConnections;
+            public int PreservationConnections;
+            public int PreservedUturnConnections;
+            public int UnsafeConnections;
+            public int TrackConnections;
         }
     }
 }

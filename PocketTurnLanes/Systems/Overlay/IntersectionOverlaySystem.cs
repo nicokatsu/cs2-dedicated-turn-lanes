@@ -107,12 +107,6 @@ namespace PocketTurnLanes.Systems.Overlay
             }
         }
 
-        private void AddVertex(float3 position, Color color)
-        {
-            m_Vertices.Add(new Vector3(position.x, position.y, position.z));
-            m_Colors.Add(color);
-        }
-
         private void Build()
         {
             if (m_Mesh == null || m_Vertices.Count == 0)
