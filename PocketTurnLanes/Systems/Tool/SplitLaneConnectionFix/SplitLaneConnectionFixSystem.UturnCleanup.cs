@@ -7,6 +7,7 @@ using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 using Unity.Mathematics;
 using SubLane = Game.Net.SubLane;
+
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
@@ -105,16 +106,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static void PopulateStaleSourceStats(IReadOnlyList<ConnectorLane> staleUturns, ref UturnCleanupWriteStats stats)
         {
-            HashSet<SourceLaneKey> staleSourceKeys = new HashSet<SourceLaneKey>();
-            if (staleUturns != null)
-            {
-                for (int i = 0; i < staleUturns.Count; i++)
-                {
-                    ConnectorLane connector = staleUturns[i];
-                    staleSourceKeys.Add(new SourceLaneKey(connector.SourceEdge, connector.SourceLaneIndex));
-                }
-            }
-
+            HashSet<SourceLaneKey> staleSourceKeys = TrafficUturnSuppressionPlanner.BuildStaleSourceKeys(staleUturns);
             stats.StaleSourceLanes = staleSourceKeys.Count;
             stats.SourceLanes = FormatSourceLaneKeys(staleSourceKeys);
         }
@@ -137,36 +129,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            HashSet<SourceLaneKey> staleSourceKeys = new HashSet<SourceLaneKey>();
-            if (staleUturns != null)
-            {
-                for (int i = 0; i < staleUturns.Count; i++)
-                {
-                    ConnectorLane connector = staleUturns[i];
-                    staleSourceKeys.Add(new SourceLaneKey(connector.SourceEdge, connector.SourceLaneIndex));
-                }
-            }
-
+            HashSet<SourceLaneKey> staleSourceKeys = TrafficUturnSuppressionPlanner.BuildStaleSourceKeys(staleUturns);
             stats.StaleSourceLanes = staleSourceKeys.Count;
             stats.SourceLanes = FormatSourceLaneKeys(staleSourceKeys);
 
             CollectSplitNodeConnectorLanes(request.SplitNode, outerEdge, request.PocketEdge, subLanes, m_ConnectorLanes);
-            for (int i = 0; i < m_ConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_ConnectorLanes[i];
-                SourceLaneKey sourceKey = new SourceLaneKey(connector.SourceEdge, connector.SourceLaneIndex);
-                if (!staleSourceKeys.Contains(sourceKey))
-                {
-                    continue;
-                }
-
-                if (connector.SourceEdge == connector.TargetEdge)
-                {
-                    continue;
-                }
-
-                stats.RuntimeFallbackSuppressedConnections++;
-            }
+            stats.RuntimeFallbackSuppressedConnections = TrafficUturnSuppressionPlanner.CountRuntimeNonUturnConnections(
+                staleSourceKeys,
+                m_ConnectorLanes);
 
             if (!trafficApi.HasModifiedLaneConnectionsBuffer(EntityManager, request.SplitNode))
             {
