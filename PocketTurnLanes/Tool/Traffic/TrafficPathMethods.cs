@@ -172,6 +172,11 @@ namespace PocketTurnLanes.Tool.Traffic
             return method == 0 ? PathMethod.Road : method;
         }
 
+        public static PathMethod GetRoadRepairPathMethod(PathMethod method)
+        {
+            return PathMethod.Road | (method & PathMethod.Bicycle);
+        }
+
         public static PathMethod RestrictTrafficPathMethodToEndpoints(
             PathMethod method,
             TrafficLaneCapabilities source,

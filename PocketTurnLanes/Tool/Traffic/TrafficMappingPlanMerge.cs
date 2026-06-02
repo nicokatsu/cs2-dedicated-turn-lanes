@@ -12,6 +12,41 @@ namespace PocketTurnLanes.Tool.Traffic
             AddOrMerge(bySource, mapping, TrafficPathMethodMergeMode.FinalRepair);
         }
 
+        public static List<LaneMapping> CreateRoadRepairMappings(
+            LaneMapping[] forwardMappings,
+            LaneMapping[] reverseMappings)
+        {
+            List<LaneMapping> allMappings = new List<LaneMapping>(
+                (forwardMappings?.Length ?? 0) +
+                (reverseMappings?.Length ?? 0));
+            AddRoadRepairMappings(forwardMappings, allMappings);
+            AddRoadRepairMappings(reverseMappings, allMappings);
+            return allMappings;
+        }
+
+        public static void AddRoadRepairMappings(
+            LaneMapping[] mappings,
+            List<LaneMapping> output)
+        {
+            if (mappings == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < mappings.Length; i++)
+            {
+                output.Add(NormalizeRoadRepairMapping(mappings[i]));
+            }
+        }
+
+        public static LaneMapping NormalizeRoadRepairMapping(LaneMapping mapping)
+        {
+            mapping.Method = TrafficPathMethods.GetRoadRepairPathMethod(mapping.Method);
+            mapping.IsPreservationOnly = false;
+            mapping.IsUnsafe = false;
+            return mapping;
+        }
+
         public static void AddOrMergeCenterRewrite(
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
             LaneMapping mapping)

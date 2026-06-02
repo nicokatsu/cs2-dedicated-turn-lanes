@@ -381,7 +381,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
 
                 Entity clone = CloneConnectorLane(request, template, source, target, (ushort)nextNodeLaneIndex++);
-                PathMethod roadOnlyPathMethods = GetRoadFixMethod(template.PathMethods | mapping.Method);
+                PathMethod roadOnlyPathMethods = TrafficPathMethods.GetRoadRepairPathMethod(template.PathMethods | mapping.Method);
                 subLanes.Add(new SubLane
                 {
                     m_SubLane = clone,

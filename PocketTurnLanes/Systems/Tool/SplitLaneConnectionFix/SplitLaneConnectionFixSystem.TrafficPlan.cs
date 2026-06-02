@@ -68,7 +68,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center Traffic rewrite skipped without writable sources centerNode={FormatEntity(request.IntersectionNode)} splitNode={FormatEntity(request.SplitNode)} pocketEdge={FormatEntity(request.PocketEdge)} diagnostics={FormatStringList(centerPlan.Diagnostics)}; continuing outer split-node Traffic repair.");
             }
 
-            List<LaneMapping> roadMappings = GetRoadFixMappings(request);
+            List<LaneMapping> roadMappings = TrafficMappingPlanMerge.CreateRoadRepairMappings(
+                request.Mappings,
+                request.ReverseMappings);
             List<LaneMapping> validRoadMappings = new List<LaneMapping>(roadMappings.Count);
             for (int i = 0; i < roadMappings.Count; i++)
             {
@@ -86,9 +88,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     return false;
                 }
 
-                mapping.Method = GetRoadFixMethod(mapping.Method);
-                mapping.IsPreservationOnly = false;
-                mapping.IsUnsafe = false;
                 validRoadMappings.Add(mapping);
             }
 
@@ -384,46 +383,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             return copied;
-        }
-
-        private static List<LaneMapping> GetRoadFixMappings(Request request)
-        {
-            List<LaneMapping> allMappings = new List<LaneMapping>(
-                (request.Mappings?.Length ?? 0) +
-                (request.ReverseMappings?.Length ?? 0));
-            if (request.Mappings != null)
-            {
-                AddRoadFixMappings(request.Mappings, allMappings);
-            }
-
-            if (request.ReverseMappings != null)
-            {
-                AddRoadFixMappings(request.ReverseMappings, allMappings);
-            }
-
-            return allMappings;
-        }
-
-        private static void AddRoadFixMappings(LaneMapping[] mappings, List<LaneMapping> output)
-        {
-            if (mappings == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < mappings.Length; i++)
-            {
-                LaneMapping mapping = mappings[i];
-                mapping.Method = GetRoadFixMethod(mapping.Method);
-                mapping.IsPreservationOnly = false;
-                mapping.IsUnsafe = false;
-                output.Add(mapping);
-            }
-        }
-
-        private static PathMethod GetRoadFixMethod(PathMethod method)
-        {
-            return PathMethod.Road | (method & PathMethod.Bicycle);
         }
 
         private static string GetReverseRoadDirectionLabel(RepairMode mode)
