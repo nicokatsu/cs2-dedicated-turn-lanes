@@ -138,13 +138,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                             forwardMappingReason = reason;
                             Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count} reason={reason}; preservationFallback=True continueReverse=True.");
                         }
-                        else if (!TryBuildDesiredMappings(
+                        else if (!TrafficLaneMappingBuilder.TryBuildDesiredMappings(
                                      m_SourceLanes,
                                      selectedTargets,
                                      extraTargetListIndex,
                                      branchSourceLaneIndex,
                                      m_ExistingConnectorLanes,
                                      preferExistingConnectors: !centerTurnEvidence,
+                                     FormatLaneOrder,
                                      out LaneMapping[] mappings,
                                      out forwardMappingSource,
                                      out string mappingReason))

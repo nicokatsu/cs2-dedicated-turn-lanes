@@ -245,16 +245,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public bool IsUnsafe;
         }
 
-        private struct SnapshotLaneOrder
-        {
-            public int LaneIndex;
-            public float LateralSum;
-            public int Count;
-            public int FirstSnapshotOrder;
-
-            public float AverageLateral => Count > 0 ? LateralSum / Count : 0f;
-        }
-
         private struct DirectRebuildStats
         {
             public int Kept;

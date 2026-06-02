@@ -27,7 +27,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
         private readonly List<LaneEndpoint> m_PreservationTargetLanes = new List<LaneEndpoint>(8);
         private readonly List<LaneEndpoint> m_PreservationReverseSourceLanes = new List<LaneEndpoint>(8);
         private readonly List<LaneEndpoint> m_PreservationReverseTargetLanes = new List<LaneEndpoint>(8);
-        private readonly List<LaneMapping> m_Mappings = new List<LaneMapping>(12);
         private readonly List<LaneMapping> m_PreservationMappings = new List<LaneMapping>(12);
         private readonly List<object> m_KeptTrafficConnections = new List<object>(16);
         private readonly List<ConnectorLane> m_ConnectorLanes = new List<ConnectorLane>(16);

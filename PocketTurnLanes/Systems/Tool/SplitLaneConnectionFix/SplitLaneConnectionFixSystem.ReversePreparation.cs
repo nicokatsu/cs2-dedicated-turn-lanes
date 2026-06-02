@@ -164,13 +164,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return true;
             }
 
-            if (!TryBuildDesiredMappings(
+            if (!TrafficLaneMappingBuilder.TryBuildDesiredMappings(
                     m_ReverseSourceLanes,
                     selectedReverseTargets,
                     extraTargetListIndex,
                     branchSourceLaneIndex,
                     m_ExistingConnectorLanes,
                     preferExistingConnectors: !centerTurnEvidence,
+                    FormatLaneOrder,
                     out LaneMapping[] balancedReverseMappings,
                     out string balancedMappingSource,
                     out string balancedMappingReason))
@@ -200,12 +201,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
         {
             mappingSource = "none";
             reason = string.Empty;
-            if (!TryBuildSnapshotReverseMappings(
+            if (!TrafficLaneMappingBuilder.TryBuildSnapshotReverseMappings(
                     request.TransitionReverseSnapshot,
                     m_ReverseSourceLanes,
                     m_ReverseTargetLanes,
                     request.PocketEdge,
                     outerEdge,
+                    FormatLaneOrder,
+                    FormatSnapshot,
                     out LaneMapping[] snapshotReverseMappings,
                     out mappingSource,
                     out string snapshotReason))
@@ -237,10 +240,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             mappingSource = "none";
             reason = string.Empty;
             CollectConnectorLanes(request.SplitNode, request.PocketEdge, outerEdge, m_ExistingConnectorLanes);
-            if (!TryBuildStraightMappings(
+            if (!TrafficLaneMappingBuilder.TryBuildStraightMappings(
                     m_ReverseSourceLanes,
                     m_ReverseTargetLanes,
                     m_ExistingConnectorLanes,
+                    FormatLaneOrder,
                     out LaneMapping[] reverseMappings,
                     out mappingSource,
                     out string buildReason))
