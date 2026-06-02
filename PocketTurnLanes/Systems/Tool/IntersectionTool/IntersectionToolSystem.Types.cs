@@ -5,6 +5,7 @@ using Game.Prefabs;
 using Game.Tools;
 using PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix;
 using PocketTurnLanes.Tool;
+using PocketTurnLanes.Tool.Traffic;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -95,7 +96,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
             public int Attempt;
-            public SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
+            public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
         }
 
         private struct NodeMergeCandidate
@@ -130,8 +131,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
             public NodeMergeDefinitionRequest MergeRequest;
-            public SplitLaneConnectionFixSystem.TransitionConnectionSnapshot TransitionReverseSnapshot;
-            public SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
+            public TransitionConnectionSnapshot TransitionReverseSnapshot;
+            public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
         }
 
         private struct ReplacementDefinitionRequest
@@ -173,8 +174,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
             public Entity TransitionOuterEdge;
-            public SplitLaneConnectionFixSystem.TransitionConnectionSnapshot TransitionReverseSnapshot;
-            public SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
+            public TransitionConnectionSnapshot TransitionReverseSnapshot;
+            public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
         }
 
         private struct CreateNodeMergeDefinitionJob : IJob

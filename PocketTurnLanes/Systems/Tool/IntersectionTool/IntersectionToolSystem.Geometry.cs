@@ -6,6 +6,7 @@ using Game.Prefabs;
 using PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix;
 using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.PrefabMatching;
+using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 using Unity.Mathematics;
 using static PocketTurnLanes.Tool.SplitGeometry.SplitGeometryMath;
@@ -486,7 +487,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 ? continuationSeed.m_Seed
                 : continuationEdge.Index;
             bool hasMergedUpgraded = EntityManager.TryGetComponent(continuationEdge, out Upgraded mergedUpgraded);
-            SplitLaneConnectionFixSystem.FarIntersectionTrafficSnapshot farSnapshot = m_SplitLaneConnectionFixSystem != null
+            FarIntersectionTrafficSnapshot farSnapshot = m_SplitLaneConnectionFixSystem != null
                 ? m_SplitLaneConnectionFixSystem.CaptureFarIntersectionTrafficSnapshot(farNode, continuationEdge)
                 : null;
 
@@ -588,7 +589,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 ? fallbackContext.ContinuationCurve.m_Length
                 : MathUtils.Length(fallbackContext.ContinuationCurve.m_Bezier);
             float3 hitPosition = MathUtils.Position(curve.m_Bezier, 0.5f);
-            SplitLaneConnectionFixSystem.TransitionConnectionSnapshot reverseSnapshot = m_SplitLaneConnectionFixSystem != null
+            TransitionConnectionSnapshot reverseSnapshot = m_SplitLaneConnectionFixSystem != null
                 ? m_SplitLaneConnectionFixSystem.CaptureTransitionReverseConnections(
                     fallbackContext.RemovableNode,
                     edgeEntity,

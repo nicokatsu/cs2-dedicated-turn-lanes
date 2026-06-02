@@ -4,6 +4,39 @@ using Unity.Mathematics;
 
 namespace PocketTurnLanes.Tool.Traffic
 {
+    public sealed class TransitionConnectionSnapshot
+    {
+        public Entity Node;
+        public Entity SourceEdge;
+        public Entity TargetEdge;
+        public string Source;
+        public string Detail;
+        public TransitionConnectionSnapshotMapping[] Mappings;
+    }
+
+    public struct TransitionConnectionSnapshotMapping
+    {
+        public int SourceLaneIndex;
+        public int TargetLaneIndex;
+        public float SourceLateral;
+        public float TargetLateral;
+        public float3 SourceLanePosition;
+        public float3 TargetLanePosition;
+        public int2 SourceCarriagewayAndGroup;
+        public int2 TargetCarriagewayAndGroup;
+        public PathMethod Method;
+        public bool IsUnsafe;
+    }
+
+    public sealed class FarIntersectionTrafficSnapshot
+    {
+        public Entity Node;
+        public Entity ContinuationEdge;
+        public string Source;
+        public string Detail;
+        public TrafficSourceSnapshot[] Entries;
+    }
+
     public struct TrafficEndpointSnapshot
     {
         public bool HasEndpoint;
