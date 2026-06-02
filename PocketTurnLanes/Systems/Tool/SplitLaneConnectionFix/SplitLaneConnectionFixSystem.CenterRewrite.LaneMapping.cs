@@ -179,30 +179,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private TurnDirection ClassifyCenterConnectorTurn(Entity intersectionNode, Entity sourceEdge, Entity targetEdge, CarLaneFlags flags)
         {
-            if ((flags & CarLaneFlags.TurnLeft) != 0)
-            {
-                return TurnDirection.Left;
-            }
-
-            if ((flags & CarLaneFlags.TurnRight) != 0)
-            {
-                return TurnDirection.Right;
-            }
-
-            if (!NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, sourceEdge, intersectionNode, out float2 sourceOutward) ||
-                !NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, targetEdge, intersectionNode, out float2 targetOutward))
-            {
-                return TurnDirection.Ambiguous;
-            }
-
-            float2 incoming = -sourceOutward;
-            float cross = NetTopologyHelpers.Cross(incoming, targetOutward);
-            if (math.abs(cross) < 0.25f)
-            {
-                return TurnDirection.Ambiguous;
-            }
-
-            return cross > 0f ? TurnDirection.Left : TurnDirection.Right;
+            return TrafficConnectorMovementClassifier.ClassifyCenterConnectorTurn(
+                EntityManager,
+                intersectionNode,
+                sourceEdge,
+                targetEdge,
+                flags);
         }
 
         private bool TryAddCenterCandidateMapping(

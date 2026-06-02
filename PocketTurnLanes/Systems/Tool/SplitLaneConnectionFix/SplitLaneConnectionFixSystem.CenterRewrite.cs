@@ -552,64 +552,33 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             TurnDirection bigTurn,
             TurnDirection smallTurn)
         {
-            if (sourceEdge == targetEdge ||
-                (flags & (CarLaneFlags.UTurnLeft | CarLaneFlags.UTurnRight)) != 0)
-            {
-                return CenterRewriteMovement.Uturn;
-            }
-
-            bool left = (flags & (CarLaneFlags.TurnLeft | CarLaneFlags.GentleTurnLeft)) != 0;
-            bool right = (flags & (CarLaneFlags.TurnRight | CarLaneFlags.GentleTurnRight)) != 0;
-            if (left != right)
-            {
-                return TurnToCenterMovement(left ? TurnDirection.Left : TurnDirection.Right, bigTurn, smallTurn);
-            }
-
-            if ((flags & CarLaneFlags.Forward) != 0)
-            {
-                return CenterRewriteMovement.Straight;
-            }
-
-            if (!TryClassifyCenterMovementByGeometry(centerNode, sourceEdge, targetEdge, bigTurn, smallTurn, out CenterRewriteMovement movement))
-            {
-                return CenterRewriteMovement.Ambiguous;
-            }
-
-            return movement;
+            TrafficConnectorMovement movement = TrafficConnectorMovementClassifier.ClassifyCenterRewrite(
+                EntityManager,
+                centerNode,
+                sourceEdge,
+                targetEdge,
+                flags);
+            return ToCenterRewriteMovement(movement, bigTurn, smallTurn);
         }
 
-        private bool TryClassifyCenterMovementByGeometry(
-            Entity centerNode,
-            Entity sourceEdge,
-            Entity targetEdge,
+        private static CenterRewriteMovement ToCenterRewriteMovement(
+            TrafficConnectorMovement movement,
             TurnDirection bigTurn,
-            TurnDirection smallTurn,
-            out CenterRewriteMovement movement)
+            TurnDirection smallTurn)
         {
-            movement = CenterRewriteMovement.Ambiguous;
-            if (!NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, sourceEdge, centerNode, out float2 sourceOutward) ||
-                !NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, targetEdge, centerNode, out float2 targetOutward))
+            switch (movement)
             {
-                return false;
+                case TrafficConnectorMovement.Straight:
+                    return CenterRewriteMovement.Straight;
+                case TrafficConnectorMovement.Uturn:
+                    return CenterRewriteMovement.Uturn;
+                case TrafficConnectorMovement.Left:
+                    return TurnToCenterMovement(TurnDirection.Left, bigTurn, smallTurn);
+                case TrafficConnectorMovement.Right:
+                    return TurnToCenterMovement(TurnDirection.Right, bigTurn, smallTurn);
+                default:
+                    return CenterRewriteMovement.Ambiguous;
             }
-
-            float2 incoming = -sourceOutward;
-            float cross = NetTopologyHelpers.Cross(incoming, targetOutward);
-            float dot = math.dot(incoming, targetOutward);
-            if (math.abs(cross) < 0.25f)
-            {
-                if (dot > 0.25f)
-                {
-                    movement = CenterRewriteMovement.Straight;
-                    return true;
-                }
-
-                movement = CenterRewriteMovement.Uturn;
-                return true;
-            }
-
-            movement = TurnToCenterMovement(cross > 0f ? TurnDirection.Left : TurnDirection.Right, bigTurn, smallTurn);
-            return movement != CenterRewriteMovement.Ambiguous;
         }
 
         private static CenterRewriteMovement TurnToCenterMovement(

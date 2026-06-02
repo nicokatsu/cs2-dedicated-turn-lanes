@@ -8,6 +8,7 @@ using Game.Tools;
 using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.ApproachAnalysis;
 using PocketTurnLanes.Tool.PrefabMatching;
+using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -677,33 +678,23 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
         private ApproachMovement ClassifyCenterMovement(Entity intersectionNode, Entity sourceEdge, Entity targetEdge, CarLaneFlags flags)
         {
-            bool leftFlag = (flags & CarLaneFlags.TurnLeft) != 0;
-            bool rightFlag = (flags & CarLaneFlags.TurnRight) != 0;
-            if (leftFlag && !rightFlag)
+            TrafficConnectorMovement movement = TrafficConnectorMovementClassifier.ClassifyApproachDemand(
+                EntityManager,
+                intersectionNode,
+                sourceEdge,
+                targetEdge,
+                flags);
+            switch (movement)
             {
-                return ApproachMovement.Left;
+                case TrafficConnectorMovement.Straight:
+                    return ApproachMovement.Straight;
+                case TrafficConnectorMovement.Left:
+                    return ApproachMovement.Left;
+                case TrafficConnectorMovement.Right:
+                    return ApproachMovement.Right;
+                default:
+                    return ApproachMovement.Ambiguous;
             }
-
-            if (rightFlag && !leftFlag)
-            {
-                return ApproachMovement.Right;
-            }
-
-            if (!NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, sourceEdge, intersectionNode, out float2 sourceOutward) ||
-                !NetTopologyHelpers.TryGetEdgeDirectionFromNode(EntityManager, targetEdge, intersectionNode, out float2 targetOutward))
-            {
-                return ApproachMovement.Ambiguous;
-            }
-
-            float2 incoming = -sourceOutward;
-            float cross = NetTopologyHelpers.Cross(incoming, targetOutward);
-            float dot = math.dot(incoming, targetOutward);
-            if (math.abs(cross) < 0.25f)
-            {
-                return dot > 0f ? ApproachMovement.Straight : ApproachMovement.Ambiguous;
-            }
-
-            return cross > 0f ? ApproachMovement.Left : ApproachMovement.Right;
         }
 
         private bool TryGetSourceEdgeFromNodeLane(Lane nodeLane, DynamicBuffer<ConnectedEdge> connectedEdges, out Entity sourceEdge)
