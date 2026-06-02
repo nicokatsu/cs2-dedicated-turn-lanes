@@ -148,29 +148,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Uturn
         }
 
-        private enum TrafficPlanUturnPolicy
-        {
-            Preserve,
-            Suppress
-        }
-
-        private struct TrafficPlanAuditPolicy
-        {
-            public string Name;
-            public TrafficPlanUturnPolicy UturnPolicy;
-            public bool AllowEmptyUturnSuppression;
-
-            public TrafficPlanAuditPolicy(
-                string name,
-                TrafficPlanUturnPolicy uturnPolicy,
-                bool allowEmptyUturnSuppression)
-            {
-                Name = name;
-                UturnPolicy = uturnPolicy;
-                AllowEmptyUturnSuppression = allowEmptyUturnSuppression;
-            }
-        }
-
         private sealed class CenterRewritePlan
         {
             public readonly Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> BySource = new Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>>();

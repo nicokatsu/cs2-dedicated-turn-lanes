@@ -1,18 +1,18 @@
 using System.Collections.Generic;
 using Game.Pathfind;
-using PocketTurnLanes.Tool.Traffic;
+using PocketTurnLanes.Tool;
 
-namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
+namespace PocketTurnLanes.Tool.Traffic
 {
-    public partial class SplitLaneConnectionFixSystem
+    internal static class TrafficMappingPlanAudit
     {
-        private static readonly TrafficPlanAuditPolicy OuterTrafficPlanAuditPolicy =
+        public static readonly TrafficPlanAuditPolicy OuterSuppressSplitPairUturns =
             new TrafficPlanAuditPolicy("outerSuppressSplitPairUturns", TrafficPlanUturnPolicy.Suppress, true);
 
-        private static readonly TrafficPlanAuditPolicy CenterTrafficPlanAuditPolicy =
+        public static readonly TrafficPlanAuditPolicy CenterPreserveUturns =
             new TrafficPlanAuditPolicy("centerPreserveUturns", TrafficPlanUturnPolicy.Preserve, false);
 
-        private static TrafficPlanAuditStats AuditAndNormalizeTrafficMappingPlan(
+        public static TrafficPlanAuditStats AuditAndNormalize(
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
             TrafficPlanAuditPolicy policy,
             HashSet<SourceLaneKey> roadRepairSourceKeys,
@@ -115,6 +115,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             stats.FinalSources = bySource.Count;
             stats.SourceDecisions = decisions.Count == 0 ? "<none>" : string.Join(" | ", decisions);
             return stats;
+        }
+
+        public static string FormatStats(TrafficPlanAuditStats stats)
+        {
+            string policy = string.IsNullOrEmpty(stats.Policy) ? "notRun" : stats.Policy;
+            string sourceDecisions = string.IsNullOrEmpty(stats.SourceDecisions) ? "<none>" : stats.SourceDecisions;
+            return $"policy={policy} initialSources={stats.InitialSources} finalSources={stats.FinalSources} roadSources={stats.RoadSources} preservationSources={stats.PreservationSources} roadConnections={stats.RoadConnections} preservationConnections={stats.PreservationConnections} preservedUturn={stats.PreservedUturnConnections} suppressedUturn={stats.SuppressedUturnConnections} emptyOverrideSources={stats.EmptyOverrideSources} removedEmptySources={stats.RemovedEmptySources} skippedSources={stats.SkippedSources} unsafeConnections={stats.UnsafeConnections} trackConnections={stats.TrackConnections} uturnSourcesCovered={stats.UturnSourcesCoveredByPlan} uturnEmptyOverrides={stats.UturnSourcesCoveredByEmptyOverride} uturnDirectCleanupFallback={stats.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={stats.RuntimeNonUturnSuppressionSkipped} sourceDecisions=({sourceDecisions})";
         }
 
         private static int SuppressTrafficPlanUturnMappings(
@@ -308,7 +315,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             bool staleUturnSource,
             bool runtimeNonUturnSource)
         {
-            return $"{FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex}" +
+            return $"{DiagnosticFormat.Entity(sourceKey.Edge)}:{sourceKey.LaneIndex}" +
                    $" decision={decision}" +
                    $" initial={initialConnections}" +
                    $" final={finalConnections}" +
@@ -329,13 +336,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return mapping.SourceEdge == mapping.TargetEdge;
         }
 
-        private static string FormatTrafficPlanAuditStats(TrafficPlanAuditStats stats)
-        {
-            string policy = string.IsNullOrEmpty(stats.Policy) ? "notRun" : stats.Policy;
-            string sourceDecisions = string.IsNullOrEmpty(stats.SourceDecisions) ? "<none>" : stats.SourceDecisions;
-            return $"policy={policy} initialSources={stats.InitialSources} finalSources={stats.FinalSources} roadSources={stats.RoadSources} preservationSources={stats.PreservationSources} roadConnections={stats.RoadConnections} preservationConnections={stats.PreservationConnections} preservedUturn={stats.PreservedUturnConnections} suppressedUturn={stats.SuppressedUturnConnections} emptyOverrideSources={stats.EmptyOverrideSources} removedEmptySources={stats.RemovedEmptySources} skippedSources={stats.SkippedSources} unsafeConnections={stats.UnsafeConnections} trackConnections={stats.TrackConnections} uturnSourcesCovered={stats.UturnSourcesCoveredByPlan} uturnEmptyOverrides={stats.UturnSourcesCoveredByEmptyOverride} uturnDirectCleanupFallback={stats.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={stats.RuntimeNonUturnSuppressionSkipped} sourceDecisions=({sourceDecisions})";
-        }
-
         private struct TrafficPlanSourceAuditStats
         {
             public int RoadConnections;
@@ -343,6 +343,29 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int PreservedUturnConnections;
             public int UnsafeConnections;
             public int TrackConnections;
+        }
+    }
+
+    internal enum TrafficPlanUturnPolicy
+    {
+        Preserve,
+        Suppress
+    }
+
+    internal readonly struct TrafficPlanAuditPolicy
+    {
+        public readonly string Name;
+        public readonly TrafficPlanUturnPolicy UturnPolicy;
+        public readonly bool AllowEmptyUturnSuppression;
+
+        public TrafficPlanAuditPolicy(
+            string name,
+            TrafficPlanUturnPolicy uturnPolicy,
+            bool allowEmptyUturnSuppression)
+        {
+            Name = name;
+            UturnPolicy = uturnPolicy;
+            AllowEmptyUturnSuppression = allowEmptyUturnSuppression;
         }
     }
 }
