@@ -110,36 +110,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 stats.DeletedUturn++;
             }
 
-            string trackForwardReason = "trackForward deferred until final Traffic write";
-            string trackReverseReason = "trackReverse deferred until final Traffic write";
-            if (request.FinalTrackRestoreTrafficWritten || !HasTrackRestoreMappings(request))
-            {
-                RestoreTrackConnectorDirection(
-                    request,
-                    subLanes,
-                    request.TrackForwardMappings,
-                    request.TrackForwardSourceLanes,
-                    request.TrackForwardTargetLanes,
-                    request.OuterEdge,
-                    request.PocketEdge,
-                    "trackForward",
-                    ref nextNodeLaneIndex,
-                    ref stats,
-                    out trackForwardReason);
-                RestoreTrackConnectorDirection(
-                    request,
-                    subLanes,
-                    request.TrackReverseMappings,
-                    request.TrackReverseSourceLanes,
-                    request.TrackReverseTargetLanes,
-                    request.PocketEdge,
-                    request.OuterEdge,
-                    "trackReverse",
-                    ref nextNodeLaneIndex,
-                    ref stats,
-                    out trackReverseReason);
-            }
-
             m_RemoveSubLaneIndexes.Sort();
             int lastRemovedIndex = -1;
             for (int i = m_RemoveSubLaneIndexes.Count - 1; i >= 0; i--)
@@ -158,14 +128,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             stats.Reason = "ok";
-            if (stats.Kept > 0 || stats.Cloned > 0 || stats.Deleted > 0 || stats.TrackKept > 0 || stats.TrackCloned > 0)
+            if (stats.Kept > 0 || stats.Cloned > 0 || stats.Deleted > 0)
             {
                 MarkUpdatedIfExists(request.SplitNode);
                 MarkUpdatedIfExists(request.OuterEdge);
                 MarkUpdatedIfExists(request.PocketEdge);
             }
 
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct rebuild result splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} expected={FormatMappings(request.Mappings)} reverseExpected={FormatMappings(request.ReverseMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] staleUturn={m_StaleConnectorLanes.Count} reverseReason={reverseReason} trackForward={trackForwardReason} trackReverse={trackReverseReason} kept={stats.Kept} cloned={stats.Cloned} deleted={stats.Deleted} deletedUturn={stats.DeletedUturn} trackKept={stats.TrackKept} trackCloned={stats.TrackCloned} trackSkipped={stats.TrackSkipped} updated={stats.Updated}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Direct rebuild result splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} expected={FormatMappings(request.Mappings)} reverseExpected={FormatMappings(request.ReverseMappings)} staleUturn={m_StaleConnectorLanes.Count} reverseReason={reverseReason} kept={stats.Kept} cloned={stats.Cloned} deleted={stats.Deleted} deletedUturn={stats.DeletedUturn} updated={stats.Updated}.");
             return true;
         }
 
@@ -432,207 +402,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return true;
         }
 
-        private void RestoreTrackConnectorDirection(
-            Request request,
-            DynamicBuffer<SubLane> subLanes,
-            LaneMapping[] mappings,
-            LaneEndpoint[] sourceLanes,
-            LaneEndpoint[] targetLanes,
-            Entity sourceEdge,
-            Entity targetEdge,
-            string direction,
-            ref int nextNodeLaneIndex,
-            ref DirectRebuildStats stats,
-            out string reason)
-        {
-            if (mappings == null || mappings.Length == 0)
-            {
-                reason = $"{direction} no expected track mappings";
-                return;
-            }
-
-            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
-            Dictionary<ConnectionKey, LaneMapping> expectedMappings = new Dictionary<ConnectionKey, LaneMapping>();
-            for (int i = 0; i < mappings.Length; i++)
-            {
-                LaneMapping mapping = mappings[i];
-                ConnectionKey key = new ConnectionKey(mapping.SourceLaneIndex, mapping.TargetLaneIndex);
-                expected.Add(key);
-                if (!expectedMappings.ContainsKey(key))
-                {
-                    expectedMappings.Add(key, mapping);
-                }
-            }
-
-            CollectTrackConnectorLanes(request.SplitNode, sourceEdge, targetEdge, subLanes, m_TrackConnectorLanes);
-            HashSet<ConnectionKey> actual = new HashSet<ConnectionKey>();
-            for (int i = 0; i < m_TrackConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_TrackConnectorLanes[i];
-                ConnectionKey key = new ConnectionKey(connector.SourceLaneIndex, connector.TargetLaneIndex);
-                if (!expected.Contains(key))
-                {
-                    continue;
-                }
-
-                if ((connector.PathMethods & PathMethod.Track) != 0)
-                {
-                    actual.Add(key);
-                    ClearUnsafeFlags(connector.Entity);
-                    MarkUpdatedIfExists(connector.Entity);
-                    stats.TrackKept++;
-                    stats.Updated++;
-                    continue;
-                }
-
-                if (!expectedMappings.TryGetValue(key, out LaneMapping mapping) ||
-                    (mapping.Method & PathMethod.Track) == 0 ||
-                    connector.SubLaneIndex < 0 ||
-                    connector.SubLaneIndex >= subLanes.Length)
-                {
-                    continue;
-                }
-
-                SubLane subLane = subLanes[connector.SubLaneIndex];
-                PathMethod restoredMethods = SanitizeTrafficPathMethod(subLane.m_PathMethods | mapping.Method);
-                if ((restoredMethods & PathMethod.Track) == 0)
-                {
-                    continue;
-                }
-
-                subLane.m_PathMethods = restoredMethods;
-                subLanes[connector.SubLaneIndex] = subLane;
-                actual.Add(key);
-                MarkUpdatedIfExists(connector.Entity);
-                stats.TrackKept++;
-                stats.Updated++;
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Restored shared track method on existing connector direction={direction} connector={FormatEntity(connector.Entity)} splitNode={FormatEntity(request.SplitNode)} sourceEdge={FormatEntity(sourceEdge)} targetEdge={FormatEntity(targetEdge)} source={mapping.SourceLaneIndex} target={mapping.TargetLaneIndex} oldMethods=[{connector.PathMethods}] newMethods=[{restoredMethods}] mappingMethod=[{mapping.Method}].");
-            }
-
-            int cloned = 0;
-            int skipped = 0;
-            List<string> skipReasons = new List<string>(4);
-            for (int i = 0; i < mappings.Length; i++)
-            {
-                LaneMapping mapping = mappings[i];
-                ConnectionKey key = new ConnectionKey(mapping.SourceLaneIndex, mapping.TargetLaneIndex);
-                if (actual.Contains(key))
-                {
-                    continue;
-                }
-
-                if (!TryFindLaneEndpoint(sourceLanes, mapping.SourceLaneIndex, out LaneEndpoint source) ||
-                    !TryFindLaneEndpoint(targetLanes, mapping.TargetLaneIndex, out LaneEndpoint target))
-                {
-                    skipped++;
-                    skipReasons.Add($"endpointMissing {mapping.SourceLaneIndex}->{mapping.TargetLaneIndex}");
-                    continue;
-                }
-
-                if (!TryFindTrackConnectorTemplate(mapping, out ConnectorLane template) &&
-                    !TryFindSnapshotTrackConnectorTemplate(mapping, out template))
-                {
-                    skipped++;
-                    skipReasons.Add($"templateMissing {mapping.SourceLaneIndex}->{mapping.TargetLaneIndex}");
-                    continue;
-                }
-
-                if (nextNodeLaneIndex > ushort.MaxValue)
-                {
-                    skipped++;
-                    skipReasons.Add($"nodeLaneIndexExhausted next={nextNodeLaneIndex}");
-                    continue;
-                }
-
-                PathMethod restoredPathMethods = GetTrackFixMethod(mapping.Method);
-                if ((restoredPathMethods & PathMethod.Track) == 0)
-                {
-                    skipped++;
-                    skipReasons.Add($"methodMissingTrack {mapping.SourceLaneIndex}->{mapping.TargetLaneIndex}");
-                    continue;
-                }
-
-                Entity clone = CloneConnectorLane(request, template, source, target, (ushort)nextNodeLaneIndex++);
-                subLanes.Add(new SubLane
-                {
-                    m_SubLane = clone,
-                    m_PathMethods = restoredPathMethods
-                });
-                actual.Add(key);
-                cloned++;
-                stats.TrackCloned++;
-                stats.Updated++;
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Restored track connector lane direction={direction} clone={FormatEntity(clone)} template={FormatEntity(template.Entity)} splitNode={FormatEntity(request.SplitNode)} sourceEdge={FormatEntity(sourceEdge)} targetEdge={FormatEntity(targetEdge)} source={mapping.SourceLaneIndex}/{FormatEntity(source.LaneEntity)} target={mapping.TargetLaneIndex}/{FormatEntity(target.LaneEntity)} method=[{restoredPathMethods}] snapshotMethod=[{mapping.Method}] templateMethods=[{template.PathMethods}].");
-            }
-
-            stats.TrackSkipped += skipped;
-            reason = $"{direction} expected={FormatConnectionSet(expected)} actualBefore={FormatConnectionSet(actual)} templates={m_TrackConnectorLanes.Count} cloned={cloned} skipped={skipped} trackSkippedReason={FormatStringList(skipReasons)}";
-            if (skipped > 0)
-            {
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Track connector restore skipped splitNode={FormatEntity(request.SplitNode)} direction={direction} sourceEdge={FormatEntity(sourceEdge)} targetEdge={FormatEntity(targetEdge)} expected={FormatMappings(mappings)} actual={FormatConnectionSet(actual)} trackSkippedReason={FormatStringList(skipReasons)} trackForwardSource=({FormatLaneOrder(request.TrackForwardSourceLanes)}) trackForwardTarget=({FormatLaneOrder(request.TrackForwardTargetLanes)}) trackReverseSource=({FormatLaneOrder(request.TrackReverseSourceLanes)}) trackReverseTarget=({FormatLaneOrder(request.TrackReverseTargetLanes)}).");
-            }
-        }
-
-        private bool TryFindSnapshotTrackConnectorTemplate(LaneMapping mapping, out ConnectorLane template)
-        {
-            if (mapping.TemplateEntity != Entity.Null &&
-                EntityManager.Exists(mapping.TemplateEntity) &&
-                (mapping.TemplatePathMethods & PathMethod.Track) != 0)
-            {
-                template = new ConnectorLane
-                {
-                    Entity = mapping.TemplateEntity,
-                    PathMethods = mapping.TemplatePathMethods,
-                    SourceEdge = mapping.SourceEdge,
-                    TargetEdge = mapping.TargetEdge,
-                    SourceLaneIndex = mapping.SourceLaneIndex,
-                    TargetLaneIndex = mapping.TargetLaneIndex
-                };
-                return true;
-            }
-
-            template = default;
-            return false;
-        }
-
-        private bool TryFindTrackConnectorTemplate(LaneMapping mapping, out ConnectorLane template)
-        {
-            for (int i = 0; i < m_TrackConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_TrackConnectorLanes[i];
-                if ((connector.PathMethods & PathMethod.Track) != 0 &&
-                    connector.SourceLaneIndex == mapping.SourceLaneIndex)
-                {
-                    template = connector;
-                    return true;
-                }
-            }
-
-            for (int i = 0; i < m_TrackConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_TrackConnectorLanes[i];
-                if ((connector.PathMethods & PathMethod.Track) != 0 &&
-                    connector.TargetLaneIndex == mapping.TargetLaneIndex)
-                {
-                    template = connector;
-                    return true;
-                }
-            }
-
-            for (int i = 0; i < m_TrackConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_TrackConnectorLanes[i];
-                if ((connector.PathMethods & PathMethod.Track) != 0)
-                {
-                    template = connector;
-                    return true;
-                }
-            }
-
-            template = default;
-            return false;
-        }
-
         private Entity CloneConnectorLane(Request request, ConnectorLane template, LaneEndpoint source, LaneEndpoint target, ushort middleLaneIndex)
         {
             Entity clone = EntityManager.Instantiate(template.Entity);
@@ -732,22 +501,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     return true;
                 }
 
-                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.TrackForwardSourceLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
                 if (edge == request.OuterEdge && TryFindLaneEndpoint(request.PreservationForwardSourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
                 if (edge == request.PocketEdge && TryFindLaneEndpoint(request.ReverseSourceLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.TrackReverseSourceLanes, laneIndex, out lane))
                 {
                     return true;
                 }
@@ -764,22 +523,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     return true;
                 }
 
-                if (edge == request.PocketEdge && TryFindLaneEndpoint(request.TrackForwardTargetLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
                 if (edge == request.PocketEdge && TryFindLaneEndpoint(request.PreservationForwardTargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }
 
                 if (edge == request.OuterEdge && TryFindLaneEndpoint(request.ReverseTargetLanes, laneIndex, out lane))
-                {
-                    return true;
-                }
-
-                if (edge == request.OuterEdge && TryFindLaneEndpoint(request.TrackReverseTargetLanes, laneIndex, out lane))
                 {
                     return true;
                 }

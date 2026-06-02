@@ -49,29 +49,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
         }
 
-        private void CollectTrackConnectorLanes(
-            Entity splitNode,
-            Entity sourceEdge,
-            Entity targetEdge,
-            DynamicBuffer<SubLane> subLanes,
-            List<ConnectorLane> output)
-        {
-            output.Clear();
-            for (int i = 0; i < subLanes.Length; i++)
-            {
-                SubLane subLane = subLanes[i];
-                if (!TryGetConnectorLaneEdges(splitNode, subLane, out Entity laneEntity, out Lane lane, out Entity actualSourceEdge, out Entity actualTargetEdge) ||
-                    !IsTrackConnectorCandidate(laneEntity, subLane) ||
-                    actualSourceEdge != sourceEdge ||
-                    actualTargetEdge != targetEdge)
-                {
-                    continue;
-                }
-
-                output.Add(CreateConnectorLane(laneEntity, i, subLane, lane, actualSourceEdge, actualTargetEdge));
-            }
-        }
-
         private void CollectSplitPairPreservationConnectorLanes(
             Entity splitNode,
             Entity sourceEdge,

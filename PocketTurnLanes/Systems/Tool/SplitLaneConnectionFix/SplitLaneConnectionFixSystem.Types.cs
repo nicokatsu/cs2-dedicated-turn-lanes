@@ -355,14 +355,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int QueuedFrame;
             public int LaneDataRetries;
             public bool TrafficWritten;
-            public bool FinalTrackRestoreTrafficWritten;
             public bool OuterPreservationSnapshotCaptured;
             public int TrafficWriteFrame;
             public int VerificationAttempts;
             public int StableVerificationFrames;
             public bool UturnCleanupPending;
             public bool RemoveAfterUturnCleanup;
-            public bool ReverseTrackAuditLogged;
             public RoadDirectionState ForwardRoadState;
             public RoadDirectionState ReverseRoadState;
             public string ForwardRoadSkipReason;
@@ -372,21 +370,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public LaneEndpoint[] TargetLanes;
             public LaneEndpoint[] ReverseSourceLanes;
             public LaneEndpoint[] ReverseTargetLanes;
-            public LaneEndpoint[] TrackForwardSourceLanes;
-            public LaneEndpoint[] TrackForwardTargetLanes;
-            public LaneEndpoint[] TrackReverseSourceLanes;
-            public LaneEndpoint[] TrackReverseTargetLanes;
             public LaneEndpoint[] PreservationForwardSourceLanes;
             public LaneEndpoint[] PreservationForwardTargetLanes;
             public LaneEndpoint[] PreservationReverseSourceLanes;
             public LaneEndpoint[] PreservationReverseTargetLanes;
             public LaneMapping[] Mappings;
             public LaneMapping[] ReverseMappings;
-            public LaneMapping[] TrackForwardMappings;
-            public LaneMapping[] TrackReverseMappings;
             public LaneMapping[] PreservationForwardMappings;
             public LaneMapping[] PreservationReverseMappings;
-            public string TrackSkippedReason;
             public string PreservationSkippedReason;
             public TransitionConnectionSnapshot TransitionReverseSnapshot;
             public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
@@ -541,10 +532,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int PreservationNonRoadConnections;
             public int PreservationUnsafeConnections;
             public int PreservationSuppressedUturnConnections;
-            public int TrackConnections;
-            public int TrackSkipped;
-            public int TrackOnlyTargets;
-            public int SharedTrackConnections;
+            public int PreservationTrackConnections;
+            public int PreservationTrackOnlyTargets;
+            public int PreservationSharedTrackConnections;
             public int StaleUturnConnections;
             public int UturnSourcesCoveredByPlan;
             public int UturnSourcesCoveredByEmptyOverride;
@@ -579,21 +569,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int Cloned;
             public int Deleted;
             public int DeletedUturn;
-            public int TrackKept;
-            public int TrackCloned;
-            public int TrackSkipped;
             public int Updated;
             public string Reason;
-        }
-
-        private struct TrackMappingStats
-        {
-            public int Connectors;
-            public int Mappings;
-            public int EndpointMisses;
-            public int Skipped;
-            public int TrackOnlyTargets;
-            public int SharedTrackConnections;
         }
 
         private struct PreservationMappingStats
@@ -605,6 +582,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int UturnSuppressed;
             public int NonRoadConnections;
             public int UnsafeConnections;
+            public int TrackConnections;
+            public int TrackOnlyTargets;
+            public int SharedTrackConnections;
         }
 
         private struct UturnCleanupWriteStats
@@ -626,7 +606,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int MissingGeneratedBufferSources;
             public int UnsafePreservedConnections;
             public int SuppressedTrafficUturnConnections;
-            public bool TrackRestoreOverlaySuppressed;
             public string SourceLanes;
             public string RewriteSourceLanes;
             public string Reason;
