@@ -10,6 +10,7 @@ using Game.Tools;
 using PocketTurnLanes.Systems.Overlay;
 using PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix;
 using PocketTurnLanes.Tool;
+using PocketTurnLanes.Tool.PrefabMatching;
 using Unity.Entities;
 using Unity.Jobs;
 
@@ -39,24 +40,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private const float BalancedRetryPreviewSplitNodePositionTolerance = 1f;
         private const int BalancedRetryMinimumApplyDelayFrames = 2;
         private const int MaxReplacementPreviewWaitFrames = 6;
-        private const float PrefabWidthTolerance = 0.05f;
         private const float SplitNodePositionTolerance = 2.5f;
         private const float PocketEdgeLengthTolerance = 4f;
         private const float MergedEdgeLengthTolerance = 12f;
         private const float NodeMergePreviewEdgeExitDistance = 6f;
         private const float NodeMergePreviewIntersectionBoundsMargin = 0.75f;
-        private const float MinimumMarkedParkingSlotAngleDegrees = 15f;
-        private const int DlcSourceNonDlcCandidatePenalty = 5000;
-        private const int TramUpgradeFallbackPenalty = 20000;
-        private const int IndependentTramTargetPreference = 1000;
-        private const int PublicTransportTramTargetPenalty = 500;
-        private const int OtherTramTargetPenalty = 1000;
-        private const int MissingTramTargetPenalty = 50000;
-        private const int PublicTransportTramUpgradeLaneTypePenalty = 50;
-        private const int OtherTramUpgradeLaneTypePenalty = 100;
-        private const float PublicTransportLayoutOffsetScoreScale = 100f;
-        private const int PublicTransportLayoutMissingDirectionPenalty = 2500;
-        private const int PublicTransportLayoutCountMismatchPenalty = 750;
 
         public override string toolID => $"{Mod.ModId} Intersection Tool";
         public override bool allowUnderground => true;
@@ -71,6 +59,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private EntityQuery m_TempSplitNodeQuery;
         private EntityQuery m_TempPreviewEdgeQuery;
         private EntityQuery m_RoadPrefabQuery;
+        private ReplacementPrefabMatcher m_ReplacementPrefabMatcher;
         private Entity m_HoveredIntersection = Entity.Null;
         private Entity m_PreviewIntersection = Entity.Null;
         private Entity m_PreviewEdge = Entity.Null;
@@ -139,6 +128,14 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 ComponentType.ReadOnly<NetGeometryData>(),
                 ComponentType.Exclude<BridgeData>(),
                 ComponentType.Exclude<Deleted>());
+            m_ReplacementPrefabMatcher = new ReplacementPrefabMatcher(
+                EntityManager,
+                m_PrefabSystem,
+                m_RoadPrefabQuery,
+                () => GetBufferLookup<NetSubSection>(true),
+                () => GetBufferLookup<NetSectionPiece>(true),
+                () => GetComponentLookup<NetLaneData>(true),
+                () => GetBufferLookup<NetPieceLane>(true));
             m_DisplayOverridePropertyInfo = typeof(Game.Input.ProxyAction).GetProperty("displayOverride");
             m_ToolSystem.EventToolChanged += ToolChanged;
 

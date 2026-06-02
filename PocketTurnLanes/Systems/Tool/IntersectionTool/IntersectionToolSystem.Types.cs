@@ -270,45 +270,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         {
         }
 
-        private struct ReplacementPrefabMatch
-        {
-            public Entity Prefab;
-            public bool Invert;
-            public RoadLaneCounts OriginalCounts;
-            public RoadLaneCounts TargetCounts;
-            public RoadLaneCounts CandidateCounts;
-            public RoadLaneCounts OriginalEffectiveCounts;
-            public RoadLaneCounts TargetEffectiveCounts;
-            public RoadLaneCounts SourceIndependentTramCounts;
-            public RoadLaneCounts TargetIndependentTramCounts;
-            public RoadLaneCounts SourcePublicTransportTramCounts;
-            public RoadLaneCounts TargetPublicTransportTramCounts;
-            public RoadLaneCounts SourceTramTrackCounts;
-            public RoadLaneCounts TargetTramTrackCounts;
-            public bool TargetHasIndependentTram;
-            public bool TargetHasPublicTransportTram;
-            public bool TargetUsesTramUpgradeFallback;
-            public bool HasTargetUpgrade;
-            public Upgraded TargetUpgrade;
-            public string TramMatchDetail;
-            public string SourceTramTrackLayout;
-            public string TargetTramTrackLayout;
-            public string SourceBusLaneLayout;
-            public string TargetBusLaneLayout;
-            public DirectionalLaneOffsetProfile TargetTramTrackOffsetProfile;
-            public DirectionalLaneOffsetProfile TargetBusLaneOffsetProfile;
-            public string SourceBusLaneDetail;
-            public string TargetBusLaneDetail;
-            public string LayoutScoreDetail;
-            public int LayoutScore;
-            public int TramLayoutScore;
-            public int BusLayoutScore;
-            public bool TargetIsSourcePrefab;
-            public bool TargetIsDlc;
-            public string TargetContentDetail;
-            public int Score;
-        }
-
         private struct ReplacementCandidate
         {
             public Entity Node;
