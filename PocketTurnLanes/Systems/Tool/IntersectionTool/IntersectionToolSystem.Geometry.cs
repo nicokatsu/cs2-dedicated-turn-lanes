@@ -653,118 +653,68 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             continuationRoadCounts = continuationProfile.RoadCounts;
-            if (!CountsMatchAtApproachNodes(
+            if (!ApproachNodeLaneProfile.CountsMatchAtNodes(
                     prefabMatch.TargetCounts,
                     currentNodeIsStartOnShortEdge,
                     continuationProfile.RoadCounts,
                     farNodeIsStartOnContinuation))
             {
-                detail = $"continuationProfile={continuationProfile.Source} road={FormatApproachCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={FormatApproachCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} rawTargetRoad={prefabMatch.TargetCounts}";
+                detail = $"continuationProfile={continuationProfile.Source} road={ApproachNodeLaneProfile.FormatCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={ApproachNodeLaneProfile.FormatCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} rawTargetRoad={prefabMatch.TargetCounts}";
                 return false;
             }
 
-            if (!CountsMatchAtApproachNodes(
+            if (!ApproachNodeLaneProfile.CountsMatchAtNodes(
                     prefabMatch.TargetTramTrackCounts,
                     currentNodeIsStartOnShortEdge,
                     continuationProfile.TramTrackCounts,
                     farNodeIsStartOnContinuation))
             {
-                detail = $"continuationProfile={continuationProfile.Source} tramTracks={FormatApproachCounts(continuationProfile.TramTrackCounts, farNodeIsStartOnContinuation)} expectedTargetTramTracks={FormatApproachCounts(prefabMatch.TargetTramTrackCounts, currentNodeIsStartOnShortEdge)} rawTargetTramTracks={prefabMatch.TargetTramTrackCounts}";
+                detail = $"continuationProfile={continuationProfile.Source} tramTracks={ApproachNodeLaneProfile.FormatCounts(continuationProfile.TramTrackCounts, farNodeIsStartOnContinuation)} expectedTargetTramTracks={ApproachNodeLaneProfile.FormatCounts(prefabMatch.TargetTramTrackCounts, currentNodeIsStartOnShortEdge)} rawTargetTramTracks={prefabMatch.TargetTramTrackCounts}";
                 return false;
             }
 
-            if (!CountsMatchAtApproachNodes(
+            if (!ApproachNodeLaneProfile.CountsMatchAtNodes(
                     prefabMatch.TargetIndependentTramCounts,
                     currentNodeIsStartOnShortEdge,
                     continuationProfile.IndependentTramCounts,
                     farNodeIsStartOnContinuation))
             {
-                detail = $"continuationProfile={continuationProfile.Source} independentTram={FormatApproachCounts(continuationProfile.IndependentTramCounts, farNodeIsStartOnContinuation)} expectedTargetIndependentTram={FormatApproachCounts(prefabMatch.TargetIndependentTramCounts, currentNodeIsStartOnShortEdge)} rawTargetIndependentTram={prefabMatch.TargetIndependentTramCounts}";
+                detail = $"continuationProfile={continuationProfile.Source} independentTram={ApproachNodeLaneProfile.FormatCounts(continuationProfile.IndependentTramCounts, farNodeIsStartOnContinuation)} expectedTargetIndependentTram={ApproachNodeLaneProfile.FormatCounts(prefabMatch.TargetIndependentTramCounts, currentNodeIsStartOnShortEdge)} rawTargetIndependentTram={prefabMatch.TargetIndependentTramCounts}";
                 return false;
             }
 
-            if (!CountsMatchAtApproachNodes(
+            if (!ApproachNodeLaneProfile.CountsMatchAtNodes(
                     prefabMatch.TargetPublicTransportTramCounts,
                     currentNodeIsStartOnShortEdge,
                     continuationProfile.PublicTransportTramCounts,
                     farNodeIsStartOnContinuation))
             {
-                detail = $"continuationProfile={continuationProfile.Source} publicTransportTram={FormatApproachCounts(continuationProfile.PublicTransportTramCounts, farNodeIsStartOnContinuation)} expectedTargetPublicTransportTram={FormatApproachCounts(prefabMatch.TargetPublicTransportTramCounts, currentNodeIsStartOnShortEdge)} rawTargetPublicTransportTram={prefabMatch.TargetPublicTransportTramCounts}";
+                detail = $"continuationProfile={continuationProfile.Source} publicTransportTram={ApproachNodeLaneProfile.FormatCounts(continuationProfile.PublicTransportTramCounts, farNodeIsStartOnContinuation)} expectedTargetPublicTransportTram={ApproachNodeLaneProfile.FormatCounts(prefabMatch.TargetPublicTransportTramCounts, currentNodeIsStartOnShortEdge)} rawTargetPublicTransportTram={prefabMatch.TargetPublicTransportTramCounts}";
                 return false;
             }
 
-            if (!LayoutCountsMatchAtApproachNodes(
+            if (!ApproachNodeLaneProfile.LayoutCountsMatchAtNodes(
                     prefabMatch.TargetBusLaneOffsetProfile,
                     currentNodeIsStartOnShortEdge,
                     continuationProfile.BusLaneLayout,
                     farNodeIsStartOnContinuation))
             {
-                detail = $"continuationProfile={continuationProfile.Source} busLayout={FormatApproachLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} expectedTargetBus={FormatApproachLayout(prefabMatch.TargetBusLaneOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetBus={prefabMatch.TargetBusLaneLayout}";
+                detail = $"continuationProfile={continuationProfile.Source} busLayout={ApproachNodeLaneProfile.FormatLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} expectedTargetBus={ApproachNodeLaneProfile.FormatLayout(prefabMatch.TargetBusLaneOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetBus={prefabMatch.TargetBusLaneLayout}";
                 return false;
             }
 
-            if (!LayoutCountsMatchAtApproachNodes(
+            if (!ApproachNodeLaneProfile.LayoutCountsMatchAtNodes(
                     prefabMatch.TargetTramTrackOffsetProfile,
                     currentNodeIsStartOnShortEdge,
                     continuationProfile.TramTrackLayout,
                     farNodeIsStartOnContinuation))
             {
-                detail = $"continuationProfile={continuationProfile.Source} tramLayout={FormatApproachLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)} expectedTargetTramLayout={FormatApproachLayout(prefabMatch.TargetTramTrackOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetTramLayout={prefabMatch.TargetTramTrackLayout}";
+                detail = $"continuationProfile={continuationProfile.Source} tramLayout={ApproachNodeLaneProfile.FormatLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)} expectedTargetTramLayout={ApproachNodeLaneProfile.FormatLayout(prefabMatch.TargetTramTrackOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetTramLayout={prefabMatch.TargetTramTrackLayout}";
                 return false;
             }
 
-            detail = $"continuationProfile={continuationProfile.Source} road={FormatApproachCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={FormatApproachCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} bus={FormatApproachLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} tram={FormatApproachLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)}";
+            detail = $"continuationProfile={continuationProfile.Source} road={ApproachNodeLaneProfile.FormatCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={ApproachNodeLaneProfile.FormatCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} bus={ApproachNodeLaneProfile.FormatLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} tram={ApproachNodeLaneProfile.FormatLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)}";
             return true;
-        }
-
-        private static bool CountsMatchAtApproachNodes(
-            RoadLaneCounts targetCounts,
-            bool targetNodeIsStart,
-            RoadLaneCounts continuationCounts,
-            bool continuationNodeIsStart)
-        {
-            return GetIncomingCount(targetCounts, targetNodeIsStart) == GetIncomingCount(continuationCounts, continuationNodeIsStart) &&
-                   GetOutgoingCount(targetCounts, targetNodeIsStart) == GetOutgoingCount(continuationCounts, continuationNodeIsStart);
-        }
-
-        private static int GetIncomingCount(RoadLaneCounts counts, bool nodeIsStart)
-        {
-            return nodeIsStart ? counts.Backward : counts.Forward;
-        }
-
-        private static int GetOutgoingCount(RoadLaneCounts counts, bool nodeIsStart)
-        {
-            return nodeIsStart ? counts.Forward : counts.Backward;
-        }
-
-        private static string FormatApproachCounts(RoadLaneCounts counts, bool nodeIsStart)
-        {
-            return $"raw={counts} nodeSide={(nodeIsStart ? "start" : "end")} incoming={GetIncomingCount(counts, nodeIsStart)} outgoing={GetOutgoingCount(counts, nodeIsStart)}";
-        }
-
-        private static bool LayoutCountsMatchAtApproachNodes(
-            DirectionalLaneOffsetProfile targetLayout,
-            bool targetNodeIsStart,
-            DirectionalLaneOffsetProfile continuationLayout,
-            bool continuationNodeIsStart)
-        {
-            return GetIncomingLayoutCount(targetLayout, targetNodeIsStart) == GetIncomingLayoutCount(continuationLayout, continuationNodeIsStart) &&
-                   GetOutgoingLayoutCount(targetLayout, targetNodeIsStart) == GetOutgoingLayoutCount(continuationLayout, continuationNodeIsStart);
-        }
-
-        private static int GetIncomingLayoutCount(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
-        {
-            return nodeIsStart ? layout.BackwardCount : layout.ForwardCount;
-        }
-
-        private static int GetOutgoingLayoutCount(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
-        {
-            return nodeIsStart ? layout.ForwardCount : layout.BackwardCount;
-        }
-
-        private static string FormatApproachLayout(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
-        {
-            return $"raw={layout} nodeSide={(nodeIsStart ? "start" : "end")} incoming={GetIncomingLayoutCount(layout, nodeIsStart)} outgoing={GetOutgoingLayoutCount(layout, nodeIsStart)}";
         }
 
         private bool TryGetShortEdgeFallbackContext(
