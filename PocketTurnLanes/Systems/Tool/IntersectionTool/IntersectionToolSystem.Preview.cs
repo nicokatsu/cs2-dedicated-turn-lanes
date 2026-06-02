@@ -5,6 +5,7 @@ using Game.Common;
 using Game.Net;
 using Game.Prefabs;
 using Game.Tools;
+using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.PrefabMatching;
 using Unity.Collections;
 using Unity.Entities;
@@ -869,8 +870,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     tempEdgeCount++;
                     bool originalMatch = temp.m_Original == candidate.ShortEdge;
                     bool endpointMatch =
-                        (IsSameOrTempOriginalNode(edge.m_Start, shortEdge.m_Start) && IsSameOrTempOriginalNode(edge.m_End, shortEdge.m_End)) ||
-                        (IsSameOrTempOriginalNode(edge.m_Start, shortEdge.m_End) && IsSameOrTempOriginalNode(edge.m_End, shortEdge.m_Start));
+                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, shortEdge.m_Start) &&
+                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, shortEdge.m_End)) ||
+                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, shortEdge.m_End) &&
+                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, shortEdge.m_Start));
                     if (!originalMatch && !endpointMatch)
                     {
                         continue;
@@ -1032,8 +1035,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            bool startMatches = IsSameOrTempOriginalNode(previewEdge.m_Start, candidate.RemovableNode);
-            bool endMatches = IsSameOrTempOriginalNode(previewEdge.m_End, candidate.RemovableNode);
+            bool startMatches = TempEntityHelpers.IsSameOrTempOriginal(EntityManager, previewEdge.m_Start, candidate.RemovableNode);
+            bool endMatches = TempEntityHelpers.IsSameOrTempOriginal(EntityManager, previewEdge.m_End, candidate.RemovableNode);
             if (startMatches == endMatches)
             {
                 detail = $"ambiguous removable endpoint previewShortEdge={FormatEntity(previewShortEdge)} start={FormatEntity(previewEdge.m_Start)} end={FormatEntity(previewEdge.m_End)} removableNode={FormatEntity(candidate.RemovableNode)} startMatches={startMatches} endMatches={endMatches}";
@@ -1090,8 +1093,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     tempEdgeCount++;
                     bool originalMatch = temp.m_Original == sourceEdge;
                     bool endpointMatch =
-                        (IsSameOrTempOriginalNode(edge.m_Start, sourceEdgeData.m_Start) && IsSameOrTempOriginalNode(edge.m_End, sourceEdgeData.m_End)) ||
-                        (IsSameOrTempOriginalNode(edge.m_Start, sourceEdgeData.m_End) && IsSameOrTempOriginalNode(edge.m_End, sourceEdgeData.m_Start));
+                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, sourceEdgeData.m_Start) &&
+                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, sourceEdgeData.m_End)) ||
+                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, sourceEdgeData.m_End) &&
+                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, sourceEdgeData.m_Start));
                     if (!originalMatch && !endpointMatch)
                     {
                         continue;
@@ -1304,7 +1309,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     tempEdgeCount++;
                     bool connectsSplitNode = edge.m_Start == splitNode || edge.m_End == splitNode;
                     Entity otherNode = edge.m_Start == splitNode ? edge.m_End : edge.m_Start;
-                    bool connectsCandidateNode = connectsSplitNode && IsSameOrTempOriginalNode(otherNode, candidate.Node);
+                    bool connectsCandidateNode =
+                        connectsSplitNode &&
+                        TempEntityHelpers.IsSameOrTempOriginal(EntityManager, otherNode, candidate.Node);
                     if (!connectsCandidateNode)
                     {
                         continue;
@@ -1403,7 +1410,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     }
 
                     Entity otherNode = edge.m_Start == splitNode ? edge.m_End : edge.m_Start;
-                    if (IsSameOrTempOriginalNode(otherNode, candidate.Node))
+                    if (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, otherNode, candidate.Node))
                     {
                         continue;
                     }
@@ -1452,17 +1459,5 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return true;
         }
 
-        private bool IsSameOrTempOriginalNode(Entity node, Entity originalNode)
-        {
-            if (node == originalNode)
-            {
-                return true;
-            }
-
-            return node != Entity.Null &&
-                   EntityManager.TryGetComponent(node, out Temp temp) &&
-                   temp.m_Original == originalNode &&
-                   (temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) == (TempFlags)0;
-        }
     }
 }

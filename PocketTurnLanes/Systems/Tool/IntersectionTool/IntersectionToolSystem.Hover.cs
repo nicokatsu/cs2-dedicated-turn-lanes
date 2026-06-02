@@ -73,7 +73,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            Entity originalEdge = ResolveTempOriginalEdge(edgeEntity);
+            Entity originalEdge = TempEntityHelpers.ResolveTempOriginal(EntityManager, edgeEntity);
 
             for (int i = 0; i < m_PreviewNodeMergeCandidates.Count; i++)
             {
@@ -129,24 +129,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
             detail = "missing NodeGeometry and Node";
             return false;
-        }
-
-        private Entity ResolveTempOriginalEdge(Entity edgeEntity)
-        {
-            Entity originalEdge = edgeEntity;
-            for (int i = 0; i < 4; i++)
-            {
-                if (!EntityManager.TryGetComponent(originalEdge, out Temp temp) ||
-                    temp.m_Original == Entity.Null ||
-                    (temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0)
-                {
-                    break;
-                }
-
-                originalEdge = temp.m_Original;
-            }
-
-            return originalEdge;
         }
 
         private bool IsValidIntersection(Entity entity)
