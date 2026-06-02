@@ -66,13 +66,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
 
                 int sourceLaneIndex = lane.m_StartNode.GetLaneIndex() & 0xff;
-                if (!TryFindTargetByCenterLaneIndex(selectedTargets, sourceLaneIndex, out int targetListIndex))
+                if (!TrafficCenterTurnTargetSelector.TryFindTargetByCenterLaneIndex(selectedTargets, sourceLaneIndex, out int targetListIndex))
                 {
                     continue;
                 }
 
                 NetCarLane carLane = EntityManager.GetComponentData<NetCarLane>(laneEntity);
-                TurnDirection connectorTurn = ClassifyCenterConnectorTurn(intersectionNode, centerSourceEdge, targetEdge, carLane.m_Flags);
+                TurnDirection connectorTurn = TrafficConnectorMovementClassifier.ClassifyCenterConnectorTurn(
+                    EntityManager,
+                    intersectionNode,
+                    centerSourceEdge,
+                    targetEdge,
+                    carLane.m_Flags);
                 if (connectorTurn == TurnDirection.Left)
                 {
                     leftCounts[targetListIndex]++;
@@ -99,92 +104,21 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             diagnostics = FormatCenterTurnDiagnostics(selectedTargets, leftCounts, rightCounts, straightCounts, m_CenterTurnCandidates);
-            int bestIndex = -1;
-            int bestScore = int.MinValue;
-            TurnDirection bestTurn = TurnDirection.Ambiguous;
-            bool tied = false;
-
-            for (int i = 0; i < selectedTargets.Count; i++)
+            if (!TrafficCenterTurnTargetSelector.TrySelectExtraTarget(
+                    selectedTargets,
+                    leftCounts,
+                    rightCounts,
+                    straightCounts,
+                    out extraTargetIndex,
+                    out turn,
+                    out string selectionDiagnostic))
             {
-                bool edgeTarget = i == 0 || i == selectedTargets.Count - 1;
-                if (!edgeTarget)
-                {
-                    continue;
-                }
-
-                int left = leftCounts[i];
-                int right = rightCounts[i];
-                if (left == right)
-                {
-                    continue;
-                }
-
-                TurnDirection candidateTurn = left > right ? TurnDirection.Left : TurnDirection.Right;
-                int turnCount = math.max(left, right);
-                int oppositeTurnCount = math.min(left, right);
-                int score = turnCount * 16 - oppositeTurnCount * 8 - straightCounts[i] * 3;
-                if (straightCounts[i] == 0)
-                {
-                    score += 1000;
-                }
-
-                if (score > bestScore)
-                {
-                    bestIndex = i;
-                    bestScore = score;
-                    bestTurn = candidateTurn;
-                    tied = false;
-                }
-                else if (score == bestScore)
-                {
-                    tied = true;
-                }
-            }
-
-            if (bestIndex < 0 || tied)
-            {
-                diagnostics = $"{diagnostics}; centerSelection={(bestIndex < 0 ? "none" : "tie")}";
+                diagnostics = $"{diagnostics}; {selectionDiagnostic}";
                 return false;
             }
 
-            extraTargetIndex = bestIndex;
-            turn = bestTurn;
-            diagnostics = $"{diagnostics}; centerSelection=target{selectedTargets[bestIndex].LaneIndex}/{bestTurn}/score{bestScore}{(straightCounts[bestIndex] == 0 ? "/turnOnly" : string.Empty)}";
+            diagnostics = $"{diagnostics}; {selectionDiagnostic}";
             return true;
-        }
-
-        private static bool TryFindTargetByCenterLaneIndex(IReadOnlyList<LaneEndpoint> targets, int centerLaneIndex, out int targetListIndex)
-        {
-            for (int i = 0; i < targets.Count; i++)
-            {
-                if (targets[i].OppositeLaneIndex == centerLaneIndex)
-                {
-                    targetListIndex = i;
-                    return true;
-                }
-            }
-
-            for (int i = 0; i < targets.Count; i++)
-            {
-                if (targets[i].LaneIndex == centerLaneIndex)
-                {
-                    targetListIndex = i;
-                    return true;
-                }
-            }
-
-            targetListIndex = -1;
-            return false;
-        }
-
-        private TurnDirection ClassifyCenterConnectorTurn(Entity intersectionNode, Entity sourceEdge, Entity targetEdge, CarLaneFlags flags)
-        {
-            return TrafficConnectorMovementClassifier.ClassifyCenterConnectorTurn(
-                EntityManager,
-                intersectionNode,
-                sourceEdge,
-                targetEdge,
-                flags);
         }
 
         private bool TryAddCenterCandidateMapping(
