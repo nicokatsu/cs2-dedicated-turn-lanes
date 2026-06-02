@@ -403,7 +403,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     TargetEdge = target.Edge,
                     SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
                     TargetLaneIndex = assignedTargets[sourceIndex],
-                    Method = GetMappingMethod(sourceLanes[sourceIndex], target),
+                    Method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target),
                     IsBranch = false
                 });
             }
@@ -421,7 +421,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 TargetEdge = branchTarget.Edge,
                 SourceLaneIndex = branchSourceLaneIndex,
                 TargetLaneIndex = extraTargetLaneIndex,
-                Method = GetMappingMethod(branchSource, branchTarget),
+                Method = TrafficPathMethods.GetMappingMethod(branchSource, branchTarget),
                 IsBranch = true
             });
 
@@ -704,7 +704,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
         private static PathMethod RemapSnapshotMethod(PathMethod snapshotMethod, LaneEndpoint source, LaneEndpoint target)
         {
             PathMethod method = snapshotMethod | PathMethod.Road;
-            PathMethod compatible = GetMappingMethod(source, target);
+            PathMethod compatible = TrafficPathMethods.GetMappingMethod(source, target);
             if ((compatible & PathMethod.Bicycle) != 0)
             {
                 method |= PathMethod.Bicycle;
@@ -837,7 +837,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     TargetEdge = target.Edge,
                     SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
                     TargetLaneIndex = target.LaneIndex,
-                    Method = GetMappingMethod(sourceLanes[sourceIndex], target),
+                    Method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target),
                     IsBranch = false
                 };
             }
@@ -1245,7 +1245,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             LaneEndpoint source,
             LaneEndpoint target)
         {
-            PathMethod method = RestrictTrafficPathMethodToEndpoints(
+            PathMethod method = TrafficPathMethods.RestrictTrafficPathMethodToEndpoints(
                 PathMethod.Road,
                 source,
                 target);
@@ -1255,20 +1255,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             method |= templateMethod & PathMethod.Bicycle;
-            return SanitizeCenterTrafficPathMethod(method);
-        }
-
-        private static PathMethod SanitizeCenterTrafficPathMethod(PathMethod method)
-        {
-            return SanitizePreservedTrafficPathMethod(method);
-        }
-
-        private static PathMethod RestrictCenterTrafficPathMethodToEndpoints(
-            PathMethod method,
-            LaneEndpoint source,
-            LaneEndpoint target)
-        {
-            return RestrictPreservedTrafficPathMethodToEndpoints(method, source, target);
+            return TrafficPathMethods.SanitizeCenterTrafficPathMethod(method);
         }
 
         private static int CountRoadBicycleMappings(
@@ -1354,7 +1341,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 bySource.Add(sourceKey, byTarget);
             }
 
-            PathMethod mergeMethod = SanitizeTrafficMappingMethod(
+            PathMethod mergeMethod = TrafficPathMethods.SanitizeMappingMethod(
                 mapping.Method,
                 mode,
                 mapping.HasPreservedPathMethods || mode == TrafficPathMethodMergeMode.CenterRewrite);
@@ -1367,7 +1354,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             {
                 bool preserveUnsafe = existing.IsPreservationOnly && mapping.IsPreservationOnly;
                 bool hasPreservedPathMethods = existing.HasPreservedPathMethods || mapping.HasPreservedPathMethods;
-                existing.Method = SanitizeTrafficMappingMethod(
+                existing.Method = TrafficPathMethods.SanitizeMappingMethod(
                     existing.Method | mergeMethod,
                     mode,
                     hasPreservedPathMethods || mode == TrafficPathMethodMergeMode.CenterRewrite);
@@ -1390,86 +1377,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             mapping.Method = mergeMethod;
             byTarget.Add(targetKey, mapping);
-        }
-
-        private static PathMethod SanitizeTrafficMappingMethod(
-            PathMethod method,
-            TrafficPathMethodMergeMode mode,
-            bool preservePathMethods)
-        {
-            return TrafficPathMethods.SanitizeMappingMethod(method, mode, preservePathMethods);
-        }
-
-        private static PathMethod SanitizePreservedTrafficPathMethod(PathMethod method)
-        {
-            return TrafficPathMethods.SanitizePreservedTrafficPathMethod(method);
-        }
-
-        private static PathMethod GetLayerPreservationPathMethod(PathMethod method, bool preserveUturn)
-        {
-            return TrafficPathMethods.GetLayerPreservationPathMethod(method, preserveUturn);
-        }
-
-        private static PathMethod RestrictPreservedTrafficPathMethodToEndpoints(
-            PathMethod method,
-            LaneEndpoint source,
-            LaneEndpoint target)
-        {
-            return TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(
-                method,
-                GetTrafficLaneCapabilities(source),
-                GetTrafficLaneCapabilities(target));
-        }
-
-        private static PathMethod GetMappingMethod(LaneEndpoint source, LaneEndpoint target)
-        {
-            return TrafficPathMethods.GetMappingMethod(
-                GetTrafficLaneCapabilities(source),
-                GetTrafficLaneCapabilities(target));
-        }
-
-        private static PathMethod SanitizeTrafficPathMethod(PathMethod method)
-        {
-            return TrafficPathMethods.SanitizeTrafficPathMethod(method);
-        }
-
-        private static PathMethod RestrictTrafficPathMethodToEndpoints(PathMethod method, LaneEndpoint source, LaneEndpoint target)
-        {
-            return TrafficPathMethods.RestrictTrafficPathMethodToEndpoints(
-                method,
-                GetTrafficLaneCapabilities(source),
-                GetTrafficLaneCapabilities(target));
-        }
-
-        private static bool SupportsRoadPath(LaneEndpoint endpoint)
-        {
-            return TrafficPathMethods.SupportsRoadPath(GetTrafficLaneCapabilities(endpoint));
-        }
-
-        private static bool SupportsBicycleRoadPath(LaneEndpoint endpoint)
-        {
-            return TrafficPathMethods.SupportsBicycleRoadPath(GetTrafficLaneCapabilities(endpoint));
-        }
-
-        private static bool SupportsTrackPath(LaneEndpoint endpoint)
-        {
-            return TrafficPathMethods.SupportsTrackPath(GetTrafficLaneCapabilities(endpoint));
-        }
-
-        private static bool IsTrackOnlyEndpoint(LaneEndpoint endpoint)
-        {
-            return TrafficPathMethods.IsTrackOnlyEndpoint(GetTrafficLaneCapabilities(endpoint));
-        }
-
-        private static TrafficLaneCapabilities GetTrafficLaneCapabilities(LaneEndpoint endpoint)
-        {
-            return new TrafficLaneCapabilities(
-                endpoint.PathMethods,
-                endpoint.LaneFlags,
-                endpoint.RoadTypes,
-                endpoint.TrackTypes,
-                endpoint.HasTrackLaneData,
-                endpoint.HasNetTrackLane);
         }
 
         private static TurnDirection DetermineTurn(List<LaneEndpoint> selectedTargets, int extraTargetIndex)

@@ -376,7 +376,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     PathMethod originalMethod = generated.Method;
-                    PathMethod method = SanitizePreservedTrafficPathMethod(originalMethod);
+                    PathMethod method = TrafficPathMethods.SanitizePreservedTrafficPathMethod(originalMethod);
                     if (method != originalMethod)
                     {
                         stats.NormalizedMethods++;

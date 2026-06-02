@@ -81,7 +81,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    if (RestrictCenterTrafficPathMethodToEndpoints(mapping.Method, sourceEndpoint, targetEndpoint) == 0)
+                    if (TrafficPathMethods.RestrictCenterTrafficPathMethodToEndpoints(mapping.Method, sourceEndpoint, targetEndpoint) == 0)
                     {
                         Mod.LogDiagnostic($"[SplitLaneConnectionFix] centerRewriteWriteFailed centerNode={FormatEntity(request.IntersectionNode)} reason=methodUnavailable mapping={FormatMapping(mapping)}.");
                         return false;
@@ -144,11 +144,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     TargetLaneKey targetKey = new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex);
                     bool hasTargetEndpoint = plan.TargetEndpoints.TryGetValue(targetKey, out LaneEndpoint targetEndpoint);
                     PathMethod method = hasTargetEndpoint
-                        ? RestrictCenterTrafficPathMethodToEndpoints(
-                            SanitizeCenterTrafficPathMethod(mapping.Method),
+                        ? TrafficPathMethods.RestrictCenterTrafficPathMethodToEndpoints(
+                            TrafficPathMethods.SanitizeCenterTrafficPathMethod(mapping.Method),
                             sourceEndpoint,
                             targetEndpoint)
-                        : SanitizeCenterTrafficPathMethod(mapping.Method);
+                        : TrafficPathMethods.SanitizeCenterTrafficPathMethod(mapping.Method);
                     if (method == 0)
                     {
                         continue;
@@ -217,7 +217,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < generatedSnapshots.Count; i++)
             {
                 TrafficGeneratedSnapshot generated = generatedSnapshots[i];
-                PathMethod method = SanitizeCenterTrafficPathMethod(generated.Method);
+                PathMethod method = TrafficPathMethods.SanitizeCenterTrafficPathMethod(generated.Method);
                 if (generated.SourceEdge != sourceKey.Edge ||
                     generated.SourceLaneIndex != sourceKey.LaneIndex ||
                     (method & ~PathMethod.Road) != 0 ||

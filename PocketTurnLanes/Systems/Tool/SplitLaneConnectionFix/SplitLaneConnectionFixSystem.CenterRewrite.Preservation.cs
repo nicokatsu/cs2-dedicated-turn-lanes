@@ -41,7 +41,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     connector.CarFlags,
                     plan.BigTurn,
                     plan.SmallTurn);
-                PathMethod preservedMethod = GetLayerPreservationPathMethod(
+                PathMethod preservedMethod = TrafficPathMethods.GetLayerPreservationPathMethod(
                     connector.PathMethods,
                     movement == CenterRewriteMovement.Uturn);
                 if (preservedMethod == 0)
@@ -148,7 +148,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
                     PathMethod originalMethod = generated.Method;
                     bool isUturn = generated.SourceEdge == generated.TargetEdge;
-                    PathMethod preservedMethod = GetLayerPreservationPathMethod(originalMethod, isUturn);
+                    PathMethod preservedMethod = TrafficPathMethods.GetLayerPreservationPathMethod(originalMethod, isUturn);
                     if (preservedMethod == 0)
                     {
                         continue;

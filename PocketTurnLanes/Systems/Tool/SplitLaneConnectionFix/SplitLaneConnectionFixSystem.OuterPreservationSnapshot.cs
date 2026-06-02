@@ -128,8 +128,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
-                    GetLayerPreservationPathMethod(connector.PathMethods, preserveUturn: sameEdgeUturn),
+                PathMethod method = TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(
+                    TrafficPathMethods.GetLayerPreservationPathMethod(connector.PathMethods, preserveUturn: sameEdgeUturn),
                     sourceEndpoint,
                     targetEndpoint);
                 if (method == 0)
@@ -172,7 +172,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 if ((method & PathMethod.Track) != 0)
                 {
                     stats.TrackConnections++;
-                    if (IsTrackOnlyEndpoint(targetEndpoint))
+                    if (TrafficPathMethods.IsTrackOnlyEndpoint(targetEndpoint))
                     {
                         stats.TrackOnlyTargets++;
                     }

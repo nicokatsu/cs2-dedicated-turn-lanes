@@ -188,9 +188,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     PathMethod method = mapping.HasPreservedPathMethods
-                        ? RestrictPreservedTrafficPathMethodToEndpoints(mapping.Method, sourceEndpoint, targetEndpoint)
-                        : RestrictTrafficPathMethodToEndpoints(
-                            SanitizeTrafficPathMethod(mapping.Method),
+                        ? TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(mapping.Method, sourceEndpoint, targetEndpoint)
+                        : TrafficPathMethods.RestrictTrafficPathMethodToEndpoints(
+                            TrafficPathMethods.SanitizeTrafficPathMethod(mapping.Method),
                             sourceEndpoint,
                             targetEndpoint);
 
@@ -350,8 +350,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
-                    GetLayerPreservationPathMethod(mapping.Method, preserveUturn: sameEdgeUturn),
+                PathMethod method = TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(
+                    TrafficPathMethods.GetLayerPreservationPathMethod(mapping.Method, preserveUturn: sameEdgeUturn),
                     sourceEndpoint,
                     targetEndpoint);
                 if (method == 0)
@@ -452,11 +452,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     PathMethod preservedMethod = sameEdgeUturn
-                        ? SanitizePreservedTrafficPathMethod(generated.Method)
+                        ? TrafficPathMethods.SanitizePreservedTrafficPathMethod(generated.Method)
                         : plan.RoadRepairSourceKeys.Contains(sourceKey)
-                        ? GetLayerPreservationPathMethod(generated.Method, preserveUturn: false)
-                        : SanitizePreservedTrafficPathMethod(generated.Method);
-                    PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
+                        ? TrafficPathMethods.GetLayerPreservationPathMethod(generated.Method, preserveUturn: false)
+                        : TrafficPathMethods.SanitizePreservedTrafficPathMethod(generated.Method);
+                    PathMethod method = TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(
                         preservedMethod,
                         sourceEndpoint,
                         targetEndpoint);
@@ -572,8 +572,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
-                    SanitizePreservedTrafficPathMethod(connector.PathMethods),
+                PathMethod method = TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(
+                    TrafficPathMethods.SanitizePreservedTrafficPathMethod(connector.PathMethods),
                     sourceEndpoint,
                     targetEndpoint);
                 if (method == 0)
@@ -699,8 +699,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    PathMethod method = RestrictPreservedTrafficPathMethodToEndpoints(
-                        SanitizePreservedTrafficPathMethod(generated.Method),
+                    PathMethod method = TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(
+                        TrafficPathMethods.SanitizePreservedTrafficPathMethod(generated.Method),
                         sourceEndpoint,
                         targetEndpoint);
                     if (method == 0)
@@ -822,7 +822,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                PathMethod preservedMethod = SanitizePreservedTrafficPathMethod(generated.Method);
+                PathMethod preservedMethod = TrafficPathMethods.SanitizePreservedTrafficPathMethod(generated.Method);
                 if (preservedMethod == 0)
                 {
                     continue;
@@ -845,7 +845,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                mapping.Method = RestrictPreservedTrafficPathMethodToEndpoints(
+                mapping.Method = TrafficPathMethods.RestrictPreservedTrafficPathMethodToEndpoints(
                     mapping.Method,
                     sourceEndpoint,
                     targetEndpoint);
@@ -878,7 +878,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             plan.PreservationTrackConnections++;
-            if (IsTrackOnlyEndpoint(targetEndpoint))
+            if (TrafficPathMethods.IsTrackOnlyEndpoint(targetEndpoint))
             {
                 plan.PreservationTrackOnlyTargets++;
             }

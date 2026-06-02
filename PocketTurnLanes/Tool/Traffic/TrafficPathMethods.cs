@@ -67,6 +67,17 @@ namespace PocketTurnLanes.Tool.Traffic
             return RestrictPreservedTrafficPathMethodToEndpoints(method, source, target);
         }
 
+        public static PathMethod RestrictCenterTrafficPathMethodToEndpoints(
+            PathMethod method,
+            LaneEndpoint source,
+            LaneEndpoint target)
+        {
+            return RestrictCenterTrafficPathMethodToEndpoints(
+                method,
+                GetTrafficLaneCapabilities(source),
+                GetTrafficLaneCapabilities(target));
+        }
+
         public static PathMethod SanitizePreservedTrafficPathMethod(PathMethod method)
         {
             return method;
@@ -106,6 +117,17 @@ namespace PocketTurnLanes.Tool.Traffic
             return SanitizePreservedTrafficPathMethod(roadAndTrack | otherMethods);
         }
 
+        public static PathMethod RestrictPreservedTrafficPathMethodToEndpoints(
+            PathMethod method,
+            LaneEndpoint source,
+            LaneEndpoint target)
+        {
+            return RestrictPreservedTrafficPathMethodToEndpoints(
+                method,
+                GetTrafficLaneCapabilities(source),
+                GetTrafficLaneCapabilities(target));
+        }
+
         public static PathMethod GetMappingMethod(
             TrafficLaneCapabilities source,
             TrafficLaneCapabilities target)
@@ -135,6 +157,13 @@ namespace PocketTurnLanes.Tool.Traffic
             }
 
             return SanitizeTrafficPathMethod(method);
+        }
+
+        public static PathMethod GetMappingMethod(LaneEndpoint source, LaneEndpoint target)
+        {
+            return GetMappingMethod(
+                GetTrafficLaneCapabilities(source),
+                GetTrafficLaneCapabilities(target));
         }
 
         public static PathMethod SanitizeTrafficPathMethod(PathMethod method)
@@ -171,6 +200,17 @@ namespace PocketTurnLanes.Tool.Traffic
             return method;
         }
 
+        public static PathMethod RestrictTrafficPathMethodToEndpoints(
+            PathMethod method,
+            LaneEndpoint source,
+            LaneEndpoint target)
+        {
+            return RestrictTrafficPathMethodToEndpoints(
+                method,
+                GetTrafficLaneCapabilities(source),
+                GetTrafficLaneCapabilities(target));
+        }
+
         public static bool SupportsRoadPath(TrafficLaneCapabilities endpoint)
         {
             return (endpoint.PathMethods & PathMethod.Road) != 0 &&
@@ -178,11 +218,21 @@ namespace PocketTurnLanes.Tool.Traffic
                    (endpoint.RoadTypes & RoadTypes.Car) != 0;
         }
 
+        public static bool SupportsRoadPath(LaneEndpoint endpoint)
+        {
+            return SupportsRoadPath(GetTrafficLaneCapabilities(endpoint));
+        }
+
         public static bool SupportsBicycleRoadPath(TrafficLaneCapabilities endpoint)
         {
             return SupportsRoadPath(endpoint) &&
                    (endpoint.PathMethods & PathMethod.Bicycle) != 0 &&
                    (endpoint.RoadTypes & RoadTypes.Bicycle) != 0;
+        }
+
+        public static bool SupportsBicycleRoadPath(LaneEndpoint endpoint)
+        {
+            return SupportsBicycleRoadPath(GetTrafficLaneCapabilities(endpoint));
         }
 
         public static bool SupportsTrackPath(TrafficLaneCapabilities endpoint)
@@ -193,9 +243,30 @@ namespace PocketTurnLanes.Tool.Traffic
                     endpoint.HasNetTrackLane);
         }
 
+        public static bool SupportsTrackPath(LaneEndpoint endpoint)
+        {
+            return SupportsTrackPath(GetTrafficLaneCapabilities(endpoint));
+        }
+
         public static bool IsTrackOnlyEndpoint(TrafficLaneCapabilities endpoint)
         {
             return SupportsTrackPath(endpoint) && !SupportsRoadPath(endpoint);
+        }
+
+        public static bool IsTrackOnlyEndpoint(LaneEndpoint endpoint)
+        {
+            return IsTrackOnlyEndpoint(GetTrafficLaneCapabilities(endpoint));
+        }
+
+        public static TrafficLaneCapabilities GetTrafficLaneCapabilities(LaneEndpoint endpoint)
+        {
+            return new TrafficLaneCapabilities(
+                endpoint.PathMethods,
+                endpoint.LaneFlags,
+                endpoint.RoadTypes,
+                endpoint.TrackTypes,
+                endpoint.HasTrackLaneData,
+                endpoint.HasNetTrackLane);
         }
 
         public static bool TrackTypesCompatible(TrackTypes source, TrackTypes target)
