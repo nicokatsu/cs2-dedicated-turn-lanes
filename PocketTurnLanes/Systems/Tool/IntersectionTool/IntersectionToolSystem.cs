@@ -18,24 +18,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
     public partial class IntersectionToolSystem : ToolBaseSystem
     {
-        private const float SplitGridSize = 8f;
-        private const float PocketLengthGridSize = 8f;
-        private const float FallbackPocketLaneLength = 24f;
-        private const float MinimumWidthBasedPocketLaneLength = 8f;
-        private const float MaximumWidthBasedPocketLaneLength = 32f;
-        private const float MaximumRetryPocketLaneLength = 64f;
-        private const float DrivableLaneEnvelopeBuffer = 8f;
-        private const float SplitGridAlignmentTolerance = 0.05f;
         private const float IntersectionExitBuffer = 0f;
-        private const float MinimumPocketLaneLength = 8f;
-        private const float MinimumPocketLaneLengthTolerance = 0.05f;
         private const float MinimumIntersectionSin = 0.2f;
         private const float MaxIntersectionExitDistance = 40f;
-        private const float SplitLengthBuffer = 0.16f;
         private const float MaxNodePickDistance = 16f;
-        private const float SplitRetryStep = PocketLengthGridSize;
-        private const int MaxSplitRetryAttempts = 8;
-        private const float MinimumRetryProgress = 2f;
         private const float PreviewSplitNodeTolerance = 0.004f;
         private const float BalancedRetryPreviewSplitNodePositionTolerance = 1f;
         private const int BalancedRetryMinimumApplyDelayFrames = 2;

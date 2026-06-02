@@ -10,6 +10,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using static PocketTurnLanes.Tool.SplitGeometry.SplitGeometryMath;
 
 namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
