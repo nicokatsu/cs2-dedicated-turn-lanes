@@ -362,7 +362,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                      bigExclusive.Count == 1 &&
                      smallStraight.Count == 2)
             {
-                if (!TrySelectPocketExtraAndMiddleSmallStraightLane(
+                if (!TrafficCenterStraightTargetResolver.TrySelectPocketExtraAndMiddleSmallStraightLane(
                         smallStraight,
                         pocketExtraCenterLane,
                         out smallLane,
