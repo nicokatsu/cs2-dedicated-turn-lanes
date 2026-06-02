@@ -213,12 +213,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Uturn
         }
 
-        private enum TrafficMappingMergeMode
-        {
-            FinalRepair,
-            CenterRewrite
-        }
-
         private enum TrafficPlanUturnPolicy
         {
             Preserve,
