@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Game.Common;
-using Game.Pathfind;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
-using Unity.Mathematics;
 
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
@@ -15,17 +13,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
         private delegate bool TrafficGeneratedSnapshotPredicate(
             TrafficSourceSnapshot source,
             TrafficGeneratedSnapshot generated);
-
-        private struct TrafficSnapshotReadStats
-        {
-            public int ModifiedSources;
-            public int AcceptedSources;
-            public int SkippedSources;
-            public int GeneratedConnections;
-            public int AcceptedGeneratedConnections;
-            public int SkippedGeneratedConnections;
-            public int MissingGeneratedBuffers;
-        }
 
         private bool TryReadTrafficSourceSnapshots(
             TrafficApi trafficApi,
@@ -56,7 +43,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 generatedFilter,
                 snapshots,
                 ref stats);
-            detail = FormatTrafficSnapshotReadStats(stats);
+            detail = TrafficSnapshotHelpers.FormatReadStats(stats);
             return true;
         }
 
@@ -79,7 +66,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < length; i++)
             {
                 object modified = trafficApi.GetBufferItem(modifiedBuffer, i);
-                TrafficSourceSnapshot source = CreateTrafficSourceSnapshot(trafficApi, modified);
+                TrafficSourceSnapshot source = TrafficSnapshotHelpers.CreateSourceSnapshot(trafficApi, modified);
                 if (sourceFilter != null && !sourceFilter(source))
                 {
                     stats.SkippedSources++;
@@ -106,7 +93,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 for (int generatedIndex = 0; generatedIndex < generatedLength; generatedIndex++)
                 {
                     object generated = trafficApi.GetBufferItem(generatedBuffer, generatedIndex);
-                    TrafficGeneratedSnapshot generatedSnapshot = CreateTrafficGeneratedSnapshot(trafficApi, generated);
+                    TrafficGeneratedSnapshot generatedSnapshot = TrafficSnapshotHelpers.CreateGeneratedSnapshot(trafficApi, generated);
                     stats.GeneratedConnections++;
                     if (generatedFilter != null && !generatedFilter(source, generatedSnapshot))
                     {
@@ -141,39 +128,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             int generatedLength = trafficApi.GetBufferLength(generatedBuffer);
             for (int i = 0; i < generatedLength; i++)
             {
-                snapshots.Add(CreateTrafficGeneratedSnapshot(trafficApi, trafficApi.GetBufferItem(generatedBuffer, i)));
+                snapshots.Add(TrafficSnapshotHelpers.CreateGeneratedSnapshot(trafficApi, trafficApi.GetBufferItem(generatedBuffer, i)));
             }
 
             return true;
-        }
-
-        private static TrafficSourceSnapshot CreateTrafficSourceSnapshot(TrafficApi trafficApi, object modified)
-        {
-            return new TrafficSourceSnapshot
-            {
-                SourceEdge = trafficApi.GetModifiedConnectionEdge(modified),
-                SourceLaneIndex = trafficApi.GetModifiedConnectionLaneIndex(modified),
-                SourceCarriagewayAndGroup = trafficApi.GetModifiedConnectionCarriagewayAndGroup(modified),
-                SourceLanePosition = trafficApi.GetModifiedConnectionLanePosition(modified),
-                ModifiedConnectionEntity = trafficApi.GetModifiedConnectionEntity(modified),
-                Connections = Array.Empty<TrafficGeneratedSnapshot>()
-            };
-        }
-
-        private static TrafficGeneratedSnapshot CreateTrafficGeneratedSnapshot(TrafficApi trafficApi, object generated)
-        {
-            int2 laneIndexMap = trafficApi.GetGeneratedConnectionLaneIndexMap(generated);
-            return new TrafficGeneratedSnapshot
-            {
-                SourceEdge = trafficApi.GetGeneratedConnectionSource(generated),
-                TargetEdge = trafficApi.GetGeneratedConnectionTarget(generated),
-                SourceLaneIndex = laneIndexMap.x & 0xff,
-                TargetLaneIndex = laneIndexMap.y & 0xff,
-                LanePositionMap = trafficApi.GetGeneratedConnectionLanePositionMap(generated),
-                CarriagewayAndGroupIndexMap = trafficApi.GetGeneratedConnectionCarriagewayAndGroupIndexMap(generated),
-                Method = trafficApi.GetGeneratedConnectionMethod(generated),
-                IsUnsafe = trafficApi.GetGeneratedConnectionUnsafe(generated)
-            };
         }
 
         private object GetOrReplaceTrafficModifiedConnectionsBuffer(
@@ -226,7 +184,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             TrafficGeneratedSnapshot[] connections = source.Connections ?? Array.Empty<TrafficGeneratedSnapshot>();
             for (int i = 0; i < connections.Length; i++)
             {
-                WriteTrafficGeneratedSnapshot(trafficApi, generatedBuffer, connections[i]);
+                TrafficSnapshotHelpers.WriteGeneratedSnapshot(trafficApi, generatedBuffer, connections[i]);
                 writtenConnections++;
             }
 
@@ -237,43 +195,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 source.SourceEdge,
                 modifiedConnectionEntity));
             return true;
-        }
-
-        private static void WriteTrafficGeneratedSnapshot(
-            TrafficApi trafficApi,
-            object generatedBuffer,
-            TrafficGeneratedSnapshot connection)
-        {
-            trafficApi.AddBufferElement(generatedBuffer, trafficApi.CreateGeneratedConnection(
-                connection.SourceEdge,
-                connection.TargetEdge,
-                connection.SourceLaneIndex,
-                connection.TargetLaneIndex,
-                connection.LanePositionMap,
-                connection.CarriagewayAndGroupIndexMap,
-                connection.Method,
-                connection.IsUnsafe));
-        }
-
-        private static int CountTrafficSnapshotConnections(IReadOnlyList<TrafficSourceSnapshot> snapshots)
-        {
-            int count = 0;
-            if (snapshots == null)
-            {
-                return count;
-            }
-
-            for (int i = 0; i < snapshots.Count; i++)
-            {
-                count += snapshots[i].Connections?.Length ?? 0;
-            }
-
-            return count;
-        }
-
-        private static string FormatTrafficSnapshotReadStats(TrafficSnapshotReadStats stats)
-        {
-            return $"modifiedSources={stats.ModifiedSources} acceptedSources={stats.AcceptedSources} generatedConnections={stats.GeneratedConnections} acceptedGeneratedConnections={stats.AcceptedGeneratedConnections} missingGeneratedBuffers={stats.MissingGeneratedBuffers} skippedSources={stats.SkippedSources} skippedGeneratedConnections={stats.SkippedGeneratedConnections}";
         }
     }
 }

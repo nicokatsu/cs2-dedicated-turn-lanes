@@ -67,7 +67,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             int sourceCount = snapshot.Entries?.Length ?? 0;
-            int connectionCount = CountTrafficSnapshotConnections(snapshot.Entries);
+            int connectionCount = TrafficSnapshotHelpers.CountConnections(snapshot.Entries);
 
             return $"{snapshot.Source}/{sourceCount} sources/{connectionCount} connections node={FormatEntity(snapshot.Node)} continuation={FormatEntity(snapshot.ContinuationEdge)} detail=({snapshot.Detail})";
         }

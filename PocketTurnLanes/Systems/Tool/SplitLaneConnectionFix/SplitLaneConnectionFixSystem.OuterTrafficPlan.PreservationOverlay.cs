@@ -174,7 +174,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             int snapshotConnections = plan.PreservationOverlaySnapshotConnections - beforeSnapshot;
             int skipped = plan.PreservationSkipped - beforeSkipped;
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic snapshot outer preservation overlay scan complete splitNode={FormatEntity(request.SplitNode)} sourceKeys={FormatSourceLaneKeys(sourceKeys)} overlaySources={FormatSourceLaneKeys(overlaySources)} snapshotConnections={snapshotConnections} skipped={skipped} sameEdgeUturnCandidates={sameEdgeUturnCandidates} finalUturnPolicy=outerAuditSuppress readStats=({FormatTrafficSnapshotReadStats(readStats)}).");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic snapshot outer preservation overlay scan complete splitNode={FormatEntity(request.SplitNode)} sourceKeys={FormatSourceLaneKeys(sourceKeys)} overlaySources={FormatSourceLaneKeys(overlaySources)} snapshotConnections={snapshotConnections} skipped={skipped} sameEdgeUturnCandidates={sameEdgeUturnCandidates} finalUturnPolicy=outerAuditSuppress readStats=({TrafficSnapshotHelpers.FormatReadStats(readStats)}).");
         }
     }
 }
