@@ -642,74 +642,15 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            HashSet<ApproachMovementKey> dedicatedTurnKeys = new HashSet<ApproachMovementKey>();
-            HashSet<ApproachMovementKey> mixedTurnKeys = new HashSet<ApproachMovementKey>();
-            HashSet<ApproachMovementKey> allKeys = new HashSet<ApproachMovementKey>();
-            int mixedLaneCount = 0;
-            int ambiguousLaneCount = 0;
-
-            foreach (KeyValuePair<int, HashSet<ApproachMovementKey>> pair in laneMovementKeys)
-            {
-                bool laneMixed = pair.Value.Count > 1;
-                if (laneMixed)
-                {
-                    mixedLaneCount++;
-                }
-
-                foreach (ApproachMovementKey key in pair.Value)
-                {
-                    allKeys.Add(key);
-                    if (key.Movement == ApproachMovement.Ambiguous)
-                    {
-                        ambiguousLaneCount++;
-                    }
-
-                    if (!key.IsTurn)
-                    {
-                        continue;
-                    }
-
-                    if (laneMixed)
-                    {
-                        mixedTurnKeys.Add(key);
-                    }
-                    else
-                    {
-                        dedicatedTurnKeys.Add(key);
-                    }
-                }
-            }
-
-            bool needsLeft = false;
-            bool needsRight = false;
-            List<ApproachMovementKey> unmetTurnKeys = new List<ApproachMovementKey>();
-            foreach (ApproachMovementKey key in mixedTurnKeys)
-            {
-                if (dedicatedTurnKeys.Contains(key))
-                {
-                    continue;
-                }
-
-                unmetTurnKeys.Add(key);
-                if (key.Movement == ApproachMovement.Left)
-                {
-                    needsLeft = true;
-                }
-                else if (key.Movement == ApproachMovement.Right)
-                {
-                    needsRight = true;
-                }
-            }
-
-            bool needsPocket = needsLeft || needsRight;
+            ApproachDemandAnalysis demand = ApproachDemandAnalyzer.Analyze(laneMovementKeys);
             string usageSummary = FormatApproachLaneUsages(laneUsages);
             string keySummary = FormatApproachMovementKeys(laneMovementKeys);
-            string dedicatedSummary = FormatApproachMovementKeySet(dedicatedTurnKeys);
-            string mixedSummary = FormatApproachMovementKeySet(mixedTurnKeys);
-            string unmetSummary = FormatApproachMovementKeySet(unmetTurnKeys);
-            string diagnostics = $"roadEdges={roadEdgeCount} connectors={connectorCount} ignored={ignoredConnectorCount} lanes={laneUsages.Count} distinctTargets={allKeys.Count} mixedLanes={mixedLaneCount} ambiguousKeys={ambiguousLaneCount} dedicatedTurnKeys=[{dedicatedSummary}] mixedTurnKeys=[{mixedSummary}] unmetTurnKeys=[{unmetSummary}] needsLeft={needsLeft} needsRight={needsRight} usage=[{usageSummary}] targetUsage=[{keySummary}] connectors=[{connectorSummary}]";
+            string dedicatedSummary = FormatApproachMovementKeySet(demand.DedicatedTurnKeys);
+            string mixedSummary = FormatApproachMovementKeySet(demand.MixedTurnKeys);
+            string unmetSummary = FormatApproachMovementKeySet(demand.UnmetTurnKeys);
+            string diagnostics = $"roadEdges={roadEdgeCount} connectors={connectorCount} ignored={ignoredConnectorCount} lanes={laneUsages.Count} distinctTargets={demand.DistinctMovementKeyCount} mixedLanes={demand.MixedLaneCount} ambiguousKeys={demand.AmbiguousKeyCount} dedicatedTurnKeys=[{dedicatedSummary}] mixedTurnKeys=[{mixedSummary}] unmetTurnKeys=[{unmetSummary}] needsLeft={demand.NeedsLeft} needsRight={demand.NeedsRight} usage=[{usageSummary}] targetUsage=[{keySummary}] connectors=[{connectorSummary}]";
 
-            if (!needsPocket)
+            if (!demand.NeedsPocketLane)
             {
                 reason = $"{diagnostics}; existing connector allocation is already turn-dedicated or has no split turn demand.";
                 return false;
