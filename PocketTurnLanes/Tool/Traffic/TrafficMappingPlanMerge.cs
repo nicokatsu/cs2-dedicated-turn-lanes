@@ -47,11 +47,11 @@ namespace PocketTurnLanes.Tool.Traffic
             return mapping;
         }
 
-        public static void AddOrMergeCenterRewrite(
+        public static void AddOrMergeCenter(
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
             LaneMapping mapping)
         {
-            AddOrMerge(bySource, mapping, TrafficPathMethodMergeMode.CenterRewrite);
+            AddOrMerge(bySource, mapping, TrafficPathMethodMergeMode.Center);
         }
 
         public static void AddOrMerge(
@@ -70,7 +70,7 @@ namespace PocketTurnLanes.Tool.Traffic
             PathMethod mergeMethod = TrafficPathMethods.SanitizeMappingMethod(
                 mapping.Method,
                 mode,
-                mapping.HasPreservedPathMethods || mode == TrafficPathMethodMergeMode.CenterRewrite);
+                mapping.HasPreservedPathMethods || mode == TrafficPathMethodMergeMode.Center);
             if (mergeMethod == 0)
             {
                 return;
@@ -83,11 +83,11 @@ namespace PocketTurnLanes.Tool.Traffic
                 existing.Method = TrafficPathMethods.SanitizeMappingMethod(
                     existing.Method | mergeMethod,
                     mode,
-                    hasPreservedPathMethods || mode == TrafficPathMethodMergeMode.CenterRewrite);
+                    hasPreservedPathMethods || mode == TrafficPathMethodMergeMode.Center);
                 existing.IsBranch |= mapping.IsBranch;
                 existing.IsPreservationOnly &= mapping.IsPreservationOnly;
                 existing.HasPreservedPathMethods = hasPreservedPathMethods;
-                existing.IsUnsafe = mode == TrafficPathMethodMergeMode.CenterRewrite
+                existing.IsUnsafe = mode == TrafficPathMethodMergeMode.Center
                     ? existing.IsUnsafe || mapping.IsUnsafe
                     : preserveUnsafe && (existing.IsUnsafe || mapping.IsUnsafe);
                 if (!existing.HasTrafficMaps && mapping.HasTrafficMaps)

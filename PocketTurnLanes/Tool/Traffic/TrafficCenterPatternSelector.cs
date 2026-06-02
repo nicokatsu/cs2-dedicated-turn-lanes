@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace PocketTurnLanes.Tool.Traffic
 {
-    internal static class TrafficCenterRewritePatternSelector
+    internal static class TrafficCenterPatternSelector
     {
         public static bool TrySelect(
             IReadOnlyList<LaneEndpoint> sourceEndpoints,
@@ -13,10 +13,10 @@ namespace PocketTurnLanes.Tool.Traffic
             bool activePocketScope,
             int pocketExtraCenterLane,
             TrafficCenterStraightTargetResolver.TryGetTargetEndpoints tryGetTargetEndpoints,
-            out CenterRewritePatternSelection selection,
+            out CenterPatternSelection selection,
             out string skipReason)
         {
-            selection = new CenterRewritePatternSelection
+            selection = new CenterPatternSelection
             {
                 RewriteMode = "twoLaneShift",
                 ShiftDetail = string.Empty
@@ -65,7 +65,7 @@ namespace PocketTurnLanes.Tool.Traffic
             bool activePocketScope,
             int pocketExtraCenterLane,
             TrafficCenterStraightTargetResolver.TryGetTargetEndpoints tryGetTargetEndpoints,
-            ref CenterRewritePatternSelection selection,
+            ref CenterPatternSelection selection,
             out string skipReason)
         {
             skipReason = string.Empty;
@@ -130,7 +130,7 @@ namespace PocketTurnLanes.Tool.Traffic
             CenterLaneMovementSummary bigLane,
             CenterConnectorCandidate bigCurrentStraight,
             TrafficCenterStraightTargetResolver.TryGetTargetEndpoints tryGetTargetEndpoints,
-            ref CenterRewritePatternSelection selection,
+            ref CenterPatternSelection selection,
             out string skipReason)
         {
             skipReason = string.Empty;
@@ -175,7 +175,7 @@ namespace PocketTurnLanes.Tool.Traffic
             IReadOnlyList<CenterLaneMovementSummary> smallStraight,
             int pocketExtraCenterLane,
             TrafficCenterStraightTargetResolver.TryGetTargetEndpoints tryGetTargetEndpoints,
-            ref CenterRewritePatternSelection selection,
+            ref CenterPatternSelection selection,
             out string skipReason)
         {
             skipReason = string.Empty;
@@ -249,7 +249,7 @@ namespace PocketTurnLanes.Tool.Traffic
                     : $"ambiguousBigTurnStraightLane count={bigStraight.Count}";
             }
 
-            return "unsupportedCenterRewritePattern";
+            return "unsupportedCenterPattern";
         }
     }
 }

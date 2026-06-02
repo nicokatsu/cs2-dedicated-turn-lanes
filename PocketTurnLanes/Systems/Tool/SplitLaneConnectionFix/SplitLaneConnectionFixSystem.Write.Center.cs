@@ -9,10 +9,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
-        private bool TryWriteCenterRewriteMappings(
+        private bool TryWriteCenterMappings(
             TrafficApi trafficApi,
             Request request,
-            CenterRewritePlan plan,
+            CenterPlan plan,
             out bool wrote)
         {
             wrote = false;
@@ -57,7 +57,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 null,
                 null,
                 null);
-            plan.PlannedConnections = TrafficCenterRewriteMappingBuilder.CountTrafficPlanConnections(plan.BySource);
+            plan.PlannedConnections = TrafficCenterMappingBuilder.CountTrafficPlanConnections(plan.BySource);
 
             foreach (KeyValuePair<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> pair in plan.BySource)
             {
@@ -103,7 +103,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 bool rewriteSource = plan.BySource.ContainsKey(existingKey);
                 bool legacyOffScopeSource = !rewriteSource &&
                                             plan.LegacyOffScopeSourceKeys.Contains(existingKey) &&
-                                            LooksLikeLegacyCenterRewriteOverride(trafficApi, existing, existingKey);
+                                            LooksLikeLegacyCenterOverride(trafficApi, existing, existingKey);
                 if (!rewriteSource && !legacyOffScopeSource)
                 {
                     kept.Add(existing);
@@ -195,7 +195,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                    writtenConnections == plan.PlannedConnections;
         }
 
-        private bool LooksLikeLegacyCenterRewriteOverride(
+        private bool LooksLikeLegacyCenterOverride(
             TrafficApi trafficApi,
             object modifiedConnection,
             SourceLaneKey sourceKey)

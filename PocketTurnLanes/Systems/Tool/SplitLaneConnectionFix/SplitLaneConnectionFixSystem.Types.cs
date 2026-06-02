@@ -143,7 +143,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int QueuedFrame;
             public int LaneDataRetries;
             public bool TrafficWritten;
-            public bool OuterPreservationSnapshotCaptured;
+            public bool PreservationSnapshotCapturedForOuter;
             public int TrafficWriteFrame;
             public int VerificationAttempts;
             public int StableVerificationFrames;

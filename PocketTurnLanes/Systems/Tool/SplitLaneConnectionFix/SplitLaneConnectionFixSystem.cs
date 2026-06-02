@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Colossal.Entities;
 using Game;
 using Game.City;
 using Game.Common;
@@ -126,18 +125,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         {
                             if (request.OuterEdge != Entity.Null)
                             {
-                                EnsureOuterPreservationSnapshotCaptured(ref request, request.OuterEdge, "prepare-retry-exhausted");
+                                EnsurePreservationSnapshotCapturedForOuter(ref request, request.OuterEdge, "prepare-retry-exhausted");
                             }
 
                             if (!request.UturnCleanupPending)
                             {
-                            QueueUturnCleanup(ref request, request.OuterEdge, "lane-data retries exhausted after prepare failure");
-                        }
+                                QueueUturnCleanup(ref request, request.OuterEdge, "lane-data retries exhausted after prepare failure");
+                            }
 
-                        request.RemoveAfterUturnCleanup = true;
-                        Mod.LogDiagnostic($"[SplitLaneConnectionFix] Exhausted lane-data retries; waiting for post-lane U-turn cleanup before skipping request splitNode={FormatEntity(request.SplitNode)} intersection={FormatEntity(request.IntersectionNode)} original={FormatEntity(request.OriginalEdge)} outerEdge={FormatEntity(request.OuterEdge)} pocket={FormatEntity(request.PocketEdge)} sourcePrefab={FormatEntity(request.SourcePrefab)} targetPrefab={FormatEntity(request.TargetPrefab)} reason={request.UturnCleanupReason}.");
-                        m_Requests[i] = request;
-                        continue;
+                            request.RemoveAfterUturnCleanup = true;
+                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Exhausted lane-data retries; waiting for post-lane U-turn cleanup before skipping request splitNode={FormatEntity(request.SplitNode)} intersection={FormatEntity(request.IntersectionNode)} original={FormatEntity(request.OriginalEdge)} outerEdge={FormatEntity(request.OuterEdge)} pocket={FormatEntity(request.PocketEdge)} sourcePrefab={FormatEntity(request.SourcePrefab)} targetPrefab={FormatEntity(request.TargetPrefab)} reason={request.UturnCleanupReason}.");
+                            m_Requests[i] = request;
+                            continue;
                         }
 
                         Mod.LogDiagnostic($"[SplitLaneConnectionFix] Lane data not ready splitNode={FormatEntity(request.SplitNode)} pocket={FormatEntity(request.PocketEdge)} retry={request.LaneDataRetries}/{MaxLaneDataRetries}.");
@@ -149,7 +148,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     {
                         if (request.OuterEdge != Entity.Null)
                         {
-                            EnsureOuterPreservationSnapshotCaptured(ref request, request.OuterEdge, "road-only-write-failed");
+                            EnsurePreservationSnapshotCapturedForOuter(ref request, request.OuterEdge, "road-only-write-failed");
                         }
 
                         QueueUturnCleanup(ref request, request.OuterEdge, "Traffic mapping write failed");
@@ -387,7 +386,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     existing.StableVerificationFrames = 0;
                     existing.TrafficWritten = false;
                     ResetRoadPreparation(ref existing);
-                    ResetOuterPreservationSnapshot(ref existing);
+                    ResetPreservationSnapshotForOuter(ref existing);
                     m_Requests[i] = existing;
                     Mod.LogDiagnostic($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} reverseSnapshot={FormatSnapshot(reverseSnapshot)} farSnapshot={FormatFarSnapshot(farIntersectionSnapshot)} frame={UnityEngine.Time.frameCount}.");
                     return;

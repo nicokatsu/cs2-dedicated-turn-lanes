@@ -16,7 +16,7 @@ namespace PocketTurnLanes.Tool.Traffic
     internal static class TrafficConnectorMovementClassifier
     {
         private const float StraightCrossThreshold = 0.25f;
-        private const float CenterRewriteStraightDotThreshold = 0.25f;
+        private const float CenterStraightDotThreshold = 0.25f;
 
         public static TrafficConnectorMovement ClassifyApproachDemand(
             EntityManager entityManager,
@@ -49,7 +49,7 @@ namespace PocketTurnLanes.Tool.Traffic
                 : TrafficConnectorMovement.Ambiguous;
         }
 
-        public static TrafficConnectorMovement ClassifyCenterRewrite(
+        public static TrafficConnectorMovement ClassifyCenter(
             EntityManager entityManager,
             Entity centerNode,
             Entity sourceEdge,
@@ -79,7 +79,7 @@ namespace PocketTurnLanes.Tool.Traffic
                     centerNode,
                     sourceEdge,
                     targetEdge,
-                    CenterRewriteStraightDotThreshold,
+                    CenterStraightDotThreshold,
                     classifyOpposingAsUturn: true,
                     out TrafficConnectorMovement movement)
                 ? movement

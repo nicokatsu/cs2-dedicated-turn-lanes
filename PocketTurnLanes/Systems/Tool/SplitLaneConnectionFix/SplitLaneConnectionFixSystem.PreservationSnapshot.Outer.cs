@@ -10,21 +10,21 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
-        private void EnsureOuterPreservationSnapshotCaptured(ref Request request, Entity outerEdge, string phase)
+        private void EnsurePreservationSnapshotCapturedForOuter(ref Request request, Entity outerEdge, string phase)
         {
-            if (request.OuterPreservationSnapshotCaptured)
+            if (request.PreservationSnapshotCapturedForOuter)
             {
                 return;
             }
 
-            PrepareOuterPreservationSnapshot(ref request, outerEdge);
-            request.OuterPreservationSnapshotCaptured = true;
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] CaptureOuterPreservationSnapshot stage complete phase={phase} splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] preservationForwardSource=({FormatLaneOrder(request.PreservationForwardSourceLanes)}) preservationForwardTarget=({FormatLaneOrder(request.PreservationForwardTargetLanes)}) preservationReverseSource=({FormatLaneOrder(request.PreservationReverseSourceLanes)}) preservationReverseTarget=({FormatLaneOrder(request.PreservationReverseTargetLanes)}) preservationSkippedReason={request.PreservationSkippedReason}.");
+            PreparePreservationSnapshotForOuter(ref request, outerEdge);
+            request.PreservationSnapshotCapturedForOuter = true;
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] CapturePreservationSnapshotForOuter stage complete phase={phase} splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] preservationForwardSource=({FormatLaneOrder(request.PreservationForwardSourceLanes)}) preservationForwardTarget=({FormatLaneOrder(request.PreservationForwardTargetLanes)}) preservationReverseSource=({FormatLaneOrder(request.PreservationReverseSourceLanes)}) preservationReverseTarget=({FormatLaneOrder(request.PreservationReverseTargetLanes)}) preservationSkippedReason={request.PreservationSkippedReason}.");
         }
 
-        private static void ResetOuterPreservationSnapshot(ref Request request)
+        private static void ResetPreservationSnapshotForOuter(ref Request request)
         {
-            request.OuterPreservationSnapshotCaptured = false;
+            request.PreservationSnapshotCapturedForOuter = false;
             request.PreservationForwardSourceLanes = null;
             request.PreservationForwardTargetLanes = null;
             request.PreservationReverseSourceLanes = null;
@@ -34,7 +34,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             request.PreservationSkippedReason = null;
         }
 
-        private void PrepareOuterPreservationSnapshot(ref Request request, Entity outerEdge)
+        private void PreparePreservationSnapshotForOuter(ref Request request, Entity outerEdge)
         {
             m_PreservationSourceLanes.Clear();
             m_PreservationTargetLanes.Clear();
@@ -76,7 +76,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             request.PreservationReverseMappings = preservationReverseMappings;
             request.PreservationSkippedReason = preservationSkipped.Count == 0 ? "none" : FormatStringList(preservationSkipped);
 
-            LogOuterPreservationSnapshotAudit(request, outerEdge, preservationForwardStats, preservationReverseStats);
+            LogPreservationSnapshotAuditForOuter(request, outerEdge, preservationForwardStats, preservationReverseStats);
         }
 
         private PreservationMappingStats BuildPreservationMappingsFromExistingConnectors(
@@ -188,7 +188,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return stats;
         }
 
-        private void LogOuterPreservationSnapshotAudit(
+        private void LogPreservationSnapshotAuditForOuter(
             Request request,
             Entity outerEdge,
             PreservationMappingStats preservationForwardStats,

@@ -51,7 +51,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 reason = $"roadMappingSkipped=reverseLayoutMismatch source={m_ReverseSourceLanes.Count} target={m_ReverseTargetLanes.Count} expected={m_ReverseSourceLanes.Count}";
                 MarkReverseRoadSkipped(ref request, reason);
                 mappingSource = "standard-reverse-skipped-layout-mismatch";
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Standard reverse road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} source={FormatEntity(request.PocketEdge)} target={FormatEntity(outerEdge)} rule=N->N {reason} preserveExistingDirection=True forwardUnaffected=True outerPreservationSnapshotCaptured={request.OuterPreservationSnapshotCaptured} reverseSourceOrder={FormatLaneOrder(m_ReverseSourceLanes)} reverseTargetOrder={FormatLaneOrder(m_ReverseTargetLanes)}.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Standard reverse road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} source={FormatEntity(request.PocketEdge)} target={FormatEntity(outerEdge)} rule=N->N {reason} preserveExistingDirection=True forwardUnaffected=True outerPreservationSnapshotCaptured={request.PreservationSnapshotCapturedForOuter} reverseSourceOrder={FormatLaneOrder(m_ReverseSourceLanes)} reverseTargetOrder={FormatLaneOrder(m_ReverseTargetLanes)}.");
                 return true;
             }
 
@@ -255,7 +255,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 reason = $"roadMappingSkipped=reverseStraightMappingFailed detail=({buildReason}) reverseSourceOrder={FormatLaneOrder(m_ReverseSourceLanes)} reverseTargetOrder={FormatLaneOrder(m_ReverseTargetLanes)} existingReverse={FormatConnectorLanes(m_ExistingConnectorLanes)}";
                 MarkReverseRoadSkipped(ref request, reason);
                 mappingSource = "standard-reverse-skipped-straight-mapping-failed";
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Standard reverse road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} source={FormatEntity(request.PocketEdge)} target={FormatEntity(outerEdge)} rule=N->N preserveExistingDirection=True forwardUnaffected=True outerPreservationSnapshotCaptured={request.OuterPreservationSnapshotCaptured} reason={reason}.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Standard reverse road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} source={FormatEntity(request.PocketEdge)} target={FormatEntity(outerEdge)} rule=N->N preserveExistingDirection=True forwardUnaffected=True outerPreservationSnapshotCaptured={request.PreservationSnapshotCapturedForOuter} reason={reason}.");
                 return true;
             }
 

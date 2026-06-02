@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Colossal.Entities;
 using Game.Common;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;

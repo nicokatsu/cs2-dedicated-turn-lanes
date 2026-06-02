@@ -46,7 +46,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             request.SourceLanes = m_SourceLanes.ToArray();
             request.TargetLanes = m_TargetLanes.ToArray();
-            EnsureOuterPreservationSnapshotCaptured(ref request, outerEdge, "capture-before-directional-road-mapping");
+            EnsurePreservationSnapshotCapturedForOuter(ref request, outerEdge, "capture-before-directional-road-mapping");
 
             PrepareForwardRoadMappings(ref request, outerEdge, out ForwardRoadPreparationResult forwardResult);
 

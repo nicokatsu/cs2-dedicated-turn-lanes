@@ -1,13 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
-using Colossal.Entities;
 using Game.Common;
-using Game.Net;
 using Game.Pathfind;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 using Unity.Mathematics;
-using SubLane = Game.Net.SubLane;
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
@@ -39,14 +36,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            CenterRewritePlan centerPlan = BuildCenterRewritePlan(request);
+            CenterPlan centerPlan = BuildCenterPlan(request);
             bool centerRewriteWritten = false;
             bool centerRewriteWriteSucceeded = true;
             if (centerPlan.BySource.Count > 0 || centerPlan.LegacyOffScopeSourceKeys.Count > 0)
             {
                 try
                 {
-                    centerRewriteWriteSucceeded = TryWriteCenterRewriteMappings(
+                    centerRewriteWriteSucceeded = TryWriteCenterMappings(
                         trafficApi,
                         request,
                         centerPlan,

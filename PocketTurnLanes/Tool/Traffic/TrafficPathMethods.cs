@@ -8,7 +8,7 @@ namespace PocketTurnLanes.Tool.Traffic
     internal enum TrafficPathMethodMergeMode
     {
         FinalRepair,
-        CenterRewrite
+        Center
     }
 
     internal readonly struct TrafficLaneCapabilities
@@ -49,7 +49,7 @@ namespace PocketTurnLanes.Tool.Traffic
                 return SanitizePreservedTrafficPathMethod(method);
             }
 
-            return mode == TrafficPathMethodMergeMode.CenterRewrite
+            return mode == TrafficPathMethodMergeMode.Center
                 ? SanitizeCenterTrafficPathMethod(method)
                 : SanitizeTrafficPathMethod(method);
         }

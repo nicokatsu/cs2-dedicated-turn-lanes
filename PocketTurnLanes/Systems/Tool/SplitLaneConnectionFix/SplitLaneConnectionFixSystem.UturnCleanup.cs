@@ -5,7 +5,6 @@ using Game.Common;
 using Game.Pathfind;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
-using Unity.Mathematics;
 using SubLane = Game.Net.SubLane;
 
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
@@ -21,14 +20,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             request.UturnCleanupPending = true;
             request.UturnCleanupReason = reason;
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Queued post-lane U-turn cleanup splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.OuterPreservationSnapshotCaptured} unsafePreservedMode=unchanged reason={reason}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Queued post-lane U-turn cleanup splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.PreservationSnapshotCapturedForOuter} unsafePreservedMode=unchanged reason={reason}.");
         }
 
         private int DeleteStaleSplitNodeUturnConnectorLanes(Request request, Entity outerEdge, string reason)
         {
             if (!EntityManager.TryGetBuffer(request.SplitNode, false, out DynamicBuffer<SubLane> subLanes))
             {
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Cannot delete stale split-node U-turn connectors after skip: split node has no SubLane buffer splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount=unknown preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.OuterPreservationSnapshotCaptured} unsafePreservedMode=unchanged persistentTrafficWrite=False persistentReason=noSubLaneBuffer reason={reason}.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Cannot delete stale split-node U-turn connectors after skip: split node has no SubLane buffer splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount=unknown preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.PreservationSnapshotCapturedForOuter} unsafePreservedMode=unchanged persistentTrafficWrite=False persistentReason=noSubLaneBuffer reason={reason}.");
                 return 0;
             }
 
@@ -36,7 +35,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             bool mandatoryRewriteAfterRoadSkip = false;
             if (m_StaleConnectorLanes.Count == 0)
             {
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] No stale split-node U-turn connectors found after skip splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount=0 preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.OuterPreservationSnapshotCaptured} unsafePreservedMode=unchanged persistentTrafficWrite=False persistentReason=noStaleUturnConnectors reason={reason}.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] No stale split-node U-turn connectors found after skip splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount=0 preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.PreservationSnapshotCapturedForOuter} unsafePreservedMode=unchanged persistentTrafficWrite=False persistentReason=noStaleUturnConnectors reason={reason}.");
                 return 0;
             }
 
@@ -100,7 +99,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             MarkUpdatedIfExists(outerEdge);
             MarkUpdatedIfExists(request.PocketEdge);
 
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Deleted stale split-node U-turn connectors after skip splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount={m_StaleConnectorLanes.Count} deletedUturn={m_StaleConnectorLanes.Count} removedSubLanes={removedSubLanes} preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.OuterPreservationSnapshotCaptured} unsafePreservedMode=unchanged mandatoryRewriteAfterRoadSkip={mandatoryRewriteAfterRoadSkip} persistentTrafficWrite={persistentTrafficWritten} persistentSources={persistentStats.WrittenSources} persistentStaleSources={persistentStats.StaleSourceLanes} persistentKept={persistentStats.PreservedConnections} persistentTrafficSnapshotKept={persistentStats.PreservedTrafficSnapshotConnections} persistentTrafficSnapshotSources={persistentStats.TrafficSnapshotSourceLanes} persistentMissingTrafficSnapshotSources={persistentStats.MissingTrafficSnapshotSources} persistentMissingGeneratedBufferSources={persistentStats.MissingGeneratedBufferSources} persistentRuntimeFallbackKept=0 persistentRuntimeFallbackSuppressed={persistentStats.RuntimeFallbackSuppressedConnections} persistentUnsafeKept={persistentStats.UnsafePreservedConnections} suppressedTrafficUturn={persistentStats.SuppressedTrafficUturnConnections} persistentPreservedTrackConnections={persistentStats.PreservedTrackConnections} persistentTrackWrittenConnections={persistentStats.TrackWrittenConnections} persistentTrackOnlyTargets={persistentStats.TrackOnlyTargetConnections} persistentSharedTrackConnections={persistentStats.SharedTrackConnections} persistentEmptySources={persistentStats.EmptySources} persistentNormalizedMethods={persistentStats.NormalizedMethods} persistentRemovedExisting={persistentStats.RemovedExisting} persistentReason={persistentStats.Reason} staleSourceLanes={persistentStats.SourceLanes} rewriteSourceLanes={persistentStats.RewriteSourceLanes} reason={reason} connectors={staleSummary} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Deleted stale split-node U-turn connectors after skip splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount={m_StaleConnectorLanes.Count} deletedUturn={m_StaleConnectorLanes.Count} removedSubLanes={removedSubLanes} preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.PreservationSnapshotCapturedForOuter} unsafePreservedMode=unchanged mandatoryRewriteAfterRoadSkip={mandatoryRewriteAfterRoadSkip} persistentTrafficWrite={persistentTrafficWritten} persistentSources={persistentStats.WrittenSources} persistentStaleSources={persistentStats.StaleSourceLanes} persistentKept={persistentStats.PreservedConnections} persistentTrafficSnapshotKept={persistentStats.PreservedTrafficSnapshotConnections} persistentTrafficSnapshotSources={persistentStats.TrafficSnapshotSourceLanes} persistentMissingTrafficSnapshotSources={persistentStats.MissingTrafficSnapshotSources} persistentMissingGeneratedBufferSources={persistentStats.MissingGeneratedBufferSources} persistentRuntimeFallbackKept=0 persistentRuntimeFallbackSuppressed={persistentStats.RuntimeFallbackSuppressedConnections} persistentUnsafeKept={persistentStats.UnsafePreservedConnections} suppressedTrafficUturn={persistentStats.SuppressedTrafficUturnConnections} persistentPreservedTrackConnections={persistentStats.PreservedTrackConnections} persistentTrackWrittenConnections={persistentStats.TrackWrittenConnections} persistentTrackOnlyTargets={persistentStats.TrackOnlyTargetConnections} persistentSharedTrackConnections={persistentStats.SharedTrackConnections} persistentEmptySources={persistentStats.EmptySources} persistentNormalizedMethods={persistentStats.NormalizedMethods} persistentRemovedExisting={persistentStats.RemovedExisting} persistentReason={persistentStats.Reason} staleSourceLanes={persistentStats.SourceLanes} rewriteSourceLanes={persistentStats.RewriteSourceLanes} reason={reason} connectors={staleSummary} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
             return m_StaleConnectorLanes.Count;
         }
 

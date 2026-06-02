@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Colossal.Entities;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix

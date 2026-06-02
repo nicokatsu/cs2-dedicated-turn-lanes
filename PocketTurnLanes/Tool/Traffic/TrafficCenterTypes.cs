@@ -11,7 +11,7 @@ namespace PocketTurnLanes.Tool.Traffic
         Right
     }
 
-    internal enum CenterRewriteMovement
+    internal enum CenterMovement
     {
         Ambiguous,
         Straight,
@@ -20,7 +20,7 @@ namespace PocketTurnLanes.Tool.Traffic
         Uturn
     }
 
-    internal sealed class CenterRewritePlan
+    internal sealed class CenterPlan
     {
         public readonly Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> BySource = new Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>>();
         public readonly Dictionary<SourceLaneKey, LaneEndpoint> SourceEndpoints = new Dictionary<SourceLaneKey, LaneEndpoint>();
@@ -62,14 +62,14 @@ namespace PocketTurnLanes.Tool.Traffic
     internal readonly struct CenterConnectorCandidate
     {
         public readonly ConnectorLane Connector;
-        public readonly CenterRewriteMovement Movement;
+        public readonly CenterMovement Movement;
         public readonly LaneEndpoint SourceEndpoint;
         public readonly LaneEndpoint TargetEndpoint;
         public readonly bool HasTargetEndpoint;
 
         public CenterConnectorCandidate(
             ConnectorLane connector,
-            CenterRewriteMovement movement,
+            CenterMovement movement,
             LaneEndpoint sourceEndpoint,
             LaneEndpoint targetEndpoint,
             bool hasTargetEndpoint)
@@ -124,16 +124,16 @@ namespace PocketTurnLanes.Tool.Traffic
         {
             switch (candidate.Movement)
             {
-                case CenterRewriteMovement.Straight:
+                case CenterMovement.Straight:
                     Straight.Add(candidate);
                     break;
-                case CenterRewriteMovement.SmallTurn:
+                case CenterMovement.SmallTurn:
                     SmallTurn.Add(candidate);
                     break;
-                case CenterRewriteMovement.BigTurn:
+                case CenterMovement.BigTurn:
                     BigTurn.Add(candidate);
                     break;
-                case CenterRewriteMovement.Uturn:
+                case CenterMovement.Uturn:
                     Uturn.Add(candidate);
                     break;
                 default:
@@ -143,7 +143,7 @@ namespace PocketTurnLanes.Tool.Traffic
         }
     }
 
-    internal struct CenterRewritePatternSelection
+    internal struct CenterPatternSelection
     {
         public CenterLaneMovementSummary SmallLane;
         public CenterLaneMovementSummary MiddleLane;

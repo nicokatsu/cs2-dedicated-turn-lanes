@@ -5,7 +5,7 @@ using Unity.Mathematics;
 
 namespace PocketTurnLanes.Tool.Traffic
 {
-    internal static class TrafficCenterRewriteMappingBuilder
+    internal static class TrafficCenterMappingBuilder
     {
         public static bool TryAddCandidateMapping(
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
@@ -52,7 +52,7 @@ namespace PocketTurnLanes.Tool.Traffic
                 IsUnsafe = unsafeConnection,
                 HasTrafficMaps = true
             };
-            TrafficMappingPlanMerge.AddOrMergeCenterRewrite(bySource, mapping);
+            TrafficMappingPlanMerge.AddOrMergeCenter(bySource, mapping);
             sourceEndpoints[new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex)] = sourceEndpoint;
             targetEndpoints[new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex)] = targetEndpoint;
             return true;
@@ -92,7 +92,7 @@ namespace PocketTurnLanes.Tool.Traffic
                 IsUnsafe = false,
                 HasTrafficMaps = true
             };
-            TrafficMappingPlanMerge.AddOrMergeCenterRewrite(bySource, mapping);
+            TrafficMappingPlanMerge.AddOrMergeCenter(bySource, mapping);
             sourceEndpoints[new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex)] = smallSourceEndpoint;
             targetEndpoints[new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex)] = shiftedTargetEndpoint;
             return true;
@@ -130,7 +130,7 @@ namespace PocketTurnLanes.Tool.Traffic
         }
 
         public static void MergeApproachPlan(
-            CenterRewritePlan plan,
+            CenterPlan plan,
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> approachBySource,
             Dictionary<SourceLaneKey, LaneEndpoint> approachSourceEndpoints,
             Dictionary<TargetLaneKey, LaneEndpoint> approachTargetEndpoints)
@@ -139,7 +139,7 @@ namespace PocketTurnLanes.Tool.Traffic
             {
                 foreach (LaneMapping mapping in sourcePair.Value.Values)
                 {
-                    TrafficMappingPlanMerge.AddOrMergeCenterRewrite(plan.BySource, mapping);
+                    TrafficMappingPlanMerge.AddOrMergeCenter(plan.BySource, mapping);
                 }
             }
 

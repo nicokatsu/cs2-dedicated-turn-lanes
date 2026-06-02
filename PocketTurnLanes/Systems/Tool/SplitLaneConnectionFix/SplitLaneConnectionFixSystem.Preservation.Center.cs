@@ -11,7 +11,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
     {
         private CenterPreservationStats AddCenterRuntimePreservationMappings(
             Entity centerNode,
-            CenterRewritePlan plan,
+            CenterPlan plan,
             IReadOnlyList<ConnectorLane> allApproachConnectors,
             Dictionary<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> bySource,
             Dictionary<SourceLaneKey, LaneEndpoint> sourceEndpoints,
@@ -34,7 +34,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                CenterRewriteMovement movement = ClassifyCenterRewriteMovement(
+                CenterMovement movement = ClassifyCenterMovement(
                     centerNode,
                     connector.SourceEdge,
                     connector.TargetEdge,
@@ -43,7 +43,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     plan.SmallTurn);
                 PathMethod preservedMethod = TrafficPathMethods.GetLayerPreservationPathMethod(
                     connector.PathMethods,
-                    movement == CenterRewriteMovement.Uturn);
+                    movement == CenterMovement.Uturn);
                 if (preservedMethod == 0)
                 {
                     continue;
@@ -85,11 +85,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     HasTrafficMaps = true,
                     HasPreservedPathMethods = true
                 };
-                TrafficMappingPlanMerge.AddOrMergeCenterRewrite(bySource, mapping);
+                TrafficMappingPlanMerge.AddOrMergeCenter(bySource, mapping);
                 targetEndpoints[new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex)] = targetEndpoint;
                 stats.Connections++;
 
-                if (movement == CenterRewriteMovement.Uturn || connector.SourceEdge == connector.TargetEdge)
+                if (movement == CenterMovement.Uturn || connector.SourceEdge == connector.TargetEdge)
                 {
                     stats.UturnConnections++;
                 }
@@ -110,7 +110,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private CenterPreservationStats CopyExistingCenterPreservedGeneratedConnections(
             TrafficApi trafficApi,
-            CenterRewritePlan plan,
+            CenterPlan plan,
             object modifiedBuffer)
         {
             CenterPreservationStats stats = default;
@@ -155,7 +155,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     LaneMapping mapping = TrafficMappingPlanPreservation.CreatePreservationMapping(generated, preservedMethod);
-                    TrafficMappingPlanMerge.AddOrMergeCenterRewrite(plan.BySource, mapping);
+                    TrafficMappingPlanMerge.AddOrMergeCenter(plan.BySource, mapping);
                     stats.Connections++;
                     if (isUturn)
                     {

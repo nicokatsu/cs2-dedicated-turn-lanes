@@ -2,19 +2,17 @@ using System.Collections.Generic;
 using Colossal.Entities;
 using Game.Common;
 using Game.Net;
-using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
-using Unity.Mathematics;
 using SubLane = Game.Net.SubLane;
 
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
-        private CenterRewritePlan BuildCenterRewritePlan(Request request)
+        private CenterPlan BuildCenterPlan(Request request)
         {
-            CenterRewritePlan plan = new CenterRewritePlan
+            CenterPlan plan = new CenterPlan
             {
                 LeftHandTraffic = m_CityConfigurationSystem.leftHandTraffic,
                 BigTurn = m_CityConfigurationSystem.leftHandTraffic ? TurnDirection.Right : TurnDirection.Left,
@@ -26,14 +24,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 EntityManager.HasComponent<Deleted>(request.IntersectionNode))
             {
                 plan.Diagnostics.Add($"centerRewriteSkipped=missingCenter centerNode={FormatEntity(request.IntersectionNode)}");
-                LogCenterRewritePlan(request, plan);
+                LogCenterPlan(request, plan);
                 return plan;
             }
 
             if (!EntityManager.TryGetBuffer(request.IntersectionNode, true, out DynamicBuffer<SubLane> subLanes))
             {
                 plan.Diagnostics.Add($"centerRewriteSkipped=noSubLaneBuffer centerNode={FormatEntity(request.IntersectionNode)}");
-                LogCenterRewritePlan(request, plan);
+                LogCenterPlan(request, plan);
                 return plan;
             }
 
@@ -45,7 +43,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             if (centerRoadConnectors.Count == 0)
             {
                 plan.Diagnostics.Add($"centerRewriteSkipped=noRoadConnectors centerNode={FormatEntity(request.IntersectionNode)}");
-                LogCenterRewritePlan(request, plan);
+                LogCenterPlan(request, plan);
                 return plan;
             }
 
@@ -95,7 +93,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
 
                 plan.OffScopeApproaches++;
-                CenterRewritePlan legacyPlan = CreateCenterRewriteSubPlan(plan);
+                CenterPlan legacyPlan = CreateCenterSubPlan(plan);
                 BuildCenterApproachRewritePlan(
                     request,
                     legacyPlan,
@@ -115,13 +113,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            LogCenterRewritePlan(request, plan);
+            LogCenterPlan(request, plan);
             return plan;
         }
 
-        private static CenterRewritePlan CreateCenterRewriteSubPlan(CenterRewritePlan parent)
+        private static CenterPlan CreateCenterSubPlan(CenterPlan parent)
         {
-            return new CenterRewritePlan
+            return new CenterPlan
             {
                 LeftHandTraffic = parent.LeftHandTraffic,
                 BigTurn = parent.BigTurn,
@@ -131,7 +129,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private void BuildCenterApproachRewritePlan(
             Request request,
-            CenterRewritePlan plan,
+            CenterPlan plan,
             Entity centerNode,
             Entity sourceEdge,
             IReadOnlyList<ConnectorLane> approachConnectors,
@@ -161,7 +159,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < approachConnectors.Count; i++)
             {
                 ConnectorLane connector = approachConnectors[i];
-                CenterRewriteMovement movement = ClassifyCenterRewriteMovement(
+                CenterMovement movement = ClassifyCenterMovement(
                     centerNode,
                     connector.SourceEdge,
                     connector.TargetEdge,
@@ -171,9 +169,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
                 if (!summaries.TryGetValue(connector.SourceLaneIndex, out CenterLaneMovementSummary summary))
                 {
-                    if (movement == CenterRewriteMovement.Straight ||
-                        movement == CenterRewriteMovement.SmallTurn ||
-                        movement == CenterRewriteMovement.BigTurn)
+                    if (movement == CenterMovement.Straight ||
+                        movement == CenterMovement.SmallTurn ||
+                        movement == CenterMovement.BigTurn)
                     {
                         relevantEndpointMisses++;
                     }
@@ -183,9 +181,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
                 LaneEndpoint targetEndpoint = default;
                 bool hasTargetEndpoint = false;
-                if (movement == CenterRewriteMovement.Straight ||
-                    movement == CenterRewriteMovement.SmallTurn ||
-                    movement == CenterRewriteMovement.BigTurn)
+                if (movement == CenterMovement.Straight ||
+                    movement == CenterMovement.SmallTurn ||
+                    movement == CenterMovement.BigTurn)
                 {
                     hasTargetEndpoint = TryFindCenterTargetEndpoint(
                         centerNode,
@@ -199,7 +197,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
                 }
 
-                if (movement == CenterRewriteMovement.BigTurn)
+                if (movement == CenterMovement.BigTurn)
                 {
                     bigTurnConnections++;
                 }
@@ -279,7 +277,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            if (!TrafficCenterRewritePatternSelector.TrySelect(
+            if (!TrafficCenterPatternSelector.TrySelect(
                     sourceEndpoints,
                     smallExclusive,
                     bigStraight,
@@ -288,7 +286,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     activePocketScope,
                     pocketExtraCenterLane,
                     TryGetTargets,
-                    out CenterRewritePatternSelection pattern,
+                    out CenterPatternSelection pattern,
                     out string patternSkipReason))
             {
                 AddCenterApproachSkip(plan, sourceEdge, patternSkipReason, approachConnectors, sourceClass);
@@ -310,7 +308,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             for (int i = 0; i < smallLane.SmallTurn.Count; i++)
             {
-                if (!TrafficCenterRewriteMappingBuilder.TryAddCandidateMapping(
+                if (!TrafficCenterMappingBuilder.TryAddCandidateMapping(
                         approachBySource,
                         approachSourceEndpoints,
                         approachTargetEndpoints,
@@ -326,7 +324,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            if (!TrafficCenterRewriteMappingBuilder.TryAddShiftedStraightMapping(
+            if (!TrafficCenterMappingBuilder.TryAddShiftedStraightMapping(
                     approachBySource,
                     approachSourceEndpoints,
                     approachTargetEndpoints,
@@ -341,7 +339,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             if (middleLane != null)
             {
-                if (!TrafficCenterRewriteMappingBuilder.TryAddShiftedStraightMapping(
+                if (!TrafficCenterMappingBuilder.TryAddShiftedStraightMapping(
                         approachBySource,
                         approachSourceEndpoints,
                         approachTargetEndpoints,
@@ -357,7 +355,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             for (int i = 0; i < bigLane.BigTurn.Count; i++)
             {
-                if (!TrafficCenterRewriteMappingBuilder.TryAddCandidateMapping(
+                if (!TrafficCenterMappingBuilder.TryAddCandidateMapping(
                         approachBySource,
                         approachSourceEndpoints,
                         approachTargetEndpoints,
@@ -373,7 +371,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            int roadBicycleConnections = TrafficCenterRewriteMappingBuilder.CountRoadBicycleMappings(approachBySource);
+            int roadBicycleConnections = TrafficCenterMappingBuilder.CountRoadBicycleMappings(approachBySource);
             CenterPreservationStats preservationStats = AddCenterRuntimePreservationMappings(
                 centerNode,
                 plan,
@@ -383,14 +381,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 approachTargetEndpoints,
                 targetEndpointCache);
 
-            int connectionCount = TrafficCenterRewriteMappingBuilder.CountTrafficPlanConnections(approachBySource);
+            int connectionCount = TrafficCenterMappingBuilder.CountTrafficPlanConnections(approachBySource);
             if (connectionCount == 0)
             {
                 AddCenterApproachSkip(plan, sourceEdge, "noWritableConnections", approachConnectors, sourceClass);
                 return;
             }
 
-            TrafficCenterRewriteMappingBuilder.MergeApproachPlan(plan, approachBySource, approachSourceEndpoints, approachTargetEndpoints);
+            TrafficCenterMappingBuilder.MergeApproachPlan(plan, approachBySource, approachSourceEndpoints, approachTargetEndpoints);
             plan.ApproachesRewritten++;
             plan.PlannedConnections += connectionCount;
             plan.StraightConnectionsWrittenSafe += straightMappingsWritten;
@@ -422,7 +420,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             plan.Diagnostics.Add($"centerRewritePlanned sourceEdge={FormatEntity(sourceEdge)} mode={rewriteMode} smallLane={smallLane.SourceEndpoint.LaneIndex}{middleEvidence} bigLane={bigLane.SourceEndpoint.LaneIndex} {extraEvidence} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} shift=({shiftDetail}) sourceClass=({sourceClass}) connections={connectionCount} straightSafe={straightMappingsWritten} straightUnsafeCleared={straightUnsafeCleared} roadBicycle={roadBicycleConnections} runtimePreserved={preservationStats.Connections} preservedUturn={preservationStats.UturnConnections} preservedNonRoad={preservationStats.NonRoadConnections} preservedUnsafe={preservationStats.UnsafeConnections} preservationSkipped={preservationStats.Skipped}");
         }
 
-        private CenterRewriteMovement ClassifyCenterRewriteMovement(
+        private CenterMovement ClassifyCenterMovement(
             Entity centerNode,
             Entity sourceEdge,
             Entity targetEdge,
@@ -430,16 +428,16 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             TurnDirection bigTurn,
             TurnDirection smallTurn)
         {
-            TrafficConnectorMovement movement = TrafficConnectorMovementClassifier.ClassifyCenterRewrite(
+            TrafficConnectorMovement movement = TrafficConnectorMovementClassifier.ClassifyCenter(
                 EntityManager,
                 centerNode,
                 sourceEdge,
                 targetEdge,
                 flags);
-            return ToCenterRewriteMovement(movement, bigTurn, smallTurn);
+            return ToCenterMovement(movement, bigTurn, smallTurn);
         }
 
-        private static CenterRewriteMovement ToCenterRewriteMovement(
+        private static CenterMovement ToCenterMovement(
             TrafficConnectorMovement movement,
             TurnDirection bigTurn,
             TurnDirection smallTurn)
@@ -447,34 +445,34 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             switch (movement)
             {
                 case TrafficConnectorMovement.Straight:
-                    return CenterRewriteMovement.Straight;
+                    return CenterMovement.Straight;
                 case TrafficConnectorMovement.Uturn:
-                    return CenterRewriteMovement.Uturn;
+                    return CenterMovement.Uturn;
                 case TrafficConnectorMovement.Left:
                     return TurnToCenterMovement(TurnDirection.Left, bigTurn, smallTurn);
                 case TrafficConnectorMovement.Right:
                     return TurnToCenterMovement(TurnDirection.Right, bigTurn, smallTurn);
                 default:
-                    return CenterRewriteMovement.Ambiguous;
+                    return CenterMovement.Ambiguous;
             }
         }
 
-        private static CenterRewriteMovement TurnToCenterMovement(
+        private static CenterMovement TurnToCenterMovement(
             TurnDirection turn,
             TurnDirection bigTurn,
             TurnDirection smallTurn)
         {
             if (turn == bigTurn)
             {
-                return CenterRewriteMovement.BigTurn;
+                return CenterMovement.BigTurn;
             }
 
             if (turn == smallTurn)
             {
-                return CenterRewriteMovement.SmallTurn;
+                return CenterMovement.SmallTurn;
             }
 
-            return CenterRewriteMovement.Ambiguous;
+            return CenterMovement.Ambiguous;
         }
 
         private bool TryGetPocketExtraCenterLaneIndex(Request request, out int centerLaneIndex)
