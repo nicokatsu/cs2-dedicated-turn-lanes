@@ -643,11 +643,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             ApproachDemandAnalysis demand = ApproachDemandAnalyzer.Analyze(laneMovementKeys);
-            string usageSummary = FormatApproachLaneUsages(laneUsages);
-            string keySummary = FormatApproachMovementKeys(laneMovementKeys);
-            string dedicatedSummary = FormatApproachMovementKeySet(demand.DedicatedTurnKeys);
-            string mixedSummary = FormatApproachMovementKeySet(demand.MixedTurnKeys);
-            string unmetSummary = FormatApproachMovementKeySet(demand.UnmetTurnKeys);
+            string usageSummary = ApproachDemandFormatter.FormatLaneUsages(laneUsages);
+            string keySummary = ApproachDemandFormatter.FormatMovementKeys(laneMovementKeys, FormatEntity);
+            string dedicatedSummary = ApproachDemandFormatter.FormatMovementKeySet(demand.DedicatedTurnKeys, FormatEntity);
+            string mixedSummary = ApproachDemandFormatter.FormatMovementKeySet(demand.MixedTurnKeys, FormatEntity);
+            string unmetSummary = ApproachDemandFormatter.FormatMovementKeySet(demand.UnmetTurnKeys, FormatEntity);
             string diagnostics = $"roadEdges={roadEdgeCount} connectors={connectorCount} ignored={ignoredConnectorCount} lanes={laneUsages.Count} distinctTargets={demand.DistinctMovementKeyCount} mixedLanes={demand.MixedLaneCount} ambiguousKeys={demand.AmbiguousKeyCount} dedicatedTurnKeys=[{dedicatedSummary}] mixedTurnKeys=[{mixedSummary}] unmetTurnKeys=[{unmetSummary}] needsLeft={demand.NeedsLeft} needsRight={demand.NeedsRight} usage=[{usageSummary}] targetUsage=[{keySummary}] connectors=[{connectorSummary}]";
 
             if (!demand.NeedsPocketLane)
@@ -704,110 +704,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             return cross > 0f ? ApproachMovement.Left : ApproachMovement.Right;
-        }
-
-        private static string FormatApproachLaneUsages(Dictionary<int, ApproachLaneUsage> laneUsages)
-        {
-            if (laneUsages.Count == 0)
-            {
-                return "<none>";
-            }
-
-            List<ApproachLaneUsage> usages = new List<ApproachLaneUsage>(laneUsages.Values);
-            usages.Sort((a, b) => a.LaneIndex.CompareTo(b.LaneIndex));
-
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < usages.Count; i++)
-            {
-                if (i > 0)
-                {
-                    builder.Append(",");
-                }
-
-                ApproachLaneUsage usage = usages[i];
-                builder.Append("lane");
-                builder.Append(usage.LaneIndex);
-                builder.Append(":S");
-                builder.Append(usage.Straight);
-                builder.Append("/L");
-                builder.Append(usage.Left);
-                builder.Append("/R");
-                builder.Append(usage.Right);
-                builder.Append("/A");
-                builder.Append(usage.Ambiguous);
-            }
-
-            return builder.ToString();
-        }
-
-        private static string FormatApproachMovementKeys(Dictionary<int, HashSet<ApproachMovementKey>> laneMovementKeys)
-        {
-            if (laneMovementKeys.Count == 0)
-            {
-                return "<none>";
-            }
-
-            List<int> laneIndexes = new List<int>(laneMovementKeys.Keys);
-            laneIndexes.Sort();
-
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < laneIndexes.Count; i++)
-            {
-                if (i > 0)
-                {
-                    builder.Append(",");
-                }
-
-                int laneIndex = laneIndexes[i];
-                builder.Append("lane");
-                builder.Append(laneIndex);
-                builder.Append(":");
-                builder.Append(FormatApproachMovementKeySet(laneMovementKeys[laneIndex]));
-            }
-
-            return builder.ToString();
-        }
-
-        private static string FormatApproachMovementKeySet(IEnumerable<ApproachMovementKey> keys)
-        {
-            if (keys == null)
-            {
-                return "<none>";
-            }
-
-            List<ApproachMovementKey> sortedKeys = new List<ApproachMovementKey>(keys);
-            if (sortedKeys.Count == 0)
-            {
-                return "<none>";
-            }
-
-            sortedKeys.Sort((a, b) =>
-            {
-                int movementCompare = a.Movement.CompareTo(b.Movement);
-                if (movementCompare != 0)
-                {
-                    return movementCompare;
-                }
-
-                int indexCompare = a.TargetEdge.Index.CompareTo(b.TargetEdge.Index);
-                return indexCompare != 0 ? indexCompare : a.TargetEdge.Version.CompareTo(b.TargetEdge.Version);
-            });
-
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < sortedKeys.Count; i++)
-            {
-                if (i > 0)
-                {
-                    builder.Append("|");
-                }
-
-                ApproachMovementKey key = sortedKeys[i];
-                builder.Append(key.Movement);
-                builder.Append("->");
-                builder.Append(FormatEntity(key.TargetEdge));
-            }
-
-            return builder.ToString();
         }
 
         private bool TryGetSourceEdgeFromNodeLane(Lane nodeLane, DynamicBuffer<ConnectedEdge> connectedEdges, out Entity sourceEdge)
