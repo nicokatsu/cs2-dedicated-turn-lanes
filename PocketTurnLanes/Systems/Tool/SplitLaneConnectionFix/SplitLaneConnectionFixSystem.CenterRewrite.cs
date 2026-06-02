@@ -267,168 +267,46 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Dictionary<SourceLaneKey, LaneEndpoint> approachSourceEndpoints = new Dictionary<SourceLaneKey, LaneEndpoint>();
             Dictionary<TargetLaneKey, LaneEndpoint> approachTargetEndpoints = new Dictionary<TargetLaneKey, LaneEndpoint>();
 
-            CenterLaneMovementSummary smallLane = null;
-            CenterLaneMovementSummary middleLane = null;
-            CenterLaneMovementSummary bigLane = null;
-            CenterConnectorCandidate smallLaneStraightTemplate = default;
-            CenterConnectorCandidate middleLaneStraightTemplate = default;
-            LaneEndpoint smallLaneStraightTarget = default;
-            LaneEndpoint middleLaneStraightTarget = default;
-            string rewriteMode = "twoLaneShift";
-            string shiftDetail = string.Empty;
-            int straightMappingsWritten = 0;
-            int straightUnsafeCleared = 0;
-            int smallTurnsClearedFromStraightLane = 0;
-
-            if (smallExclusive.Count == 1 && bigStraight.Count == 1)
+            bool TryGetTargets(Entity targetEdge, out IReadOnlyList<LaneEndpoint> targetEndpoints)
             {
-                smallLane = smallExclusive[0];
-                bigLane = bigStraight[0];
-                if (activePocketScope && smallLane.SourceEndpoint.LaneIndex != pocketExtraCenterLane)
+                if (TryGetCenterTargetEndpoints(centerNode, targetEdge, targetEndpointCache, out List<LaneEndpoint> endpoints))
                 {
-                    AddCenterApproachSkip(plan, sourceEdge, $"smallTurnNotPocketExtra expectedCenterLane={pocketExtraCenterLane} actual={smallLane.SourceEndpoint.LaneIndex}", approachConnectors, sourceClass);
-                    return;
+                    targetEndpoints = endpoints;
+                    return true;
                 }
 
-                if (bigLane.Straight.Count != 1)
-                {
-                    AddCenterApproachSkip(plan, sourceEdge, $"ambiguousBigStraightConnections count={bigLane.Straight.Count}", approachConnectors, sourceClass);
-                    return;
-                }
-
-                if (smallStraight.Count > 1)
-                {
-                    AddCenterApproachSkip(plan, sourceEdge, $"ambiguousSmallTurnStraightLane count={smallStraight.Count}", approachConnectors, sourceClass);
-                    return;
-                }
-
-                if (smallStraight.Count == 1)
-                {
-                    middleLane = smallStraight[0];
-                    if (middleLane.Straight.Count != 1)
-                    {
-                        AddCenterApproachSkip(plan, sourceEdge, $"ambiguousMiddleStraightConnections count={middleLane.Straight.Count}", approachConnectors, sourceClass);
-                        return;
-                    }
-
-                    CenterConnectorCandidate middleCurrentStraight = middleLane.Straight[0];
-                    CenterConnectorCandidate bigCurrentStraight = bigLane.Straight[0];
-                    if (!TryResolveCascadeStraightTargets(
-                            centerNode,
-                            sourceEndpoints,
-                            smallLane,
-                            middleLane,
-                            bigLane,
-                            middleCurrentStraight,
-                            bigCurrentStraight,
-                            targetEndpointCache,
-                            out smallLaneStraightTarget,
-                            out middleLaneStraightTarget,
-                            out shiftDetail))
-                    {
-                        AddCenterApproachSkip(plan, sourceEdge, $"straightTargetCascadeFailed detail=({shiftDetail})", approachConnectors, sourceClass);
-                        return;
-                    }
-
-                    smallLaneStraightTemplate = middleCurrentStraight;
-                    middleLaneStraightTemplate = bigCurrentStraight;
-                    rewriteMode = "cascadeThreeLane";
-                    straightMappingsWritten = 2;
-                    smallTurnsClearedFromStraightLane = middleLane.SmallTurn.Count;
-                }
-                else
-                {
-                    CenterConnectorCandidate bigCurrentStraight = bigLane.Straight[0];
-                    if (!TryResolveShiftedStraightTarget(
-                            centerNode,
-                            smallLane.SourceEndpoint,
-                            bigLane.SourceEndpoint,
-                            bigCurrentStraight,
-                            targetEndpointCache,
-                            out smallLaneStraightTarget,
-                            out shiftDetail))
-                    {
-                        AddCenterApproachSkip(plan, sourceEdge, $"straightTargetShiftFailed detail=({shiftDetail})", approachConnectors, sourceClass);
-                        return;
-                    }
-
-                    smallLaneStraightTemplate = bigCurrentStraight;
-                    straightMappingsWritten = 1;
-                }
+                targetEndpoints = null;
+                return false;
             }
-            else if (activePocketScope &&
-                     smallExclusive.Count == 0 &&
-                     bigStraight.Count == 0 &&
-                     bigExclusive.Count == 1 &&
-                     smallStraight.Count == 2)
+
+            if (!TrafficCenterRewritePatternSelector.TrySelect(
+                    sourceEndpoints,
+                    smallExclusive,
+                    bigStraight,
+                    bigExclusive,
+                    smallStraight,
+                    activePocketScope,
+                    pocketExtraCenterLane,
+                    TryGetTargets,
+                    out CenterRewritePatternSelection pattern,
+                    out string patternSkipReason))
             {
-                if (!TrafficCenterStraightTargetResolver.TrySelectPocketExtraAndMiddleSmallStraightLane(
-                        smallStraight,
-                        pocketExtraCenterLane,
-                        out smallLane,
-                        out middleLane,
-                        out string selectDetail))
-                {
-                    AddCenterApproachSkip(plan, sourceEdge, $"smallStraightConflictSelectFailed detail=({selectDetail})", approachConnectors, sourceClass);
-                    return;
-                }
-
-                bigLane = bigExclusive[0];
-                if (smallLane.Straight.Count != 1 ||
-                    middleLane.Straight.Count != 1)
-                {
-                    AddCenterApproachSkip(plan, sourceEdge, $"ambiguousSmallStraightConflictStraightCounts small={smallLane.Straight.Count} middle={middleLane.Straight.Count}", approachConnectors, sourceClass);
-                    return;
-                }
-
-                CenterConnectorCandidate smallCurrentStraight = smallLane.Straight[0];
-                CenterConnectorCandidate middleCurrentStraight = middleLane.Straight[0];
-                if (!TryResolveSmallStraightConflictTargets(
-                        centerNode,
-                        sourceEndpoints,
-                        smallLane,
-                        middleLane,
-                        bigLane,
-                        smallCurrentStraight,
-                        middleCurrentStraight,
-                        targetEndpointCache,
-                        out smallLaneStraightTarget,
-                        out middleLaneStraightTarget,
-                        out shiftDetail))
-                {
-                    AddCenterApproachSkip(plan, sourceEdge, $"smallStraightConflictTargetFailed detail=({shiftDetail})", approachConnectors, sourceClass);
-                    return;
-                }
-
-                smallLaneStraightTemplate = smallCurrentStraight;
-                middleLaneStraightTemplate = middleCurrentStraight;
-                rewriteMode = "repairSmallStraightConflict";
-                straightMappingsWritten = 2;
-                smallTurnsClearedFromStraightLane = middleLane.SmallTurn.Count;
-            }
-            else
-            {
-                string reason;
-                if (smallExclusive.Count != 1)
-                {
-                    reason = smallExclusive.Count == 0
-                        ? (bigExclusive.Count > 0 && smallStraight.Count > 0 ? "alreadyBigTurnExclusiveOrPartialRewrite" : "noSmallTurnExclusive")
-                        : $"ambiguousSmallTurnExclusive count={smallExclusive.Count}";
-                }
-                else if (bigStraight.Count != 1)
-                {
-                    reason = bigStraight.Count == 0
-                        ? (bigExclusive.Count > 0 ? "alreadyBigTurnExclusive" : "noBigTurnStraightLane")
-                        : $"ambiguousBigTurnStraightLane count={bigStraight.Count}";
-                }
-                else
-                {
-                    reason = "unsupportedCenterRewritePattern";
-                }
-
-                AddCenterApproachSkip(plan, sourceEdge, reason, approachConnectors, sourceClass);
+                AddCenterApproachSkip(plan, sourceEdge, patternSkipReason, approachConnectors, sourceClass);
                 return;
             }
+
+            CenterLaneMovementSummary smallLane = pattern.SmallLane;
+            CenterLaneMovementSummary middleLane = pattern.MiddleLane;
+            CenterLaneMovementSummary bigLane = pattern.BigLane;
+            CenterConnectorCandidate smallLaneStraightTemplate = pattern.SmallLaneStraightTemplate;
+            CenterConnectorCandidate middleLaneStraightTemplate = pattern.MiddleLaneStraightTemplate;
+            LaneEndpoint smallLaneStraightTarget = pattern.SmallLaneStraightTarget;
+            LaneEndpoint middleLaneStraightTarget = pattern.MiddleLaneStraightTarget;
+            string rewriteMode = pattern.RewriteMode;
+            string shiftDetail = pattern.ShiftDetail;
+            int straightMappingsWritten = pattern.StraightMappingsWritten;
+            int straightUnsafeCleared = 0;
+            int smallTurnsClearedFromStraightLane = pattern.SmallTurnsClearedFromStraightLane;
 
             for (int i = 0; i < smallLane.SmallTurn.Count; i++)
             {
