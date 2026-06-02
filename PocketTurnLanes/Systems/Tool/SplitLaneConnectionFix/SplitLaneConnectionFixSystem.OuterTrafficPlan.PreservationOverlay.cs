@@ -67,7 +67,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     plan.PreservationUnsafeConnections++;
                 }
 
-                CountPreservationTrackStats(plan, method, targetEndpoint);
+                TrafficMappingPlanPreservation.CountTrackStats(plan, method, targetEndpoint);
             }
 
             int added = plan.PreservationRuntimeConnections - beforeRuntime;
@@ -153,7 +153,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(generated, method);
+                    LaneMapping mapping = TrafficMappingPlanPreservation.CreatePreservationMapping(generated, method);
                     AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
                     plan.PreservationSourceKeys.Add(sourceKey);
                     plan.PreservationOverlaySnapshotConnections++;
@@ -168,7 +168,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         plan.PreservationUnsafeConnections++;
                     }
 
-                    CountPreservationTrackStats(plan, method, targetEndpoint);
+                    TrafficMappingPlanPreservation.CountTrackStats(plan, method, targetEndpoint);
                 }
             }
 

@@ -347,7 +347,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(
+                LaneMapping mapping = TrafficMappingPlanPreservation.CreatePreservationMapping(
                     generated,
                     preservedMethod);
 
@@ -375,7 +375,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
 
                 AddOrMergeFinalTrafficMapping(plan.BySource, mapping);
-                CountPreservationTrackStats(plan, mapping.Method, targetEndpoint);
+                TrafficMappingPlanPreservation.CountTrackStats(plan, mapping.Method, targetEndpoint);
                 copied++;
                 if (mapping.IsUnsafe)
                 {
@@ -384,28 +384,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             return copied;
-        }
-
-        private static void CountPreservationTrackStats(
-            TrafficMappingPlan plan,
-            PathMethod method,
-            LaneEndpoint targetEndpoint)
-        {
-            if ((method & PathMethod.Track) == 0)
-            {
-                return;
-            }
-
-            plan.PreservationTrackConnections++;
-            if (TrafficPathMethods.IsTrackOnlyEndpoint(targetEndpoint))
-            {
-                plan.PreservationTrackOnlyTargets++;
-            }
-
-            if ((method & (PathMethod.Road | PathMethod.Track)) == (PathMethod.Road | PathMethod.Track))
-            {
-                plan.PreservationSharedTrackConnections++;
-            }
         }
 
         private static List<LaneMapping> GetRoadFixMappings(Request request)

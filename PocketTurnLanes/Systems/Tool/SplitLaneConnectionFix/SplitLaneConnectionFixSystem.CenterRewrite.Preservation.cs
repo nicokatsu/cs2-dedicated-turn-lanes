@@ -154,7 +154,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    LaneMapping mapping = CreateLaneMappingFromTrafficSnapshot(generated, preservedMethod);
+                    LaneMapping mapping = TrafficMappingPlanPreservation.CreatePreservationMapping(generated, preservedMethod);
                     AddOrMergeCenterTrafficMapping(plan.BySource, mapping);
                     stats.Connections++;
                     if (isUturn)

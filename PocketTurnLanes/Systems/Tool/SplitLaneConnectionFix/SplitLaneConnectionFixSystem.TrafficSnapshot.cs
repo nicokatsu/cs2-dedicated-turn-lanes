@@ -255,27 +255,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 connection.IsUnsafe));
         }
 
-        private static LaneMapping CreateLaneMappingFromTrafficSnapshot(
-            TrafficGeneratedSnapshot snapshot,
-            PathMethod method)
-        {
-            return new LaneMapping
-            {
-                SourceEdge = snapshot.SourceEdge,
-                TargetEdge = snapshot.TargetEdge,
-                SourceLaneIndex = snapshot.SourceLaneIndex,
-                TargetLaneIndex = snapshot.TargetLaneIndex,
-                TrafficLanePositionMap = snapshot.LanePositionMap,
-                TrafficCarriagewayAndGroupIndexMap = snapshot.CarriagewayAndGroupIndexMap,
-                Method = method,
-                IsBranch = false,
-                IsPreservationOnly = true,
-                IsUnsafe = snapshot.IsUnsafe,
-                HasTrafficMaps = true,
-                HasPreservedPathMethods = true
-            };
-        }
-
         private static int CountTrafficSnapshotConnections(IReadOnlyList<TrafficSourceSnapshot> snapshots)
         {
             int count = 0;
