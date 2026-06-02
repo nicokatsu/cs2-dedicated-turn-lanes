@@ -525,120 +525,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             public string Semantic;
         }
 
-        private struct ReplacementSearchStats
-        {
-            public int Scanned;
-            public int DlcBlocked;
-            public int WidthMatches;
-            public int ParkingExcluded;
-            public int LaneMatches;
-            public int MissingLaneData;
-            public int IndependentTramCandidates;
-            public int PublicTransportTramCandidates;
-            public int TramUpgradeCandidates;
-            public int TramUpgradeRejected;
-            public int BusUpgradeCandidates;
-            public int BusUpgradeRejected;
-            public int LayoutScored;
-            public int BusLayoutCandidates;
-            public int SourcePrefabLaneMatches;
-            public int RoadBuilderDiscarded;
-            public int RoadBuilderNotInPlaysetExcluded;
-            public int RoadBuilderVisibilityUnknown;
-            public int HighwayExcluded;
-            public string TramUpgradeRejectSample;
-            public string BusUpgradeRejectSample;
-            public string WidthCandidateSample;
-            public string RoadBuilderCandidateSample;
-            public string RoadBuilderBusUpgradeSample;
-            public string RoadBuilderDiscardedSample;
-            public string RoadBuilderNotInPlaysetSample;
-            public string RoadBuilderVisibilityUnknownSample;
-            public string BestBusLayoutCandidateDetail;
-            private int m_BusUpgradeRejectSampleCount;
-            private int m_WidthCandidateSampleCount;
-            private int m_RoadBuilderCandidateSampleCount;
-            private int m_RoadBuilderBusUpgradeSampleCount;
-            private int m_RoadBuilderDiscardedSampleCount;
-            private int m_RoadBuilderNotInPlaysetSampleCount;
-            private int m_RoadBuilderVisibilityUnknownSampleCount;
-            private int m_BestBusLayoutCandidateScore;
-
-            public static ReplacementSearchStats Create()
-            {
-                return new ReplacementSearchStats
-                {
-                    TramUpgradeRejectSample = "<none>",
-                    BusUpgradeRejectSample = "<none>",
-                    WidthCandidateSample = "<none>",
-                    RoadBuilderCandidateSample = "<none>",
-                    RoadBuilderBusUpgradeSample = "<none>",
-                    RoadBuilderDiscardedSample = "<none>",
-                    RoadBuilderNotInPlaysetSample = "<none>",
-                    RoadBuilderVisibilityUnknownSample = "<none>",
-                    BestBusLayoutCandidateDetail = "<none>",
-                    m_BestBusLayoutCandidateScore = int.MaxValue
-                };
-            }
-
-            public void AddTramUpgradeRejection(string sample)
-            {
-                TramUpgradeRejected++;
-                if (TramUpgradeRejectSample == "<none>")
-                {
-                    TramUpgradeRejectSample = sample;
-                }
-            }
-
-            public void AddBusUpgradeRejection(string sample, int maxSamples)
-            {
-                BusUpgradeRejected++;
-                AppendLogSample(ref BusUpgradeRejectSample, ref m_BusUpgradeRejectSampleCount, sample, maxSamples);
-            }
-
-            public void AddWidthCandidateSample(string sample, int maxSamples)
-            {
-                AppendLogSample(ref WidthCandidateSample, ref m_WidthCandidateSampleCount, sample, maxSamples);
-            }
-
-            public void AddRoadBuilderCandidateSample(string sample, int maxSamples)
-            {
-                AppendLogSample(ref RoadBuilderCandidateSample, ref m_RoadBuilderCandidateSampleCount, sample, maxSamples);
-            }
-
-            public void AddRoadBuilderBusUpgradeSample(string sample, int maxSamples)
-            {
-                AppendLogSample(ref RoadBuilderBusUpgradeSample, ref m_RoadBuilderBusUpgradeSampleCount, sample, maxSamples);
-            }
-
-            public void AddRoadBuilderDiscardedSample(string sample, int maxSamples)
-            {
-                AppendLogSample(ref RoadBuilderDiscardedSample, ref m_RoadBuilderDiscardedSampleCount, sample, maxSamples);
-            }
-
-            public void AddRoadBuilderNotInPlaysetSample(string sample, int maxSamples)
-            {
-                AppendLogSample(ref RoadBuilderNotInPlaysetSample, ref m_RoadBuilderNotInPlaysetSampleCount, sample, maxSamples);
-            }
-
-            public void AddRoadBuilderVisibilityUnknownSample(string sample, int maxSamples)
-            {
-                AppendLogSample(ref RoadBuilderVisibilityUnknownSample, ref m_RoadBuilderVisibilityUnknownSampleCount, sample, maxSamples);
-            }
-
-            public void RecordBusLayoutCandidate(int score, string detail)
-            {
-                BusLayoutCandidates++;
-                if (score >= m_BestBusLayoutCandidateScore)
-                {
-                    return;
-                }
-
-                m_BestBusLayoutCandidateScore = score;
-                BestBusLayoutCandidateDetail = detail;
-            }
-        }
-
         private struct CandidateLaneMatch
         {
             public bool Invert;
@@ -805,7 +691,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     }
                 }
 
-                AppendLogSample(
+                ReplacementPrefabDiagnostics.AppendLogSample(
                     ref semanticSample,
                     ref semanticSampleCount,
                     $"{i}:{lane.Semantic}/{(forward ? "F" : "B")}@{centerOffset:0.##}m width={laneWidth:0.##}m group={ShortRoadBuilderPrefabName(lane.GroupPrefabName)} section={ShortRoadBuilderPrefabName(lane.SectionPrefabName)} transport={GetRoadBuilderOption(lane.GroupOptions, "Transport Option")}",
@@ -900,7 +786,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     }
 
                     hasRoadBuilderComponent = true;
-                    AppendLogSample(ref componentSample, ref componentSampleCount, typeName, 8);
+                    ReplacementPrefabDiagnostics.AppendLogSample(ref componentSample, ref componentSampleCount, typeName, 8);
                     if (typeName.EndsWith(".DiscardedRoadBuilderPrefab", StringComparison.Ordinal) ||
                         typeName.EndsWith(".RoadBuilderToBeDeletedComponent", StringComparison.Ordinal))
                     {
@@ -1063,7 +949,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 int sampleCount = 0;
                 foreach (object item in enumerable)
                 {
-                    AppendLogSample(ref samples, ref sampleCount, item?.ToString() ?? "<null>", 16);
+                    ReplacementPrefabDiagnostics.AppendLogSample(ref samples, ref sampleCount, item?.ToString() ?? "<null>", 16);
                 }
 
                 return samples;
@@ -2408,29 +2294,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                    prefabName.Length > 2 &&
                    prefabName[0] == 'r' &&
                    prefabName.IndexOf("-765611", StringComparison.Ordinal) > 0;
-        }
-
-        private static void AppendLogSample(
-            ref string samples,
-            ref int sampleCount,
-            string sample,
-            int maxSamples)
-        {
-            if (sampleCount >= maxSamples)
-            {
-                return;
-            }
-
-            if (samples == "<none>")
-            {
-                samples = sample;
-            }
-            else
-            {
-                samples += " || " + sample;
-            }
-
-            sampleCount++;
         }
 
         private static CompositionFlags.Side GetTramTrackSideFlags()
