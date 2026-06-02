@@ -88,7 +88,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 request.SourceLanes = m_SourceLanes.ToArray();
                 request.TargetLanes = m_TargetLanes.ToArray();
 
-                if (!TrySelectLaneMapping(m_SourceLanes, m_TargetLanes, out List<LaneEndpoint> selectedTargets, out int extraTargetListIndex, out mappingScore))
+                if (!TrafficLaneTargetSelector.TrySelectPocketTargets(m_SourceLanes, m_TargetLanes, out List<LaneEndpoint> selectedTargets, out int extraTargetListIndex, out mappingScore))
                 {
                     string reason = $"roadMappingSkipped=forwardTargetSubsetSelectionFailed source={m_SourceLanes.Count} target={m_TargetLanes.Count}";
                     MarkForwardRoadSkipped(ref request, reason);
@@ -97,7 +97,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
                 else
                 {
-                    turn = DetermineTurn(selectedTargets, extraTargetListIndex);
+                    turn = TrafficLaneTargetSelector.DetermineTurn(selectedTargets, extraTargetListIndex);
                     bool centerTurnEvidence = false;
                     if (TryRefineExtraTargetFromCenterConnectors(
                             request.IntersectionNode,

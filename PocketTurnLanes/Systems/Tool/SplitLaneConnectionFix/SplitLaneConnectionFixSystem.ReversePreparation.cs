@@ -105,7 +105,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return true;
             }
 
-            if (!TrySelectLaneMapping(m_ReverseSourceLanes, m_ReverseTargetLanes, out List<LaneEndpoint> selectedReverseTargets, out int extraTargetListIndex, out float mappingScore))
+            if (!TrafficLaneTargetSelector.TrySelectPocketTargets(m_ReverseSourceLanes, m_ReverseTargetLanes, out List<LaneEndpoint> selectedReverseTargets, out int extraTargetListIndex, out float mappingScore))
             {
                 reason = $"roadMappingSkipped=balancedReverseTargetSubsetSelectionFailed source={m_ReverseSourceLanes.Count} target={m_ReverseTargetLanes.Count}";
                 request.ReverseSourceLanes = m_ReverseSourceLanes.ToArray();
@@ -116,7 +116,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return true;
             }
 
-            TurnDirection turn = DetermineTurn(selectedReverseTargets, extraTargetListIndex);
+            TurnDirection turn = TrafficLaneTargetSelector.DetermineTurn(selectedReverseTargets, extraTargetListIndex);
             string centerTurnDiagnostic = "not-run";
             bool centerTurnEvidence = false;
             if (TryRefineExtraTargetFromCenterConnectors(
