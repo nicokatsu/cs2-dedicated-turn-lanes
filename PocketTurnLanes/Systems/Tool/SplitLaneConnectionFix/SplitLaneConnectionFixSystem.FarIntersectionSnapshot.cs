@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Colossal.Entities;
 using Game.Common;
-using Game.Pathfind;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -373,53 +372,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             EndpointRole role,
             int laneIndex)
         {
-            TryCaptureFarSnapshotEndpoint(
-                node,
-                edge,
-                role,
-                laneIndex,
-                out bool hasEndpoint,
-                out float lateral,
-                out int order);
-            return new TrafficEndpointSnapshot
-            {
-                HasEndpoint = hasEndpoint,
-                Lateral = lateral,
-                Order = order
-            };
-        }
-
-        private void TryCaptureFarSnapshotEndpoint(
-            Entity node,
-            Entity edge,
-            EndpointRole role,
-            int laneIndex,
-            out bool hasEndpoint,
-            out float lateral,
-            out int order)
-        {
-            hasEndpoint = false;
-            lateral = 0f;
-            order = -1;
             if (node == Entity.Null ||
                 edge == Entity.Null ||
                 !EntityManager.Exists(node) ||
                 !IsEdgeConnectedToNode(edge, node))
             {
-                return;
+                return TrafficSnapshotLaneMapper.CreateMissingEndpointSnapshot();
             }
 
             List<LaneEndpoint> endpoints = new List<LaneEndpoint>(8);
             CollectEdgePreservationLaneEndpoints(edge, node, role, endpoints);
             TrafficLaneEndpointHelpers.SortByLateral(endpoints);
-            order = TrafficLaneEndpointHelpers.FindOrder(endpoints, laneIndex);
-            if (order < 0)
-            {
-                return;
-            }
-
-            hasEndpoint = true;
-            lateral = endpoints[order].Lateral;
+            return TrafficSnapshotLaneMapper.CaptureEndpointSnapshot(endpoints, laneIndex);
         }
 
         private bool TryMapFarSnapshotEdge(
@@ -482,45 +446,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            if (TrafficLaneEndpointHelpers.TryFind(endpoints, snapshotLaneIndex, out endpoint))
-            {
-                detail = $"sameLaneIndex {snapshotLaneIndex}->{endpoint.LaneIndex}";
-                return true;
-            }
-
-            if (hasSnapshotEndpoint &&
-                snapshotOrder >= 0 &&
-                snapshotOrder < endpoints.Count)
-            {
-                endpoint = endpoints[snapshotOrder];
-                detail = $"rankFallback {snapshotLaneIndex}->{endpoint.LaneIndex} order={snapshotOrder}";
-                return true;
-            }
-
-            if (hasSnapshotEndpoint)
-            {
-                float bestError = float.MaxValue;
-                int bestIndex = -1;
-                for (int i = 0; i < endpoints.Count; i++)
-                {
-                    float error = math.abs(endpoints[i].Lateral - snapshotLateral);
-                    if (error < bestError)
-                    {
-                        bestError = error;
-                        bestIndex = i;
-                    }
-                }
-
-                if (bestIndex >= 0)
-                {
-                    endpoint = endpoints[bestIndex];
-                    detail = $"lateralFallback {snapshotLaneIndex}->{endpoint.LaneIndex} snapshotLateral={snapshotLateral:0.##} currentLateral={endpoint.Lateral:0.##} error={bestError:0.##}";
-                    return true;
-                }
-            }
-
-            detail = $"laneMissing lane={snapshotLaneIndex} endpoints={FormatLaneOrder(endpoints)}";
-            return false;
+            return TrafficSnapshotLaneMapper.TryResolveEndpoint(
+                endpoints,
+                snapshotLaneIndex,
+                hasSnapshotEndpoint,
+                snapshotLateral,
+                snapshotOrder,
+                FormatLaneOrder,
+                out endpoint,
+                out detail);
         }
 
         private static void AddFarSnapshotSkipSample(List<string> samples, string value)

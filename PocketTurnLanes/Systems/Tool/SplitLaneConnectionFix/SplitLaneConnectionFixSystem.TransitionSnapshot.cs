@@ -1,8 +1,7 @@
 using System.Collections.Generic;
-using Game.Pathfind;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
-using Unity.Mathematics;
+
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
@@ -48,7 +47,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 for (int i = 0; i < m_ExistingConnectorLanes.Count; i++)
                 {
                     ConnectorLane connector = m_ExistingConnectorLanes[i];
-                    if (!TryBuildSnapshotMapping(
+                    if (!TrafficSnapshotLaneMapper.TryBuildTransitionMapping(
                             connector.SourceLaneIndex,
                             connector.TargetLaneIndex,
                             connector.PathMethods,
@@ -115,7 +114,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 for (int generatedIndex = 0; generatedIndex < connections.Length; generatedIndex++)
                 {
                     TrafficGeneratedSnapshot generated = connections[generatedIndex];
-                    if (!TryBuildSnapshotMapping(
+                    if (!TrafficSnapshotLaneMapper.TryBuildTransitionMapping(
                             generated.SourceLaneIndex,
                             generated.TargetLaneIndex,
                             generated.Method,
@@ -134,38 +133,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             detail = $"trafficSources={readStats.AcceptedSources} generatedMatches={generatedEntries} accepted={accepted}";
             return accepted > 0;
-        }
-
-        private static bool TryBuildSnapshotMapping(
-            int sourceLaneIndex,
-            int targetLaneIndex,
-            PathMethod method,
-            bool isUnsafe,
-            IReadOnlyList<LaneEndpoint> sourceLanes,
-            IReadOnlyList<LaneEndpoint> targetLanes,
-            out TransitionConnectionSnapshotMapping mapping)
-        {
-            mapping = default;
-            if (!TrafficLaneEndpointHelpers.TryFind(sourceLanes, sourceLaneIndex, out LaneEndpoint source) ||
-                !TrafficLaneEndpointHelpers.TryFind(targetLanes, targetLaneIndex, out LaneEndpoint target))
-            {
-                return false;
-            }
-
-            mapping = new TransitionConnectionSnapshotMapping
-            {
-                SourceLaneIndex = sourceLaneIndex,
-                TargetLaneIndex = targetLaneIndex,
-                SourceLateral = source.Lateral,
-                TargetLateral = target.Lateral,
-                SourceLanePosition = source.LanePosition,
-                TargetLanePosition = target.LanePosition,
-                SourceCarriagewayAndGroup = source.CarriagewayAndGroup,
-                TargetCarriagewayAndGroup = target.CarriagewayAndGroup,
-                Method = method,
-                IsUnsafe = isUnsafe
-            };
-            return true;
         }
     }
 }
