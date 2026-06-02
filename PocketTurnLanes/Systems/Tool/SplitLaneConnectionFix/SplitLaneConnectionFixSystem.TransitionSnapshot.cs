@@ -15,7 +15,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             m_ReverseTargetLanes.Clear();
             CollectEdgeCarLaneEndpoints(sourceEdge, transitionNode, EndpointRole.SourceEndAtNode, m_ReverseSourceLanes);
             CollectEdgeCarLaneEndpoints(targetEdge, transitionNode, EndpointRole.TargetStartAtNode, m_ReverseTargetLanes);
-            NormalizeTransitionLaneLaterals(m_ReverseSourceLanes, m_ReverseTargetLanes);
+            TrafficLaneEndpointHelpers.NormalizeTransitionLaneLaterals(m_ReverseSourceLanes, m_ReverseTargetLanes);
 
             List<TransitionConnectionSnapshotMapping> mappings = new List<TransitionConnectionSnapshotMapping>(8);
             string source = "none";

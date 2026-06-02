@@ -71,6 +71,28 @@ namespace PocketTurnLanes.Tool.Traffic
             SortByLateral(lanes);
         }
 
+        public static void NormalizeTransitionLaneLaterals(List<LaneEndpoint> sourceLanes, List<LaneEndpoint> targetLanes)
+        {
+            if (sourceLanes == null ||
+                targetLanes == null ||
+                sourceLanes.Count == 0 ||
+                targetLanes.Count == 0)
+            {
+                return;
+            }
+
+            float2 travelDirection = sourceLanes[0].TravelDirection;
+            if (math.lengthsq(travelDirection) <= 0.0001f)
+            {
+                return;
+            }
+
+            float2 right = new float2(travelDirection.y, -travelDirection.x);
+            float2 sourceOrigin = GetAveragePosition(sourceLanes);
+            AssignLaterals(sourceLanes, sourceOrigin, right);
+            AssignLaterals(targetLanes, sourceOrigin, right);
+        }
+
         public static Bezier4x3 BuildConnectorCurve(LaneEndpoint source, LaneEndpoint target)
         {
             float distance = math.max(1f, math.distance(source.Position.xz, target.Position.xz));
