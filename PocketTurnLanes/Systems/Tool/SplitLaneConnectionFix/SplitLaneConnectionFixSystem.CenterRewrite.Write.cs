@@ -63,7 +63,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     TargetLaneKey targetKey = new TargetLaneKey(mapping.TargetEdge, mapping.TargetLaneIndex);
                     if (!plan.TargetEndpoints.TryGetValue(targetKey, out LaneEndpoint targetEndpoint))
                     {
-                        if (!mapping.IsTrackPreservation || !mapping.HasTrafficMaps)
+                        if (!mapping.IsPreservationOnly || !mapping.HasTrafficMaps)
                         {
                             Mod.LogDiagnostic($"[SplitLaneConnectionFix] centerRewriteWriteFailed centerNode={FormatEntity(request.IntersectionNode)} reason=targetEndpointMissing mapping={FormatMapping(mapping)}.");
                             return false;

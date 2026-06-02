@@ -113,15 +113,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             CollectEdgeLaneEndpoints(edgeEntity, splitNode, role, output, includeTrackOnly: true, trackCandidateMode: true);
         }
 
-        private void CollectEdgeCenterPreservationLaneEndpoints(
-            Entity edgeEntity,
-            Entity splitNode,
-            EndpointRole role,
-            List<LaneEndpoint> output)
-        {
-            CollectEdgePreservationLaneEndpoints(edgeEntity, splitNode, role, output);
-        }
-
         private void CollectEdgePreservationLaneEndpoints(
             Entity edgeEntity,
             Entity splitNode,
@@ -168,7 +159,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             if (!preservationTargetEndpointCache.TryGetValue(targetEdge, out List<LaneEndpoint> targetEndpoints))
             {
                 targetEndpoints = new List<LaneEndpoint>(8);
-                CollectEdgeCenterPreservationLaneEndpoints(
+                CollectEdgePreservationLaneEndpoints(
                     targetEdge,
                     centerNode,
                     EndpointRole.TargetStartAtNode,

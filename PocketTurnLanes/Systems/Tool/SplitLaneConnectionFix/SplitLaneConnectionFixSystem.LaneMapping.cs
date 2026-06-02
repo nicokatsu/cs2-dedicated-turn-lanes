@@ -1364,14 +1364,14 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             if (byTarget.TryGetValue(targetKey, out LaneMapping existing))
             {
-                bool preserveUnsafe = existing.IsTrackPreservation && mapping.IsTrackPreservation;
+                bool preserveUnsafe = existing.IsPreservationOnly && mapping.IsPreservationOnly;
                 bool hasPreservedPathMethods = existing.HasPreservedPathMethods || mapping.HasPreservedPathMethods;
                 existing.Method = SanitizeTrafficMappingMethod(
                     existing.Method | mergeMethod,
                     mode,
                     hasPreservedPathMethods || mode == TrafficMappingMergeMode.CenterRewrite);
                 existing.IsBranch |= mapping.IsBranch;
-                existing.IsTrackPreservation &= mapping.IsTrackPreservation;
+                existing.IsPreservationOnly &= mapping.IsPreservationOnly;
                 existing.HasPreservedPathMethods = hasPreservedPathMethods;
                 existing.IsUnsafe = mode == TrafficMappingMergeMode.CenterRewrite
                     ? existing.IsUnsafe || mapping.IsUnsafe

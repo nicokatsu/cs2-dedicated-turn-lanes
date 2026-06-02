@@ -112,7 +112,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             string trackForwardReason = "trackForward deferred until final Traffic write";
             string trackReverseReason = "trackReverse deferred until final Traffic write";
-            if (request.FinalTrackTrafficWritten || !HasTrackPreservationMappings(request))
+            if (request.FinalTrackRestoreTrafficWritten || !HasTrackRestoreMappings(request))
             {
                 RestoreTrackConnectorDirection(
                     request,

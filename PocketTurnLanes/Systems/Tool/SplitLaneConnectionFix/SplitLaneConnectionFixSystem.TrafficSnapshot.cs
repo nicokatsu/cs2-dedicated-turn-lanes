@@ -268,7 +268,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 TrafficCarriagewayAndGroupIndexMap = snapshot.CarriagewayAndGroupIndexMap,
                 Method = method,
                 IsBranch = false,
-                IsTrackPreservation = true,
+                IsPreservationOnly = true,
                 IsUnsafe = snapshot.IsUnsafe,
                 HasTrafficMaps = true,
                 HasPreservedPathMethods = true

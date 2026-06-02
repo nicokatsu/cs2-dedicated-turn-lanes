@@ -40,7 +40,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     connector.CarFlags,
                     plan.BigTurn,
                     plan.SmallTurn);
-                PathMethod preservedMethod = GetCenterPreservedConnectorMethod(connector.PathMethods, movement);
+                PathMethod preservedMethod = GetLayerPreservationPathMethod(
+                    connector.PathMethods,
+                    movement == CenterRewriteMovement.Uturn);
                 if (preservedMethod == 0)
                 {
                     continue;
@@ -77,7 +79,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     Method = preservedMethod,
                     TemplateEntity = connector.Entity,
                     TemplatePathMethods = connector.PathMethods,
-                    IsTrackPreservation = true,
+                    IsPreservationOnly = true,
                     IsUnsafe = unsafeConnection,
                     HasTrafficMaps = true,
                     HasPreservedPathMethods = true
@@ -103,11 +105,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             return stats;
-        }
-
-        private static PathMethod GetCenterPreservedConnectorMethod(PathMethod method, CenterRewriteMovement movement)
-        {
-            return GetLayerPreservationPathMethod(method, movement == CenterRewriteMovement.Uturn);
         }
 
         private CenterPreservationStats CopyExistingCenterPreservedGeneratedConnections(

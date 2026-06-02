@@ -355,8 +355,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int QueuedFrame;
             public int LaneDataRetries;
             public bool TrafficWritten;
-            public bool FinalTrackTrafficWritten;
-            public bool TrackSnapshotCaptured;
+            public bool FinalTrackRestoreTrafficWritten;
+            public bool OuterPreservationSnapshotCaptured;
             public int TrafficWriteFrame;
             public int VerificationAttempts;
             public int StableVerificationFrames;
@@ -518,7 +518,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public PathMethod Method;
             public PathMethod TemplatePathMethods;
             public bool IsBranch;
-            public bool IsTrackPreservation;
+            public bool IsPreservationOnly;
             public bool IsUnsafe;
             public bool HasTrafficMaps;
             public bool HasPreservedPathMethods;
@@ -626,7 +626,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int MissingGeneratedBufferSources;
             public int UnsafePreservedConnections;
             public int SuppressedTrafficUturnConnections;
-            public bool TrackSnapshotOverlaySuppressed;
+            public bool TrackRestoreOverlaySuppressed;
             public string SourceLanes;
             public string RewriteSourceLanes;
             public string Reason;

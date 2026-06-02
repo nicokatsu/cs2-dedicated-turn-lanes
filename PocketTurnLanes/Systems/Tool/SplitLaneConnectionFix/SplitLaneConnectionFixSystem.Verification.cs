@@ -15,7 +15,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             RoadDirectionPlan reverseDirection = GetRoadDirectionPlan(request, RoadDirection.Reverse);
             bool reverseMatches = VerifyRoadDirection(request, reverseDirection, out string reverseDetail);
 
-            bool verifyTrack = request.FinalTrackTrafficWritten || !HasTrackPreservationMappings(request);
+            bool verifyTrack = request.FinalTrackRestoreTrafficWritten || !HasTrackRestoreMappings(request);
             bool trackForwardMatches = true;
             bool trackReverseMatches = true;
             string trackForwardDetail = "trackForward unifiedTrafficWriteNotVerified";
@@ -42,7 +42,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             bool matches = forwardMatches && reverseMatches && trackForwardMatches && trackReverseMatches && staleUturnCount == 0;
             if (!matches)
             {
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Connector verification mismatch splitNode={FormatEntity(request.SplitNode)} mode={request.Mode} verifyTrack={verifyTrack} finalTrackTrafficWritten={request.FinalTrackTrafficWritten} forward={forwardDetail} reverse={reverseDetail} trackForward={trackForwardDetail} trackReverse={trackReverseDetail} staleUturnCount={staleUturnCount} staleUturns={staleUturnSummary}.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Connector verification mismatch splitNode={FormatEntity(request.SplitNode)} mode={request.Mode} verifyTrack={verifyTrack} finalTrackRestoreTrafficWritten={request.FinalTrackRestoreTrafficWritten} forward={forwardDetail} reverse={reverseDetail} trackForward={trackForwardDetail} trackReverse={trackReverseDetail} staleUturnCount={staleUturnCount} staleUturns={staleUturnSummary}.");
             }
 
             return matches;

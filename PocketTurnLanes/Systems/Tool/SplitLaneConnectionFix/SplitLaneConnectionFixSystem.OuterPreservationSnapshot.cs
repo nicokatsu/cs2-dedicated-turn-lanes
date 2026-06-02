@@ -9,21 +9,21 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
-        private void EnsureTrackSnapshotCaptured(ref Request request, Entity outerEdge, string phase)
+        private void EnsureOuterPreservationSnapshotCaptured(ref Request request, Entity outerEdge, string phase)
         {
-            if (request.TrackSnapshotCaptured)
+            if (request.OuterPreservationSnapshotCaptured)
             {
                 return;
             }
 
-            PrepareTrackPreservationMappings(ref request, outerEdge);
-            request.TrackSnapshotCaptured = true;
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] CaptureTrackSnapshot stage complete phase={phase} splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] trackForwardSource=({FormatLaneOrder(request.TrackForwardSourceLanes)}) trackForwardTarget=({FormatLaneOrder(request.TrackForwardTargetLanes)}) trackReverseSource=({FormatLaneOrder(request.TrackReverseSourceLanes)}) trackReverseTarget=({FormatLaneOrder(request.TrackReverseTargetLanes)}) preservationForwardSource=({FormatLaneOrder(request.PreservationForwardSourceLanes)}) preservationForwardTarget=({FormatLaneOrder(request.PreservationForwardTargetLanes)}) preservationReverseSource=({FormatLaneOrder(request.PreservationReverseSourceLanes)}) preservationReverseTarget=({FormatLaneOrder(request.PreservationReverseTargetLanes)}) trackSkippedReason={request.TrackSkippedReason} preservationSkippedReason={request.PreservationSkippedReason}.");
+            PrepareOuterPreservationSnapshot(ref request, outerEdge);
+            request.OuterPreservationSnapshotCaptured = true;
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] CaptureOuterPreservationSnapshot stage complete phase={phase} splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] trackForwardSource=({FormatLaneOrder(request.TrackForwardSourceLanes)}) trackForwardTarget=({FormatLaneOrder(request.TrackForwardTargetLanes)}) trackReverseSource=({FormatLaneOrder(request.TrackReverseSourceLanes)}) trackReverseTarget=({FormatLaneOrder(request.TrackReverseTargetLanes)}) preservationForwardSource=({FormatLaneOrder(request.PreservationForwardSourceLanes)}) preservationForwardTarget=({FormatLaneOrder(request.PreservationForwardTargetLanes)}) preservationReverseSource=({FormatLaneOrder(request.PreservationReverseSourceLanes)}) preservationReverseTarget=({FormatLaneOrder(request.PreservationReverseTargetLanes)}) trackSkippedReason={request.TrackSkippedReason} preservationSkippedReason={request.PreservationSkippedReason}.");
         }
 
-        private static void ResetTrackSnapshot(ref Request request)
+        private static void ResetOuterPreservationSnapshot(ref Request request)
         {
-            request.TrackSnapshotCaptured = false;
+            request.OuterPreservationSnapshotCaptured = false;
             request.TrackForwardSourceLanes = null;
             request.TrackForwardTargetLanes = null;
             request.TrackReverseSourceLanes = null;
@@ -40,7 +40,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             request.PreservationSkippedReason = null;
         }
 
-        private void PrepareTrackPreservationMappings(ref Request request, Entity outerEdge)
+        private void PrepareOuterPreservationSnapshot(ref Request request, Entity outerEdge)
         {
             m_TrackSourceLanes.Clear();
             m_TrackTargetLanes.Clear();
@@ -176,7 +176,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                PathMethod method = GetTrackPreservationMethod(connector, sourceEndpoint, targetEndpoint);
+                PathMethod method = GetTrackRestoreMethod(connector, sourceEndpoint, targetEndpoint);
                 if ((method & PathMethod.Track) == 0)
                 {
                     stats.Skipped++;
@@ -203,7 +203,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     TargetLaneIndex = connector.TargetLaneIndex,
                     Method = method,
                     IsBranch = false,
-                    IsTrackPreservation = true,
+                    IsPreservationOnly = true,
                     IsUnsafe = (connector.CarFlags & (CarLaneFlags.Unsafe | CarLaneFlags.Forbidden)) != 0,
                     TemplateEntity = connector.Entity,
                     TemplatePathMethods = connector.PathMethods,
@@ -216,7 +216,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return stats;
         }
 
-        private static PathMethod GetTrackPreservationMethod(ConnectorLane connector, LaneEndpoint sourceEndpoint, LaneEndpoint targetEndpoint)
+        private static PathMethod GetTrackRestoreMethod(ConnectorLane connector, LaneEndpoint sourceEndpoint, LaneEndpoint targetEndpoint)
         {
             PathMethod method = connector.PathMethods & (PathMethod.Road | PathMethod.Track);
             if (!SupportsRoadPath(sourceEndpoint) || !SupportsRoadPath(targetEndpoint))
@@ -296,7 +296,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     TargetLaneIndex = connector.TargetLaneIndex,
                     Method = method,
                     IsBranch = false,
-                    IsTrackPreservation = true,
+                    IsPreservationOnly = true,
                     IsUnsafe = unsafeConnection,
                     TemplateEntity = connector.Entity,
                     TemplatePathMethods = connector.PathMethods,

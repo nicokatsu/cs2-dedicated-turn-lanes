@@ -132,7 +132,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         {
                             if (request.OuterEdge != Entity.Null)
                             {
-                                EnsureTrackSnapshotCaptured(ref request, request.OuterEdge, "prepare-retry-exhausted");
+                                EnsureOuterPreservationSnapshotCaptured(ref request, request.OuterEdge, "prepare-retry-exhausted");
                             }
 
                             if (!request.UturnCleanupPending)
@@ -164,7 +164,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     {
                         if (request.OuterEdge != Entity.Null)
                         {
-                            EnsureTrackSnapshotCaptured(ref request, request.OuterEdge, "road-only-write-failed");
+                            EnsureOuterPreservationSnapshotCaptured(ref request, request.OuterEdge, "road-only-write-failed");
                         }
 
                         QueueUturnCleanup(ref request, request.OuterEdge, "Traffic mapping write failed");
@@ -175,7 +175,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     request.TrafficWritten = true;
-                    request.FinalTrackTrafficWritten = true;
+                    request.FinalTrackRestoreTrafficWritten = true;
                     request.TrafficWriteFrame = UnityEngine.Time.frameCount;
                     request.StableVerificationFrames = 0;
                     Mod.LogDiagnostic($"[SplitLaneConnectionFix] Wrote unified Traffic lane mapping; logical stages complete in one Traffic modification pass splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} mappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} trackMappings=forward[{FormatMappings(request.TrackForwardMappings)}] reverse[{FormatMappings(request.TrackReverseMappings)}] preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] trackSkippedReason={request.TrackSkippedReason} preservationSkippedReason={request.PreservationSkippedReason} sourceOrder={FormatLaneOrder(request.SourceLanes)} targetOrder={FormatLaneOrder(request.TargetLanes)} reverseSourceOrder={FormatLaneOrder(request.ReverseSourceLanes)} reverseTargetOrder={FormatLaneOrder(request.ReverseTargetLanes)} trackForwardSource=({FormatLaneOrder(request.TrackForwardSourceLanes)}) trackForwardTarget=({FormatLaneOrder(request.TrackForwardTargetLanes)}) trackReverseSource=({FormatLaneOrder(request.TrackReverseSourceLanes)}) trackReverseTarget=({FormatLaneOrder(request.TrackReverseTargetLanes)}) preservationForwardSource=({FormatLaneOrder(request.PreservationForwardSourceLanes)}) preservationForwardTarget=({FormatLaneOrder(request.PreservationForwardTargetLanes)}) preservationReverseSource=({FormatLaneOrder(request.PreservationReverseSourceLanes)}) preservationReverseTarget=({FormatLaneOrder(request.PreservationReverseTargetLanes)}) extraLane={request.ExtraTargetLaneIndex} turn={request.Turn} branchSource={request.BranchSourceLaneIndex} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()} leftHandTraffic={m_CityConfigurationSystem.leftHandTraffic}.");
@@ -402,9 +402,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     existing.VerificationAttempts = 0;
                     existing.StableVerificationFrames = 0;
                     existing.TrafficWritten = false;
-                    existing.FinalTrackTrafficWritten = false;
+                    existing.FinalTrackRestoreTrafficWritten = false;
                     ResetRoadPreparation(ref existing);
-                    ResetTrackSnapshot(ref existing);
+                    ResetOuterPreservationSnapshot(ref existing);
                     m_Requests[i] = existing;
                     Mod.LogDiagnostic($"[SplitLaneConnectionFix] Updated queued request splitNode={FormatEntity(splitNode)} pocketEdge={FormatEntity(pocketEdge)} original={FormatEntity(originalEdge)} explicitOuter={FormatEntity(explicitOuterEdge)} sourcePrefab={FormatEntity(sourcePrefab)} targetPrefab={FormatEntity(targetPrefab)} mode={mode} farIntersection={FormatEntity(farIntersectionNode)} reverseSnapshot={FormatSnapshot(reverseSnapshot)} farSnapshot={FormatFarSnapshot(farIntersectionSnapshot)} frame={UnityEngine.Time.frameCount}.");
                     return;
