@@ -53,5 +53,78 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         {
             return $"raw={layout} nodeSide={(nodeIsStart ? "start" : "end")} incoming={GetIncomingLayoutCount(layout, nodeIsStart)} outgoing={GetOutgoingLayoutCount(layout, nodeIsStart)}";
         }
+
+        public static bool TryMatchContinuationToReplacementTarget(
+            ReplacementPrefabMatch prefabMatch,
+            RoadLaneProfile continuationProfile,
+            bool currentNodeIsStartOnShortEdge,
+            bool farNodeIsStartOnContinuation,
+            out RoadLaneCounts continuationRoadCounts,
+            out string detail)
+        {
+            continuationRoadCounts = continuationProfile.RoadCounts;
+            if (!CountsMatchAtNodes(
+                    prefabMatch.TargetCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.RoadCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} road={FormatCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={FormatCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} rawTargetRoad={prefabMatch.TargetCounts}";
+                return false;
+            }
+
+            if (!CountsMatchAtNodes(
+                    prefabMatch.TargetTramTrackCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.TramTrackCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} tramTracks={FormatCounts(continuationProfile.TramTrackCounts, farNodeIsStartOnContinuation)} expectedTargetTramTracks={FormatCounts(prefabMatch.TargetTramTrackCounts, currentNodeIsStartOnShortEdge)} rawTargetTramTracks={prefabMatch.TargetTramTrackCounts}";
+                return false;
+            }
+
+            if (!CountsMatchAtNodes(
+                    prefabMatch.TargetIndependentTramCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.IndependentTramCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} independentTram={FormatCounts(continuationProfile.IndependentTramCounts, farNodeIsStartOnContinuation)} expectedTargetIndependentTram={FormatCounts(prefabMatch.TargetIndependentTramCounts, currentNodeIsStartOnShortEdge)} rawTargetIndependentTram={prefabMatch.TargetIndependentTramCounts}";
+                return false;
+            }
+
+            if (!CountsMatchAtNodes(
+                    prefabMatch.TargetPublicTransportTramCounts,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.PublicTransportTramCounts,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} publicTransportTram={FormatCounts(continuationProfile.PublicTransportTramCounts, farNodeIsStartOnContinuation)} expectedTargetPublicTransportTram={FormatCounts(prefabMatch.TargetPublicTransportTramCounts, currentNodeIsStartOnShortEdge)} rawTargetPublicTransportTram={prefabMatch.TargetPublicTransportTramCounts}";
+                return false;
+            }
+
+            if (!LayoutCountsMatchAtNodes(
+                    prefabMatch.TargetBusLaneOffsetProfile,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.BusLaneLayout,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} busLayout={FormatLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} expectedTargetBus={FormatLayout(prefabMatch.TargetBusLaneOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetBus={prefabMatch.TargetBusLaneLayout}";
+                return false;
+            }
+
+            if (!LayoutCountsMatchAtNodes(
+                    prefabMatch.TargetTramTrackOffsetProfile,
+                    currentNodeIsStartOnShortEdge,
+                    continuationProfile.TramTrackLayout,
+                    farNodeIsStartOnContinuation))
+            {
+                detail = $"continuationProfile={continuationProfile.Source} tramLayout={FormatLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)} expectedTargetTramLayout={FormatLayout(prefabMatch.TargetTramTrackOffsetProfile, currentNodeIsStartOnShortEdge)} rawTargetTramLayout={prefabMatch.TargetTramTrackLayout}";
+                return false;
+            }
+
+            detail = $"continuationProfile={continuationProfile.Source} road={FormatCounts(continuationProfile.RoadCounts, farNodeIsStartOnContinuation)} expectedTarget={FormatCounts(prefabMatch.TargetCounts, currentNodeIsStartOnShortEdge)} bus={FormatLayout(continuationProfile.BusLaneLayout, farNodeIsStartOnContinuation)} tram={FormatLayout(continuationProfile.TramTrackLayout, farNodeIsStartOnContinuation)}";
+            return true;
+        }
     }
 }
