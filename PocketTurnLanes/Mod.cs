@@ -9,7 +9,7 @@ using PocketTurnLanes.Systems.Overlay;
 using PocketTurnLanes.Systems.Tool.IntersectionTool;
 using PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix;
 using PocketTurnLanes.Systems.UI;
-using PocketTurnLanes.Tool;
+using PocketTurnLanes.Tool.Traffic;
 
 namespace PocketTurnLanes
 {

@@ -7,7 +7,7 @@ using PocketTurnLanes.Tool;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using static PocketTurnLanes.Tool.RoadLaneCountMatcher;
+using static PocketTurnLanes.Tool.PrefabMatching.RoadLaneCountMatcher;
 
 namespace PocketTurnLanes.Tool.PrefabMatching
 {

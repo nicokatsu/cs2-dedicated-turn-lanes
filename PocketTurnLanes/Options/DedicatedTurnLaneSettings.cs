@@ -3,7 +3,7 @@ using Colossal.IO.AssetDatabase;
 using Game.Modding;
 using Game.Settings;
 using PocketTurnLanes.Diagnostics;
-using PocketTurnLanes.Tool;
+using PocketTurnLanes.Tool.Traffic;
 
 namespace PocketTurnLanes.Options
 {

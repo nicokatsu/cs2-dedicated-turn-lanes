@@ -6,7 +6,7 @@ using Game;
 using Game.SceneFlow;
 using PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix;
 
-namespace PocketTurnLanes.Tool
+namespace PocketTurnLanes.Tool.Traffic
 {
     internal static class TrafficIntegration
     {

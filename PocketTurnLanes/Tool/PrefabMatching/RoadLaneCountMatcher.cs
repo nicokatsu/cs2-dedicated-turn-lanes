@@ -1,6 +1,6 @@
 using Game.Prefabs;
 
-namespace PocketTurnLanes.Tool
+namespace PocketTurnLanes.Tool.PrefabMatching
 {
     internal static class RoadLaneCountMatcher
     {

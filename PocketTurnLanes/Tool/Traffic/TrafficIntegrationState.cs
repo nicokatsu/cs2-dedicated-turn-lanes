@@ -1,4 +1,4 @@
-namespace PocketTurnLanes.Tool
+namespace PocketTurnLanes.Tool.Traffic
 {
     public static class TrafficIntegrationState
     {

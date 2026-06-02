@@ -1,4 +1,4 @@
-namespace PocketTurnLanes.Tool
+namespace PocketTurnLanes.Tool.PrefabMatching
 {
     internal struct RoadLaneCounts
     {
