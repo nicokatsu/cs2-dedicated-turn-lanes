@@ -3,7 +3,7 @@ using System.Linq;
 using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
-using Unity.Mathematics;
+
 namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
@@ -25,17 +25,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static string FormatLaneOrder(IReadOnlyList<LaneEndpoint> lanes)
         {
-            if (lanes == null || lanes.Count == 0)
-            {
-                return "<none>";
-            }
-
-            return string.Join(",", lanes.Select(lane => $"{lane.Endpoint}{lane.LaneIndex}|C{lane.OppositeLaneIndex}@{lane.Lateral:0.##}/{FormatEntity(lane.LaneEntity)} lanePos={FormatFloat3(lane.LanePosition)} cg={lane.CarriagewayAndGroup} methods=[{lane.PathMethods}] laneFlags=[{lane.LaneFlags}] carFlags=[{lane.CarFlags}] roadTypes=[{lane.RoadTypes}] trackTypes=[{lane.TrackTypes}] hasCarData={lane.HasCarLaneData} hasTrackData={lane.HasTrackLaneData} netTrack={lane.HasNetTrackLane}"));
-        }
-
-        private static string FormatFloat3(float3 value)
-        {
-            return DiagnosticFormat.Float3(value);
+            return TrafficLaneEndpointDiagnostics.FormatLaneOrder(lanes);
         }
 
         private static string FormatMappings(IReadOnlyList<LaneMapping> mappings)

@@ -296,19 +296,7 @@ namespace PocketTurnLanes.Tool.Traffic
 
         private static string FormatLaneOrder(IReadOnlyList<LaneEndpoint> lanes)
         {
-            if (lanes == null || lanes.Count == 0)
-            {
-                return "<none>";
-            }
-
-            List<string> values = new List<string>(lanes.Count);
-            for (int i = 0; i < lanes.Count; i++)
-            {
-                LaneEndpoint lane = lanes[i];
-                values.Add($"{lane.Endpoint}{lane.LaneIndex}|C{lane.OppositeLaneIndex}@{lane.Lateral:0.##}/{FormatEntity(lane.LaneEntity)} lanePos={DiagnosticFormat.Float3(lane.LanePosition)} cg={lane.CarriagewayAndGroup} methods=[{lane.PathMethods}] laneFlags=[{lane.LaneFlags}] carFlags=[{lane.CarFlags}] roadTypes=[{lane.RoadTypes}] trackTypes=[{lane.TrackTypes}] hasCarData={lane.HasCarLaneData} hasTrackData={lane.HasTrackLaneData} netTrack={lane.HasNetTrackLane}");
-            }
-
-            return string.Join(",", values);
+            return TrafficLaneEndpointDiagnostics.FormatLaneOrder(lanes);
         }
 
         private static string FormatEntity(Entity entity)
