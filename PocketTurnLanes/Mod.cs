@@ -30,15 +30,30 @@ namespace PocketTurnLanes
         {
             LogEssential($"{DisplayName} {nameof(OnLoad)} bindingGroup={BindingGroup}");
 
+            InitializeSettings();
+            LogCurrentModAsset();
+            InitializeTrafficIntegration();
+            CreateSystems(updateSystem);
+            RegisterSystemUpdates(updateSystem);
+        }
+
+        private void InitializeSettings()
+        {
             m_SettingsManager = new ModSettingsManager(this);
             ModLogger.SetDiagnosticLoggingProvider(() => m_SettingsManager?.DiagnosticLoggingEnabled ?? false);
             m_SettingsManager.Load();
+        }
 
+        private void LogCurrentModAsset()
+        {
             if (GameManager.instance.modManager.TryGetExecutableAsset(this, out var asset))
             {
                 LogEssential($"Current mod asset at {asset.path}");
             }
+        }
 
+        private static void InitializeTrafficIntegration()
+        {
             TrafficIntegrationStatus trafficStatus = TrafficIntegration.DetectTrafficMod();
             bool trafficDetected = trafficStatus.DetectedOnLoad;
             bool trafficRepairEnabled = TrafficIntegration.ShouldEnableLaneConnectionRepair(trafficDetected);
@@ -48,7 +63,10 @@ namespace PocketTurnLanes
             TrafficModDetected = trafficDetected;
             TrafficLaneConnectionFixEnabled = trafficRepairEnabled;
             LogEssential($"[SplitLaneConnectionFix] Traffic integration state trafficDetected={TrafficModDetected} repairSystemsEnabled={TrafficLaneConnectionFixEnabled} guardedFallback={trafficStatus.GuardedFallback}");
+        }
 
+        private static void CreateSystems(UpdateSystem updateSystem)
+        {
             updateSystem.World.GetOrCreateSystemManaged<Game.Tools.NetToolSystem>();
             updateSystem.World.GetOrCreateSystemManaged<IntersectionOverlaySystem>();
             updateSystem.World.GetOrCreateSystemManaged<IntersectionToolSystem>();
@@ -59,9 +77,12 @@ namespace PocketTurnLanes
                 updateSystem.World.GetOrCreateSystemManaged<SplitLaneConnectionFixSystem>();
                 updateSystem.World.GetOrCreateSystemManaged<SplitLaneConnectionCleanupSystem>();
             }
+        }
 
+        private static void RegisterSystemUpdates(UpdateSystem updateSystem)
+        {
             updateSystem.UpdateAt<IntersectionToolSystem>(SystemUpdatePhase.ToolUpdate);
-            SplitLaneConnectionRepairSystemRegistration.Register(updateSystem, trafficRepairEnabled, trafficDetected);
+            SplitLaneConnectionRepairSystemRegistration.Register(updateSystem, TrafficLaneConnectionFixEnabled, TrafficModDetected);
             updateSystem.UpdateAt<PocketTurnLaneUISystem>(SystemUpdatePhase.UIUpdate);
         }
 
