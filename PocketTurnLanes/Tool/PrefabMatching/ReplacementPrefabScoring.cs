@@ -6,6 +6,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
     internal static class ReplacementPrefabScoring
     {
         private const int DlcSourceNonDlcCandidatePenalty = 5000;
+        private const int TramUpgradeFallbackPenalty = 20000;
+        private const int IndependentTramTargetPreference = 1000;
+        private const int PublicTransportTramTargetPenalty = 500;
+        private const int OtherTramTargetPenalty = 1000;
+        private const int MissingTramTargetPenalty = 50000;
         private const float PublicTransportLayoutOffsetScoreScale = 100f;
         private const int PublicTransportLayoutMissingDirectionPenalty = 2500;
         private const int PublicTransportLayoutCountMismatchPenalty = 750;
@@ -30,6 +35,45 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 orientedCandidateBusLayout);
             detail = $"targetLayoutSource={candidateProfile.Source} sourceTram={sourceProfile.TramTrackLayout} targetTram={orientedCandidateTramLayout} sourceBus={sourceProfile.BusLaneLayout} targetBus={orientedCandidateBusLayout}";
             return tramLayoutScore + busLayoutScore;
+        }
+
+        public static int GetTramTargetScoreAdjustment(
+            bool sourceHasTramTracks,
+            RoadLaneCounts requiredTramCounts,
+            bool targetUsesTramUpgradeFallback,
+            bool targetHasTramTrackMatch,
+            bool targetHasIndependentTram,
+            RoadLaneCounts targetIndependentTramCounts,
+            bool targetHasPublicTransportTram,
+            RoadLaneCounts targetPublicTransportTramCounts,
+            bool invert)
+        {
+            int score = targetUsesTramUpgradeFallback
+                ? TramUpgradeFallbackPenalty
+                : 0;
+            if (!sourceHasTramTracks)
+            {
+                return score;
+            }
+
+            if (!targetHasTramTrackMatch)
+            {
+                return score + MissingTramTargetPenalty;
+            }
+
+            if (targetHasIndependentTram &&
+                RoadLaneCountMatcher.CountsMatchForOrientation(targetIndependentTramCounts, requiredTramCounts, invert))
+            {
+                return score - IndependentTramTargetPreference;
+            }
+
+            if (targetHasPublicTransportTram &&
+                RoadLaneCountMatcher.CountsMatchForOrientation(targetPublicTransportTramCounts, requiredTramCounts, invert))
+            {
+                return score + PublicTransportTramTargetPenalty;
+            }
+
+            return score + OtherTramTargetPenalty;
         }
 
         public static int GetDirectionalLayoutOffsetScore(

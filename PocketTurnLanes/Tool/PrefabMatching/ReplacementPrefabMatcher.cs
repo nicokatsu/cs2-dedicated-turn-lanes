@@ -13,11 +13,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
     internal sealed class ReplacementPrefabMatcher
     {
         private const float PrefabWidthTolerance = 0.05f;
-        private const int TramUpgradeFallbackPenalty = 20000;
-        private const int IndependentTramTargetPreference = 1000;
-        private const int PublicTransportTramTargetPenalty = 500;
-        private const int OtherTramTargetPenalty = 1000;
-        private const int MissingTramTargetPenalty = 50000;
 
         private readonly EntityManager m_EntityManager;
         private readonly PrefabSystem m_PrefabSystem;
@@ -440,35 +435,19 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     $"candidate={candidate.Name} orientation={(candidateMatch.Invert ? "reversed" : "direct")} score={score} candidateRoad={candidate.Profile.RoadCounts} targetSource={candidateMatch.TargetLayoutProfile.Source} targetBus={orientedTargetBusLayout} targetBusDetail={candidateMatch.TargetLayoutProfile.BusLaneDetail} targetPublicTransportTram={candidateMatch.TargetPublicTransportTramCounts} targetUpgrade={(candidateMatch.HasTargetUpgrade ? candidateMatch.TargetUpgrade.m_Flags.ToString() : "none")}");
             }
 
-            if (candidateMatch.TargetUsesTramUpgradeFallback)
-            {
-                score += TramUpgradeFallbackPenalty;
-            }
-
-            if (source.HasTramTracks)
-            {
-                RoadLaneCounts requiredTramCounts = source.HasIndependentTram
-                    ? source.Profile.IndependentTramCounts
-                    : source.Profile.TramTrackCounts;
-                if (!candidateMatch.TargetHasTramTrackMatch)
-                {
-                    score += MissingTramTargetPenalty;
-                }
-                else if (candidateMatch.TargetHasIndependentTram &&
-                         CountsMatchForOrientation(candidateMatch.TargetIndependentTramCounts, requiredTramCounts, candidateMatch.Invert))
-                {
-                    score -= IndependentTramTargetPreference;
-                }
-                else if (candidateMatch.TargetHasPublicTransportTram &&
-                         CountsMatchForOrientation(candidateMatch.TargetPublicTransportTramCounts, requiredTramCounts, candidateMatch.Invert))
-                {
-                    score += PublicTransportTramTargetPenalty;
-                }
-                else
-                {
-                    score += OtherTramTargetPenalty;
-                }
-            }
+            RoadLaneCounts requiredTramCounts = source.HasIndependentTram
+                ? source.Profile.IndependentTramCounts
+                : source.Profile.TramTrackCounts;
+            score += ReplacementPrefabScoring.GetTramTargetScoreAdjustment(
+                source.HasTramTracks,
+                requiredTramCounts,
+                candidateMatch.TargetUsesTramUpgradeFallback,
+                candidateMatch.TargetHasTramTrackMatch,
+                candidateMatch.TargetHasIndependentTram,
+                candidateMatch.TargetIndependentTramCounts,
+                candidateMatch.TargetHasPublicTransportTram,
+                candidateMatch.TargetPublicTransportTramCounts,
+                candidateMatch.Invert);
 
             return new CandidateScoreResult
             {
