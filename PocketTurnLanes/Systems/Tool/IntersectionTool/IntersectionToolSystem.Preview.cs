@@ -80,7 +80,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private JobHandle ClearPreviewDefinitions(JobHandle inputDeps, string reason)
         {
             applyMode = ApplyMode.Clear;
-            JobHandle result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
+            JobHandle result = DestroyToolDefinitions(inputDeps);
             ResetPreviewState();
             Mod.LogDiagnostic($"[IntersectionTool] Cleared split preview definitions ({reason}).");
             return result;
@@ -194,7 +194,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             {
                 int replacementPreviewDefinitionCount = m_ReplacementPreviewDefinitionQuery.CalculateEntityCount();
                 applyMode = ApplyMode.Clear;
-                JobHandle clearResult = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
+                JobHandle clearResult = DestroyToolDefinitions(inputDeps);
                 m_HasReplacementPreviewDefinitions = false;
                 m_NormalReplacementPreviewDefinitionsQueued = false;
                 if (m_PreviewNodeMergeCandidates.Count > 0)
@@ -358,7 +358,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         {
             int replacementPreviewDefinitionCount = m_ReplacementPreviewDefinitionQuery.CalculateEntityCount();
             applyMode = ApplyMode.Clear;
-            JobHandle result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
+            JobHandle result = DestroyToolDefinitions(inputDeps);
             m_HasReplacementPreviewDefinitions = false;
             m_NormalReplacementPreviewDefinitionsQueued = false;
             if (m_HasShortEdgeReplacementPreviewDefinitions)
@@ -568,7 +568,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }.Schedule(result);
 
             m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
-            result = createDefinitionJobHandle;
+            result = TrackToolUpdateJobHandle(createDefinitionJobHandle);
             return true;
         }
 

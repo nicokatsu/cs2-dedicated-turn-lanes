@@ -233,7 +233,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             applyMode = ApplyMode.Clear;
-            inputDeps = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps);
+            inputDeps = DestroyToolDefinitions(inputDeps);
             m_PreviewCandidates.Clear();
             m_NextPreviewCandidates.Clear();
             m_PreviewNodeMergeCandidates.Clear();

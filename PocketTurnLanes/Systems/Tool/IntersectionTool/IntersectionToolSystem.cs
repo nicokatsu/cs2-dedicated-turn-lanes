@@ -77,6 +77,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private readonly List<ReplacementCandidate> m_QueuedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_AppliedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_PendingLaneRepairCandidates = new List<ReplacementCandidate>();
+        private JobHandle m_LastToolUpdateJobHandle;
 
         public event Action<bool> ToolEnabledChanged;
 
@@ -131,34 +132,71 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
         protected override void OnDestroy()
         {
-            SetVanillaMutationSystemsEnabled(true);
             m_ToolSystem.EventToolChanged -= ToolChanged;
+
+            try
+            {
+                JobHandle cleanupHandle = ClearDefinitionsAndResetForToolExit(
+                    m_LastToolUpdateJobHandle,
+                    "system destroy",
+                    true,
+                    out string cleanupDetail);
+                cleanupHandle.Complete();
+                Mod.LogDiagnostic($"[IntersectionTool] Destroy cleanup complete. {cleanupDetail}");
+            }
+            catch (Exception ex)
+            {
+                SetVanillaMutationSystemsEnabled(true);
+                Mod.LogException(ex, "[IntersectionTool] Failed during destroy cleanup; restored vanilla mutation systems.");
+            }
+
             base.OnDestroy();
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
+            TrackToolUpdateJobHandle(inputDeps);
             try
             {
-                return OnUpdateCore(inputDeps);
+                JobHandle result = OnUpdateCore(inputDeps);
+                return TrackToolUpdateJobHandle(result);
             }
             catch (Exception ex)
             {
                 string state = GetUnhandledUpdateState();
-                TryRecoverFromUnhandledUpdateException(state);
-                Mod.LogException(ex, $"[IntersectionTool] Unhandled exception during tool update; restored vanilla mutation systems and disabled the tool to avoid leaving preview mutation guards stuck. {state}");
-                return inputDeps;
+                JobHandle recoveryHandle = m_LastToolUpdateJobHandle;
+                bool recoverySucceeded = false;
+                string recoveryDetail = "<not-started>";
+
+                try
+                {
+                    recoveryHandle = ClearDefinitionsAndResetForToolExit(
+                        recoveryHandle,
+                        "unhandled tool update exception",
+                        true,
+                        out recoveryDetail);
+                    recoverySucceeded = true;
+                }
+                catch (Exception recoveryException)
+                {
+                    SetVanillaMutationSystemsEnabled(true);
+                    recoveryDetail = $"{recoveryDetail} recoveryException={recoveryException.GetType().Name}:{recoveryException.Message}";
+                    Mod.LogException(recoveryException, $"[IntersectionTool] Failed while recovering from unhandled tool update exception. {state}");
+                }
+
+                Mod.LogException(ex, $"[IntersectionTool] Unhandled exception during tool update; recoverySucceeded={recoverySucceeded} recoveryDetail=({recoveryDetail}) {state}");
+                return TrackToolUpdateJobHandle(recoveryHandle);
             }
         }
 
         private JobHandle OnUpdateCore(JobHandle inputDeps)
         {
-            JobHandle result = inputDeps;
+            JobHandle result = TrackToolUpdateJobHandle(inputDeps);
 
             if (m_ClearSplitDefinitions)
             {
                 applyMode = ApplyMode.Clear;
-                result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, result);
+                result = DestroyToolDefinitions(result);
                 Mod.LogDiagnostic("[IntersectionTool] Split apply window closed; cleared split definition entities.");
                 m_ClearSplitDefinitions = false;
 
@@ -292,8 +330,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
             if (secondaryApplyAction.WasPressedThisFrame())
             {
-                result = ClearPreviewDefinitions(result, "tool cancelled");
-                DisableTool();
+                result = DisableTool(result, "tool cancelled");
                 return result;
             }
 
@@ -359,7 +396,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 if (hasReplacementPreviewDefinitions || needsNodeMergeApplyDefinitions)
                 {
                     applyMode = ApplyMode.Clear;
-                    result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, result);
+                    result = DestroyToolDefinitions(result);
                     m_HasReplacementPreviewDefinitions = false;
                     m_HasShortEdgeReplacementPreviewDefinitions = false;
                     m_NormalReplacementPreviewDefinitionsQueued = false;
@@ -395,31 +432,72 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return result;
         }
 
-        private string GetUnhandledUpdateState()
+        private JobHandle TrackToolUpdateJobHandle(JobHandle handle)
         {
-            return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} queuedReplacements={m_QueuedReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} frame={UnityEngine.Time.frameCount}";
+            m_LastToolUpdateJobHandle = handle;
+            return handle;
         }
 
-        private void TryRecoverFromUnhandledUpdateException(string state)
+        private JobHandle DestroyToolDefinitions(JobHandle inputDeps)
+        {
+            return TrackToolUpdateJobHandle(DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, inputDeps));
+        }
+
+        private JobHandle ClearDefinitionsAndResetForToolExit(
+            JobHandle inputDeps,
+            string reason,
+            bool switchToDefaultTool,
+            out string detail)
+        {
+            Entity previousHover = m_HoveredIntersection;
+            Entity previousPreview = m_PreviewIntersection;
+            Entity previousPreviewEdge = m_PreviewEdge;
+            int previousPreviewEdges = m_PreviewEdgeCount;
+            bool hadPreviewState = HasPreviewState();
+            bool wasEnabled = IsToolEnabled;
+            int definitionCountBefore = CalculateEntityCountSafe(m_DefinitionQuery);
+            int replacementDefinitionCountBefore = CalculateEntityCountSafe(m_ReplacementPreviewDefinitionQuery);
+
+            applyMode = ApplyMode.Clear;
+            JobHandle result = DestroyToolDefinitions(inputDeps);
+
+            UpdateHoveredIntersection(Entity.Null);
+            m_OverlaySystem?.Clear();
+            ResetPreviewState();
+
+            bool toolStateChanged = SetToolEnabled(false);
+            bool switchedToDefaultTool = false;
+            if (switchToDefaultTool &&
+                m_ToolSystem != null &&
+                m_ToolSystem.activeTool == this)
+            {
+                m_ToolSystem.activeTool = m_DefaultToolSystem;
+                switchedToDefaultTool = true;
+            }
+
+            SetVanillaMutationSystemsEnabled(true);
+
+            detail = $"reason={reason} wasEnabled={wasEnabled} toolStateChanged={toolStateChanged} switchedToDefaultTool={switchedToDefaultTool} hadPreviewState={hadPreviewState} definitionCountBefore={definitionCountBefore} replacementPreviewDefinitionCountBefore={replacementDefinitionCountBefore} previousHover={FormatEntity(previousHover)} previousPreview={FormatEntity(previousPreview)} previousPreviewEdge={FormatEntity(previousPreviewEdge)} previousPreviewEdges={previousPreviewEdges}";
+            return result;
+        }
+
+        private static int CalculateEntityCountSafe(EntityQuery query)
         {
             try
             {
-                UpdateHoveredIntersection(Entity.Null);
-                ResetPreviewState();
-                SetToolEnabled(false);
-                if (m_ToolSystem != null && m_ToolSystem.activeTool == this)
-                {
-                    m_ToolSystem.activeTool = m_DefaultToolSystem;
-                }
+                return query.CalculateEntityCount();
             }
-            catch (Exception recoveryException)
+            catch
             {
-                Mod.LogException(recoveryException, $"[IntersectionTool] Failed while recovering from unhandled tool update exception. {state}");
+                return -1;
             }
-            finally
-            {
-                SetVanillaMutationSystemsEnabled(true);
-            }
+        }
+
+        private string GetUnhandledUpdateState()
+        {
+            int definitionCount = CalculateEntityCountSafe(m_DefinitionQuery);
+            int replacementDefinitionCount = CalculateEntityCountSafe(m_ReplacementPreviewDefinitionQuery);
+            return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} queuedReplacements={m_QueuedReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} definitions={definitionCount} replacementPreviewDefinitions={replacementDefinitionCount} frame={UnityEngine.Time.frameCount}";
         }
 
         public override bool TrySetPrefab(PrefabBase prefab)
@@ -470,20 +548,19 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
         public void DisableTool()
         {
+            DisableTool(m_LastToolUpdateJobHandle, "tool disabled");
+        }
+
+        private JobHandle DisableTool(JobHandle inputDeps, string reason)
+        {
             bool wasEnabled = IsToolEnabled;
-
-            if (m_ToolSystem.activeTool == this)
+            JobHandle result = ClearDefinitionsAndResetForToolExit(inputDeps, reason, true, out string cleanupDetail);
+            if (wasEnabled)
             {
-                m_ToolSystem.activeTool = m_DefaultToolSystem;
+                Mod.LogEssential($"[IntersectionTool] Disabled. {cleanupDetail}");
             }
 
-            UpdateHoveredIntersection(Entity.Null);
-            ResetPreviewState();
-            if (SetToolEnabled(false) || wasEnabled)
-            {
-                SetVanillaMutationSystemsEnabled(true);
-                Mod.LogEssential("[IntersectionTool] Disabled.");
-            }
+            return result;
         }
 
 
@@ -526,10 +603,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         {
             if (system != this && IsToolEnabled)
             {
-                UpdateHoveredIntersection(Entity.Null);
-                SetToolEnabled(false);
-                SetVanillaMutationSystemsEnabled(true);
-                Mod.LogEssential($"[IntersectionTool] Disabled because active tool changed to {system?.toolID ?? "<null>"}; restored vanilla mutation systems.");
+                JobHandle result = ClearDefinitionsAndResetForToolExit(
+                    m_LastToolUpdateJobHandle,
+                    $"active tool changed to {system?.toolID ?? "<null>"}",
+                    false,
+                    out string cleanupDetail);
+                TrackToolUpdateJobHandle(result);
+                Mod.LogEssential($"[IntersectionTool] Disabled because active tool changed to {system?.toolID ?? "<null>"}; restored vanilla mutation systems. {cleanupDetail}");
             }
         }
 
@@ -591,7 +671,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             UpdateHoveredIntersection(Entity.Null);
             ResetPreviewState();
             applyMode = ApplyMode.Clear;
-            result = DestroyDefinitions(m_DefinitionQuery, m_ToolOutputBarrier, result);
+            result = DestroyToolDefinitions(result);
 
             Mod.LogDiagnostic($"[IntersectionTool] Underground mode synchronized underground={Underground} previousRequireUnderground={previousRequireUnderground} requireUnderground={requireUnderground} collisionMask={GetCurrentCollisionMask()} clearedPreview={hadPreviewState} previousHover={FormatEntity(previousHover)} previousPreview={FormatEntity(previousPreview)} previousPreviewEdges={previousPreviewEdges}.");
             return true;

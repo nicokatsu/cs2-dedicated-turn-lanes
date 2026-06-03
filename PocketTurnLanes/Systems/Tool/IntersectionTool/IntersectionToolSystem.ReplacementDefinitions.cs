@@ -21,7 +21,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }.Schedule(inputDeps);
 
             m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
-            return createDefinitionJobHandle;
+            return TrackToolUpdateJobHandle(createDefinitionJobHandle);
         }
 
         private JobHandle ScheduleReplacementDefinition(ReplacementDefinitionRequest request, JobHandle inputDeps)
@@ -33,7 +33,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }.Schedule(inputDeps);
 
             m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
-            return createDefinitionJobHandle;
+            return TrackToolUpdateJobHandle(createDefinitionJobHandle);
         }
 
         private static SplitCandidate CreateSplitCandidate(

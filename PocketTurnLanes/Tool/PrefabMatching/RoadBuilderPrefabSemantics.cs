@@ -138,7 +138,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             if (!m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase))
             {
-                detail = $"roadBuilderVisibility=unknown reason=missing-prefab prefabEntity={FormatEntity(prefabEntity)}";
+                detail = $"roadBuilderVisibility=unknown reason=missing-prefab prefabEntity={DiagnosticFormat.Entity(prefabEntity)}";
                 return false;
             }
 
@@ -309,7 +309,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             if (!m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase))
             {
-                detail = $"roadBuilderConfig=missing-prefab prefabEntity={FormatEntity(prefabEntity)}";
+                detail = $"roadBuilderConfig=missing-prefab prefabEntity={DiagnosticFormat.Entity(prefabEntity)}";
                 return false;
             }
 
@@ -361,11 +361,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             detail = $"roadBuilderConfig=loaded prefab={prefabBase.name} lanes={lanes.Count} configType={config.GetType().FullName} propertyReadErrors={propertyReadErrors}";
             return lanes.Count > 0;
-        }
-
-        private static string FormatEntity(Entity entity)
-        {
-            return DiagnosticFormat.Entity(entity);
         }
 
         private static MethodInfo FindIsInPlaysetMethod(Type extensionType, Type configType)
