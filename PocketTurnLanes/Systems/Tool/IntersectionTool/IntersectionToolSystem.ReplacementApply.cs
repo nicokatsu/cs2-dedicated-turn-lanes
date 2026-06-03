@@ -157,7 +157,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return true;
             }
 
-            if (!TryGetRoadLaneProfile(edgeEntity, candidate.TargetPrefab, out RoadLaneProfile profile))
+            if (!m_ReplacementPrefabMatcher.TryGetRoadLaneProfile(edgeEntity, candidate.TargetPrefab, out RoadLaneProfile profile))
             {
                 detail = "same-prefab profile=missing";
                 return false;
@@ -209,26 +209,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 splitCandidate.TargetPrefab != splitCandidate.SourcePrefab)
             {
                 Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement already present after split original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} targetPrefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} splitNodeDistance={splitNodeDistance:0.##}m lengthError={lengthError:0.##}m.");
-                ReplacementCandidate alreadyReplacedCandidate = new ReplacementCandidate
-                {
-                    Node = splitCandidate.Node,
-                    FarNode = splitCandidate.FarNode,
-                    SplitNode = splitNode,
-                    OriginalEdge = splitCandidate.Edge,
-                    PocketEdge = pocketEdge,
-                    SourcePrefab = splitCandidate.SourcePrefab,
-                    TargetPrefab = splitCandidate.TargetPrefab,
-                    LaneRepairMode = splitCandidate.LaneRepairMode,
-                    InvertTarget = splitCandidate.InvertTarget,
-                    HasTargetUpgrade = splitCandidate.HasTargetUpgrade,
-                    TargetUpgrade = splitCandidate.TargetUpgrade,
-                    HitPosition = splitCandidate.HitPosition,
-                    OriginalForwardLanes = splitCandidate.OriginalForwardLanes,
-                    OriginalBackwardLanes = splitCandidate.OriginalBackwardLanes,
-                    TargetForwardLanes = splitCandidate.TargetForwardLanes,
-                    TargetBackwardLanes = splitCandidate.TargetBackwardLanes,
-                    FarIntersectionSnapshot = splitCandidate.FarIntersectionSnapshot
-                };
+                ReplacementCandidate alreadyReplacedCandidate = CreateReplacementCandidate(splitCandidate, splitNode, pocketEdge);
                 DeferSplitLaneConnectionFix(alreadyReplacedCandidate, pocketEdge, "already-target-prefab");
 
                 return false;
@@ -238,39 +219,14 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement uses the source prefab; queueing a replacement definition to refresh runtime composition original={FormatEntity(splitCandidate.Edge)} pocket={FormatEntity(pocketEdge)} splitNode={FormatEntity(splitNode)} prefab={GetPrefabNameFromPrefab(splitCandidate.TargetPrefab)} orientation={(splitCandidate.InvertTarget ? "reversed" : "direct")} lanes={splitCandidate.OriginalForwardLanes}/{splitCandidate.OriginalBackwardLanes}->{splitCandidate.TargetForwardLanes}/{splitCandidate.TargetBackwardLanes}.");
             }
 
-            ReplacementCandidate replacementCandidate = new ReplacementCandidate
-            {
-                Node = splitCandidate.Node,
-                FarNode = splitCandidate.FarNode,
-                SplitNode = splitNode,
-                OriginalEdge = splitCandidate.Edge,
-                PocketEdge = pocketEdge,
-                SourcePrefab = splitCandidate.SourcePrefab,
-                TargetPrefab = splitCandidate.TargetPrefab,
-                LaneRepairMode = splitCandidate.LaneRepairMode,
-                InvertTarget = splitCandidate.InvertTarget,
-                HasTargetUpgrade = splitCandidate.HasTargetUpgrade,
-                TargetUpgrade = splitCandidate.TargetUpgrade,
-                HitPosition = splitCandidate.HitPosition,
-                OriginalForwardLanes = splitCandidate.OriginalForwardLanes,
-                OriginalBackwardLanes = splitCandidate.OriginalBackwardLanes,
-                TargetForwardLanes = splitCandidate.TargetForwardLanes,
-                TargetBackwardLanes = splitCandidate.TargetBackwardLanes,
-                FarIntersectionSnapshot = splitCandidate.FarIntersectionSnapshot
-            };
+            ReplacementCandidate replacementCandidate = CreateReplacementCandidate(splitCandidate, splitNode, pocketEdge);
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest request))
             {
                 return false;
             }
 
-            JobHandle createDefinitionJobHandle = new CreateReplacementDefinitionJob
-            {
-                Request = request,
-                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-            }.Schedule(result);
-
-            m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+            JobHandle createDefinitionJobHandle = ScheduleReplacementDefinition(request, result);
             result = createDefinitionJobHandle;
             m_QueuedReplacementCandidates.Add(replacementCandidate);
 

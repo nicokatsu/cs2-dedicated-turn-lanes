@@ -4,12 +4,185 @@ using Game.Common;
 using Game.Net;
 using Game.Prefabs;
 using Game.Tools;
+using PocketTurnLanes.Tool.PrefabMatching;
 using Unity.Entities;
+using Unity.Jobs;
 
 namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
     public partial class IntersectionToolSystem
     {
+        private JobHandle ScheduleSplitDefinition(SplitDefinitionRequest request, JobHandle inputDeps)
+        {
+            JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
+            {
+                Request = request,
+                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+            }.Schedule(inputDeps);
+
+            m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+            return createDefinitionJobHandle;
+        }
+
+        private JobHandle ScheduleReplacementDefinition(ReplacementDefinitionRequest request, JobHandle inputDeps)
+        {
+            JobHandle createDefinitionJobHandle = new CreateReplacementDefinitionJob
+            {
+                Request = request,
+                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
+            }.Schedule(inputDeps);
+
+            m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+            return createDefinitionJobHandle;
+        }
+
+        private static SplitCandidate CreateSplitCandidate(
+            Entity node,
+            Entity edge,
+            SplitDefinitionPlan splitPlan,
+            ReplacementPrefabMatch prefabMatch)
+        {
+            return new SplitCandidate
+            {
+                Node = node,
+                Edge = edge,
+                SourcePrefab = splitPlan.Request.Prefab,
+                TargetPrefab = prefabMatch.Prefab,
+                InvertTarget = prefabMatch.Invert,
+                HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
+                TargetUpgrade = prefabMatch.TargetUpgrade,
+                CurvePosition = splitPlan.CurvePosition,
+                HitPosition = splitPlan.Request.HitPosition,
+                TargetDistance = splitPlan.TargetDistance,
+                TargetPocketLength = splitPlan.TargetPocketLength,
+                SplitDistance = splitPlan.SplitDistance,
+                IntersectionDistance = splitPlan.IntersectionDistance,
+                PocketDistance = splitPlan.PocketDistance,
+                OriginalForwardLanes = prefabMatch.OriginalCounts.Forward,
+                OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
+                TargetForwardLanes = prefabMatch.TargetCounts.Forward,
+                TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                Attempt = 0
+            };
+        }
+
+        private static SplitCandidate UpdateSplitCandidate(
+            SplitCandidate candidate,
+            SplitDefinitionPlan splitPlan,
+            int attempt)
+        {
+            candidate.CurvePosition = splitPlan.CurvePosition;
+            candidate.HitPosition = splitPlan.Request.HitPosition;
+            candidate.TargetDistance = splitPlan.TargetDistance;
+            candidate.TargetPocketLength = splitPlan.TargetPocketLength;
+            candidate.SplitDistance = splitPlan.SplitDistance;
+            candidate.IntersectionDistance = splitPlan.IntersectionDistance;
+            candidate.PocketDistance = splitPlan.PocketDistance;
+            candidate.Attempt = attempt;
+            return candidate;
+        }
+
+        private static SplitCandidate CreateSplitCandidate(
+            NodeMergeCandidate candidate,
+            Entity edge,
+            SplitDefinitionRequest request,
+            float curvePosition,
+            float splitDistance,
+            float intersectionDistance,
+            float pocketDistance,
+            float targetDistance,
+            float targetPocketLength)
+        {
+            return new SplitCandidate
+            {
+                Node = candidate.Node,
+                FarNode = candidate.FarNode,
+                Edge = edge,
+                SourcePrefab = candidate.MergeRequest.Prefab,
+                TargetPrefab = candidate.TargetPrefab,
+                LaneRepairMode = candidate.LaneRepairMode,
+                InvertTarget = candidate.PostMergeInvertTarget,
+                HasTargetUpgrade = candidate.HasTargetUpgrade,
+                TargetUpgrade = candidate.TargetUpgrade,
+                CurvePosition = curvePosition,
+                HitPosition = request.HitPosition,
+                TargetDistance = targetDistance,
+                TargetPocketLength = targetPocketLength,
+                SplitDistance = splitDistance,
+                IntersectionDistance = intersectionDistance,
+                PocketDistance = pocketDistance,
+                OriginalForwardLanes = candidate.OriginalForwardLanes,
+                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
+                TargetForwardLanes = candidate.TargetForwardLanes,
+                TargetBackwardLanes = candidate.TargetBackwardLanes,
+                Attempt = 0,
+                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
+            };
+        }
+
+        private static ReplacementCandidate CreateReplacementCandidate(
+            SplitCandidate candidate,
+            Entity splitNode,
+            Entity pocketEdge)
+        {
+            return new ReplacementCandidate
+            {
+                Node = candidate.Node,
+                FarNode = candidate.FarNode,
+                SplitNode = splitNode,
+                OriginalEdge = candidate.Edge,
+                PocketEdge = pocketEdge,
+                SourcePrefab = candidate.SourcePrefab,
+                TargetPrefab = candidate.TargetPrefab,
+                LaneRepairMode = candidate.LaneRepairMode,
+                InvertTarget = candidate.InvertTarget,
+                HasTargetUpgrade = candidate.HasTargetUpgrade,
+                TargetUpgrade = candidate.TargetUpgrade,
+                HitPosition = candidate.HitPosition,
+                OriginalForwardLanes = candidate.OriginalForwardLanes,
+                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
+                TargetForwardLanes = candidate.TargetForwardLanes,
+                TargetBackwardLanes = candidate.TargetBackwardLanes,
+                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
+            };
+        }
+
+        private static ReplacementCandidate CreateShortEdgeReplacementCandidate(
+            NodeMergeCandidate candidate,
+            Entity splitNode,
+            Entity pocketEdge,
+            bool includeTransitionState)
+        {
+            ReplacementCandidate replacementCandidate = new ReplacementCandidate
+            {
+                Node = candidate.Node,
+                FarNode = includeTransitionState ? candidate.FarNode : Entity.Null,
+                SplitNode = splitNode,
+                OriginalEdge = candidate.ShortEdge,
+                PocketEdge = pocketEdge,
+                SourcePrefab = candidate.SourcePrefab,
+                TargetPrefab = candidate.TargetPrefab,
+                LaneRepairMode = candidate.LaneRepairMode,
+                InvertTarget = candidate.InvertTarget,
+                HasTargetUpgrade = candidate.HasTargetUpgrade,
+                TargetUpgrade = candidate.TargetUpgrade,
+                HitPosition = candidate.ExpectedHitPosition,
+                OriginalForwardLanes = candidate.OriginalForwardLanes,
+                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
+                TargetForwardLanes = candidate.TargetForwardLanes,
+                TargetBackwardLanes = candidate.TargetBackwardLanes,
+                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
+            };
+
+            if (includeTransitionState)
+            {
+                replacementCandidate.TransitionOuterEdge = candidate.ContinuationEdge;
+                replacementCandidate.TransitionReverseSnapshot = candidate.TransitionReverseSnapshot;
+            }
+
+            return replacementCandidate;
+        }
+
         private bool TryBuildReplacementDefinitionRequest(
             ReplacementCandidate candidate,
             out ReplacementDefinitionRequest request)

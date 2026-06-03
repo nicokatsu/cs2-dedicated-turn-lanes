@@ -5,6 +5,7 @@ using Game.Net;
 using Game.Prefabs;
 using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.PrefabMatching;
+using PocketTurnLanes.Tool.SplitGeometry;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -80,36 +81,31 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 out float pocketEdgeGeometryWidth,
                 out float pocketPrefabWidth,
                 out string pocketLaneWidthDetail);
-            float requestedTargetPocketLengthBeforeCap = requestedTargetPocketLength > 0f
-                ? requestedTargetPocketLength
-                : adaptiveTargetPocketLength;
-            float maximumRequestedPocketLength = requestedTargetPocketLength > 0f
-                ? MaximumRetryPocketLaneLength
-                : MaximumWidthBasedPocketLaneLength;
-            plan.TargetPocketLength = requestedTargetPocketLength > 0f
-                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, maximumRequestedPocketLength)
-                : adaptiveTargetPocketLength;
-            float maxDistanceFromNode = GetMaximumSplitDistanceFromNode(curve, nodeIsStart, minSplit, maxSplit);
-            if (!HasMinimumPocketLength(maxDistanceFromNode - plan.IntersectionDistance))
+            plan.TargetPocketLength = ResolveTargetPocketLength(
+                adaptiveTargetPocketLength,
+                requestedTargetPocketLength,
+                out float requestedTargetPocketLengthBeforeCap,
+                out float maximumRequestedPocketLength,
+                out bool retryOverride);
+            if (!TryCalculateSafeSplitTargetPlan(
+                    curve.m_Bezier,
+                    nodeIsStart,
+                    minSplit,
+                    maxSplit,
+                    plan.IntersectionDistance,
+                    plan.TargetPocketLength,
+                    out SafeSplitTargetPlan targetPlan))
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: not enough room for a pocket lane (length={curve.m_Length:0.##}m intersection={plan.IntersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m availablePocket={maxDistanceFromNode - plan.IntersectionDistance:0.###}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.###}m tolerance={MinimumPocketLaneLengthTolerance:0.###}m requestedPocket={plan.TargetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
+                Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)}: not enough room for a pocket lane (length={curve.m_Length:0.##}m intersection={plan.IntersectionDistance:0.##}m maxDistanceFromNode={targetPlan.MaxDistanceFromNode:0.##}m availablePocket={targetPlan.MaxDistanceFromNode - plan.IntersectionDistance:0.###}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.###}m tolerance={MinimumPocketLaneLengthTolerance:0.###}m requestedPocket={plan.TargetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
                 return false;
             }
 
-            Mod.LogDiagnostic($"[IntersectionTool] Split target pocket length node={FormatEntity(nodeEntity)} edge={FormatEntity(edgeEntity)} prefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={plan.TargetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={maximumRequestedPocketLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={plan.IntersectionDistance:0.##}m.");
+            Mod.LogDiagnostic($"[IntersectionTool] Split target pocket length node={FormatEntity(nodeEntity)} edge={FormatEntity(edgeEntity)} prefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={plan.TargetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={maximumRequestedPocketLength:0.##}m retryOverride={retryOverride} maxDistanceFromNode={targetPlan.MaxDistanceFromNode:0.##}m intersection={plan.IntersectionDistance:0.##}m.");
 
-            float desiredDistance = GetGridAlignedSplitDistance(
-                plan.IntersectionDistance,
-                plan.TargetPocketLength,
-                MinimumPocketLaneLength,
-                maxDistanceFromNode);
-            plan.TargetDistance = desiredDistance;
-            float desiredPosition = GetCurvePositionAtDistance(curve, nodeIsStart, desiredDistance);
-            plan.CurvePosition = math.clamp(desiredPosition, minSplit, maxSplit);
-            plan.SplitDistance = GetCurveDistanceFromNode(curve, nodeIsStart, plan.CurvePosition);
-            plan.PocketDistance = math.max(0f, plan.SplitDistance - plan.IntersectionDistance);
-
-            float3 hitPosition = MathUtils.Position(curve.m_Bezier, plan.CurvePosition);
+            plan.TargetDistance = targetPlan.TargetDistance;
+            plan.CurvePosition = targetPlan.CurvePosition;
+            plan.SplitDistance = targetPlan.SplitDistance;
+            plan.PocketDistance = targetPlan.PocketDistance;
             int randomSeed = EntityManager.TryGetComponent(edgeEntity, out PseudoRandomSeed seed)
                 ? seed.m_Seed
                 : edgeEntity.Index;
@@ -118,7 +114,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             {
                 Edge = edgeEntity,
                 Prefab = prefabRef.m_Prefab,
-                HitPosition = hitPosition,
+                HitPosition = targetPlan.HitPosition,
                 CurvePosition = plan.CurvePosition,
                 RandomSeed = randomSeed
             };
@@ -633,7 +629,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             out string detail)
         {
             continuationRoadCounts = default;
-            if (!TryGetRoadLaneProfile(continuationEdge, prefabMatch.Prefab, out RoadLaneProfile continuationProfile))
+            if (!m_ReplacementPrefabMatcher.TryGetRoadLaneProfile(continuationEdge, prefabMatch.Prefab, out RoadLaneProfile continuationProfile))
             {
                 detail = "continuationProfile=missing";
                 return false;
@@ -801,39 +797,32 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 out float pocketEdgeGeometryWidth,
                 out float pocketPrefabWidth,
                 out string pocketLaneWidthDetail);
-            float requestedTargetPocketLengthBeforeCap = requestedTargetPocketLength > 0f
-                ? requestedTargetPocketLength
-                : adaptiveTargetPocketLength;
-            float maximumRequestedPocketLength = requestedTargetPocketLength > 0f
-                ? MaximumRetryPocketLaneLength
-                : MaximumWidthBasedPocketLaneLength;
-            targetPocketLength = requestedTargetPocketLength > 0f
-                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, maximumRequestedPocketLength)
-                : adaptiveTargetPocketLength;
-            float maxDistanceFromNode = GetMaximumSplitDistanceFromNode(
-                mergedBezier,
-                nodeIsStartOnMergedEdge,
-                minSplit,
-                maxSplit);
-            if (!HasMinimumPocketLength(maxDistanceFromNode - intersectionDistance))
+            targetPocketLength = ResolveTargetPocketLength(
+                adaptiveTargetPocketLength,
+                requestedTargetPocketLength,
+                out float requestedTargetPocketLengthBeforeCap,
+                out float maximumRequestedPocketLength,
+                out bool retryOverride);
+            if (!TryCalculateSafeSplitTargetPlan(
+                    mergedBezier,
+                    nodeIsStartOnMergedEdge,
+                    minSplit,
+                    maxSplit,
+                    intersectionDistance,
+                    targetPocketLength,
+                    out SafeSplitTargetPlan targetPlan))
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge still has no room for a pocket lane (mergedLength={mergedLength:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={maxDistanceFromNode:0.##}m availablePocket={maxDistanceFromNode - intersectionDistance:0.###}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.###}m tolerance={MinimumPocketLaneLengthTolerance:0.###}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
+                Mod.LogDiagnostic($"[IntersectionTool] Road-node merge fallback rejected edge={FormatEntity(sourceEdgeEntity)}: merged edge still has no room for a pocket lane (mergedLength={mergedLength:0.##}m intersection={intersectionDistance:0.##}m maxDistanceFromNode={targetPlan.MaxDistanceFromNode:0.##}m availablePocket={targetPlan.MaxDistanceFromNode - intersectionDistance:0.###}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.###}m tolerance={MinimumPocketLaneLengthTolerance:0.###}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}).");
                 return false;
             }
 
-            Mod.LogDiagnostic($"[IntersectionTool] Road-node merge split target pocket length node={FormatEntity(nodeEntity)} sourceEdge={FormatEntity(sourceEdgeEntity)} prefab={GetPrefabName(sourceEdgeEntity)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={maximumRequestedPocketLength:0.##}m retryOverride={(requestedTargetPocketLength > 0f)} maxDistanceFromNode={maxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
+            Mod.LogDiagnostic($"[IntersectionTool] Road-node merge split target pocket length node={FormatEntity(nodeEntity)} sourceEdge={FormatEntity(sourceEdgeEntity)} prefab={GetPrefabName(sourceEdgeEntity)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={maximumRequestedPocketLength:0.##}m retryOverride={retryOverride} maxDistanceFromNode={targetPlan.MaxDistanceFromNode:0.##}m intersection={intersectionDistance:0.##}m.");
 
-            float desiredDistance = GetGridAlignedSplitDistance(
-                intersectionDistance,
-                targetPocketLength,
-                MinimumPocketLaneLength,
-                maxDistanceFromNode);
-            targetDistance = desiredDistance;
-            float desiredPosition = GetCurvePositionAtDistance(mergedBezier, nodeIsStartOnMergedEdge, desiredDistance);
-            splitPosition = math.clamp(desiredPosition, minSplit, maxSplit);
-            splitDistance = GetCurveDistanceFromNode(mergedBezier, nodeIsStartOnMergedEdge, splitPosition);
-            pocketDistance = math.max(0f, splitDistance - intersectionDistance);
-            hitPosition = MathUtils.Position(mergedBezier, splitPosition);
+            targetDistance = targetPlan.TargetDistance;
+            splitPosition = targetPlan.CurvePosition;
+            splitDistance = targetPlan.SplitDistance;
+            pocketDistance = targetPlan.PocketDistance;
+            hitPosition = targetPlan.HitPosition;
             return true;
         }
 
@@ -964,7 +953,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 prefabWidth = geometryData.m_DefaultWidth;
             }
 
-            if (TryGetRoadLaneProfile(edgeEntity, sourcePrefab, out RoadLaneProfile profile) &&
+            if (m_ReplacementPrefabMatcher.TryGetRoadLaneProfile(edgeEntity, sourcePrefab, out RoadLaneProfile profile) &&
                 profile.DrivableLaneEnvelopeWidth > 0f)
             {
                 roadWidth = profile.DrivableLaneEnvelopeWidth;

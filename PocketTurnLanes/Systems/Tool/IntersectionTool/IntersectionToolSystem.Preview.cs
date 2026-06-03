@@ -181,31 +181,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
                 retryCount++;
                 needsRetry = true;
-                m_NextPreviewCandidates.Add(new SplitCandidate
-                {
-                    Node = candidate.Node,
-                    FarNode = candidate.FarNode,
-                    Edge = candidate.Edge,
-                    SourcePrefab = candidate.SourcePrefab,
-                    TargetPrefab = candidate.TargetPrefab,
-                    LaneRepairMode = candidate.LaneRepairMode,
-                    InvertTarget = candidate.InvertTarget,
-                    HasTargetUpgrade = candidate.HasTargetUpgrade,
-                    TargetUpgrade = candidate.TargetUpgrade,
-                    CurvePosition = splitPlan.CurvePosition,
-                    HitPosition = splitPlan.Request.HitPosition,
-                    TargetDistance = splitPlan.TargetDistance,
-                    TargetPocketLength = splitPlan.TargetPocketLength,
-                    SplitDistance = splitPlan.SplitDistance,
-                    IntersectionDistance = splitPlan.IntersectionDistance,
-                    PocketDistance = splitPlan.PocketDistance,
-                    OriginalForwardLanes = candidate.OriginalForwardLanes,
-                    OriginalBackwardLanes = candidate.OriginalBackwardLanes,
-                    TargetForwardLanes = candidate.TargetForwardLanes,
-                    TargetBackwardLanes = candidate.TargetBackwardLanes,
-                    Attempt = nextAttempt,
-                    FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
-                });
+                m_NextPreviewCandidates.Add(UpdateSplitCandidate(candidate, splitPlan, nextAttempt));
                 Mod.LogDiagnostic($"[IntersectionTool] Preview split missing edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)}; retry attempt={nextAttempt} {retryDetail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m split={splitPlan.CurvePosition:0.###} target={splitPlan.TargetDistance:0.##}m distance={splitPlan.SplitDistance:0.##}m intersection={splitPlan.IntersectionDistance:0.##}m pocket={splitPlan.PocketDistance:0.##}m.");
             }
 
@@ -354,7 +330,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 }
             }
 
-            if (!TryFindPocketLaneReplacementPrefab(
+            if (!m_ReplacementPrefabMatcher.TryFindPocketLaneReplacementPrefab(
                     candidate.Node,
                     candidate.Edge,
                     out ReplacementPrefabMatch prefabMatch))
@@ -411,39 +387,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
-                {
-                    Request = splitPlan.Request,
-                    ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-                }.Schedule(result);
+                JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(splitPlan.Request, result);
 
-                m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
-
-                m_PreviewCandidates.Add(new SplitCandidate
-                {
-                    Node = candidate.Node,
-                    FarNode = candidate.FarNode,
-                    Edge = candidate.Edge,
-                    SourcePrefab = candidate.SourcePrefab,
-                    TargetPrefab = candidate.TargetPrefab,
-                    LaneRepairMode = candidate.LaneRepairMode,
-                    InvertTarget = candidate.InvertTarget,
-                    HasTargetUpgrade = candidate.HasTargetUpgrade,
-                    TargetUpgrade = candidate.TargetUpgrade,
-                    CurvePosition = splitPlan.CurvePosition,
-                    HitPosition = splitPlan.Request.HitPosition,
-                    TargetDistance = splitPlan.TargetDistance,
-                    TargetPocketLength = splitPlan.TargetPocketLength,
-                    SplitDistance = splitPlan.SplitDistance,
-                    IntersectionDistance = splitPlan.IntersectionDistance,
-                    PocketDistance = splitPlan.PocketDistance,
-                    OriginalForwardLanes = candidate.OriginalForwardLanes,
-                    OriginalBackwardLanes = candidate.OriginalBackwardLanes,
-                    TargetForwardLanes = candidate.TargetForwardLanes,
-                    TargetBackwardLanes = candidate.TargetBackwardLanes,
-                    Attempt = candidate.Attempt,
-                    FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
-                });
+                m_PreviewCandidates.Add(UpdateSplitCandidate(candidate, splitPlan, candidate.Attempt));
 
                 queuedCount++;
                 previewNode = candidate.Node;
@@ -529,13 +475,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     RandomSeed = randomSeed
                 };
 
-                JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
-                {
-                    Request = request,
-                    ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-                }.Schedule(result);
-
-                m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+                JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(request, result);
                 result = createDefinitionJobHandle;
                 queuedCount++;
                 m_NextPreviewCandidates.Add(candidate);
@@ -590,28 +530,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            ReplacementCandidate replacementCandidate = new ReplacementCandidate
-            {
-                Node = candidate.Node,
-                FarNode = candidate.FarNode,
-                SplitNode = candidate.RemovableNode,
-                OriginalEdge = candidate.ShortEdge,
-                PocketEdge = candidate.ShortEdge,
-                SourcePrefab = candidate.SourcePrefab,
-                TargetPrefab = candidate.TargetPrefab,
-                LaneRepairMode = SplitLaneConnectionRepairMode.ShortEdgeTransition,
-                InvertTarget = candidate.InvertTarget,
-                HasTargetUpgrade = candidate.HasTargetUpgrade,
-                TargetUpgrade = candidate.TargetUpgrade,
-                HitPosition = candidate.ExpectedHitPosition,
-                OriginalForwardLanes = candidate.OriginalForwardLanes,
-                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
-                TargetForwardLanes = candidate.TargetForwardLanes,
-                TargetBackwardLanes = candidate.TargetBackwardLanes,
-                TransitionOuterEdge = candidate.ContinuationEdge,
-                TransitionReverseSnapshot = candidate.TransitionReverseSnapshot,
-                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
-            };
+            ReplacementCandidate replacementCandidate = CreateShortEdgeReplacementCandidate(
+                candidate,
+                candidate.RemovableNode,
+                candidate.ShortEdge,
+                true);
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest request))
             {
@@ -619,13 +542,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            JobHandle createDefinitionJobHandle = new CreateReplacementDefinitionJob
-            {
-                Request = request,
-                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-            }.Schedule(result);
-
-            m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+            JobHandle createDefinitionJobHandle = ScheduleReplacementDefinition(request, result);
             result = createDefinitionJobHandle;
             m_QueuedReplacementCandidates.Add(replacementCandidate);
 
@@ -707,26 +624,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            ReplacementCandidate replacementCandidate = new ReplacementCandidate
-            {
-                Node = candidate.Node,
-                FarNode = candidate.FarNode,
-                SplitNode = splitNode,
-                OriginalEdge = candidate.Edge,
-                PocketEdge = pocketEdge,
-                SourcePrefab = candidate.SourcePrefab,
-                TargetPrefab = candidate.TargetPrefab,
-                LaneRepairMode = candidate.LaneRepairMode,
-                InvertTarget = candidate.InvertTarget,
-                HasTargetUpgrade = candidate.HasTargetUpgrade,
-                TargetUpgrade = candidate.TargetUpgrade,
-                HitPosition = candidate.HitPosition,
-                OriginalForwardLanes = candidate.OriginalForwardLanes,
-                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
-                TargetForwardLanes = candidate.TargetForwardLanes,
-                TargetBackwardLanes = candidate.TargetBackwardLanes,
-                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
-            };
+            ReplacementCandidate replacementCandidate = CreateReplacementCandidate(candidate, splitNode, pocketEdge);
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest definitionRequest))
             {
@@ -741,21 +639,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             definitionRequest.PreviewOnly = true;
             outerDefinitionRequest.PreviewOnly = true;
 
-            JobHandle definitionJobHandle = new CreateReplacementDefinitionJob
-            {
-                Request = definitionRequest,
-                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-            }.Schedule(result);
-            m_ToolOutputBarrier.AddJobHandleForProducer(definitionJobHandle);
+            JobHandle definitionJobHandle = ScheduleReplacementDefinition(definitionRequest, result);
             result = definitionJobHandle;
 
-            JobHandle outerDefinitionJobHandle = new CreateReplacementDefinitionJob
-            {
-                Request = outerDefinitionRequest,
-                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-            }.Schedule(definitionJobHandle);
-
-            m_ToolOutputBarrier.AddJobHandleForProducer(outerDefinitionJobHandle);
+            JobHandle outerDefinitionJobHandle = ScheduleReplacementDefinition(outerDefinitionRequest, definitionJobHandle);
             result = outerDefinitionJobHandle;
 
             m_HasReplacementPreviewDefinitions = true;

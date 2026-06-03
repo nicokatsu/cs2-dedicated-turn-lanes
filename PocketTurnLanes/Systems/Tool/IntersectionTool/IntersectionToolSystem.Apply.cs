@@ -141,39 +141,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
-                {
-                    Request = splitPlan.Request,
-                    ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-                }.Schedule(result);
+                JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(splitPlan.Request, result);
 
-                m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
-
-                m_PreviewCandidates.Add(new SplitCandidate
-                {
-                    Node = candidate.Node,
-                    FarNode = candidate.FarNode,
-                    Edge = candidate.Edge,
-                    SourcePrefab = candidate.SourcePrefab,
-                    TargetPrefab = candidate.TargetPrefab,
-                    LaneRepairMode = candidate.LaneRepairMode,
-                    InvertTarget = candidate.InvertTarget,
-                    HasTargetUpgrade = candidate.HasTargetUpgrade,
-                    TargetUpgrade = candidate.TargetUpgrade,
-                    CurvePosition = splitPlan.CurvePosition,
-                    HitPosition = splitPlan.Request.HitPosition,
-                    TargetDistance = splitPlan.TargetDistance,
-                    TargetPocketLength = splitPlan.TargetPocketLength,
-                    SplitDistance = splitPlan.SplitDistance,
-                    IntersectionDistance = splitPlan.IntersectionDistance,
-                    PocketDistance = splitPlan.PocketDistance,
-                    OriginalForwardLanes = candidate.OriginalForwardLanes,
-                    OriginalBackwardLanes = candidate.OriginalBackwardLanes,
-                    TargetForwardLanes = candidate.TargetForwardLanes,
-                    TargetBackwardLanes = candidate.TargetBackwardLanes,
-                    Attempt = nextAttempt,
-                    FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
-                });
+                m_PreviewCandidates.Add(UpdateSplitCandidate(candidate, splitPlan, nextAttempt));
 
                 retryCount++;
                 retryNode = candidate.Node;
@@ -301,40 +271,19 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
-                {
-                    Request = request,
-                    ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-                }.Schedule(result);
-
-                m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+                JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(request, result);
                 result = createDefinitionJobHandle;
 
-                m_PreviewCandidates.Add(new SplitCandidate
-                {
-                    Node = mergeCandidate.Node,
-                    FarNode = mergeCandidate.FarNode,
-                    Edge = mergedEdge,
-                    SourcePrefab = mergeCandidate.MergeRequest.Prefab,
-                    TargetPrefab = mergeCandidate.TargetPrefab,
-                    LaneRepairMode = mergeCandidate.LaneRepairMode,
-                    InvertTarget = mergeCandidate.PostMergeInvertTarget,
-                    HasTargetUpgrade = mergeCandidate.HasTargetUpgrade,
-                    TargetUpgrade = mergeCandidate.TargetUpgrade,
-                    CurvePosition = splitPosition,
-                    HitPosition = request.HitPosition,
-                    TargetDistance = targetDistance,
-                    TargetPocketLength = targetPocketLength,
-                    SplitDistance = splitDistance,
-                    IntersectionDistance = intersectionDistance,
-                    PocketDistance = pocketDistance,
-                    OriginalForwardLanes = mergeCandidate.OriginalForwardLanes,
-                    OriginalBackwardLanes = mergeCandidate.OriginalBackwardLanes,
-                    TargetForwardLanes = mergeCandidate.TargetForwardLanes,
-                    TargetBackwardLanes = mergeCandidate.TargetBackwardLanes,
-                    Attempt = 0,
-                    FarIntersectionSnapshot = mergeCandidate.FarIntersectionSnapshot
-                });
+                m_PreviewCandidates.Add(CreateSplitCandidate(
+                    mergeCandidate,
+                    mergedEdge,
+                    request,
+                    splitPosition,
+                    splitDistance,
+                    intersectionDistance,
+                    pocketDistance,
+                    targetDistance,
+                    targetPocketLength));
 
                 queuedSplitCount++;
                 previewNode = mergeCandidate.Node;

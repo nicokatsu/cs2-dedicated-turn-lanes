@@ -262,7 +262,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (IsHighwayRoadEdge(edgeEntity, out string highwayDetail))
+                if (m_ReplacementPrefabMatcher.IsHighwayRoadEdge(edgeEntity, out string highwayDetail))
                 {
                     skippedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: highway roads are excluded from selection and replacement matching. {highwayDetail}");
@@ -276,7 +276,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (IsBridgeRoadEdge(edgeEntity, out string bridgeDetail))
+                if (m_ReplacementPrefabMatcher.IsBridgeRoadEdge(edgeEntity, out string bridgeDetail))
                 {
                     skippedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Skip edge {FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)}: bridge road prefabs are excluded from selection and replacement matching. {bridgeDetail}");
@@ -302,7 +302,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                         edgeEntity,
                         out SplitDefinitionPlan splitPlan))
                 {
-                    if (!TryFindPocketLaneReplacementPrefab(
+                    if (!m_ReplacementPrefabMatcher.TryFindPocketLaneReplacementPrefab(
                             nodeEntity,
                             edgeEntity,
                             out ReplacementPrefabMatch prefabMatch))
@@ -311,44 +311,17 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                         continue;
                     }
 
-                    JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
-                    {
-                        Request = splitPlan.Request,
-                        ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-                    }.Schedule(result);
-
-                    m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+                    JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(splitPlan.Request, result);
 
                     splitQueuedCount++;
-                    m_PreviewCandidates.Add(new SplitCandidate
-                    {
-                        Node = nodeEntity,
-                        Edge = edgeEntity,
-                        SourcePrefab = splitPlan.Request.Prefab,
-                        TargetPrefab = prefabMatch.Prefab,
-                        InvertTarget = prefabMatch.Invert,
-                        HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
-                        TargetUpgrade = prefabMatch.TargetUpgrade,
-                        CurvePosition = splitPlan.CurvePosition,
-                        HitPosition = splitPlan.Request.HitPosition,
-                        TargetDistance = splitPlan.TargetDistance,
-                        TargetPocketLength = splitPlan.TargetPocketLength,
-                        SplitDistance = splitPlan.SplitDistance,
-                        IntersectionDistance = splitPlan.IntersectionDistance,
-                        PocketDistance = splitPlan.PocketDistance,
-                        OriginalForwardLanes = prefabMatch.OriginalCounts.Forward,
-                        OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
-                        TargetForwardLanes = prefabMatch.TargetCounts.Forward,
-                        TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
-                        Attempt = 0
-                    });
+                    m_PreviewCandidates.Add(CreateSplitCandidate(nodeEntity, edgeEntity, splitPlan, prefabMatch));
                     Mod.LogDiagnostic($"[IntersectionTool] Prepared split preview edge={FormatEntity(edgeEntity)} prefab={GetPrefabName(edgeEntity)} split={splitPlan.CurvePosition:0.###} requestedPocket={splitPlan.TargetPocketLength:0.##}m target={splitPlan.TargetDistance:0.##}m distance={splitPlan.SplitDistance:0.##}m intersection={splitPlan.IntersectionDistance:0.##}m pocket={splitPlan.PocketDistance:0.##}m replacement={GetPrefabNameFromPrefab(prefabMatch.Prefab)} orientation={(prefabMatch.Invert ? "reversed" : "direct")} lanes={prefabMatch.OriginalCounts}->{prefabMatch.TargetCounts} frame={UnityEngine.Time.frameCount}.");
                     result = createDefinitionJobHandle;
                     lastQueuedEdge = edgeEntity;
                 }
                 else
                 {
-                    if (!TryFindPocketLaneReplacementPrefab(
+                    if (!m_ReplacementPrefabMatcher.TryFindPocketLaneReplacementPrefab(
                             nodeEntity,
                             edgeEntity,
                             out ReplacementPrefabMatch prefabMatch))

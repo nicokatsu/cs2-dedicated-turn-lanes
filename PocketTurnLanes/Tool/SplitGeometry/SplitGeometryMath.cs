@@ -5,6 +5,16 @@ using Unity.Mathematics;
 
 namespace PocketTurnLanes.Tool.SplitGeometry
 {
+    internal struct SafeSplitTargetPlan
+    {
+        public float MaxDistanceFromNode;
+        public float TargetDistance;
+        public float CurvePosition;
+        public float SplitDistance;
+        public float PocketDistance;
+        public float3 HitPosition;
+    }
+
     internal static class SplitGeometryMath
     {
         internal const float SplitGridSize = 8f;
@@ -102,6 +112,25 @@ namespace PocketTurnLanes.Tool.SplitGeometry
             return pocketLength + SplitLengthBuffer + MinimumPocketLaneLengthTolerance >= MinimumPocketLaneLength;
         }
 
+        internal static float ResolveTargetPocketLength(
+            float adaptiveTargetPocketLength,
+            float requestedTargetPocketLength,
+            out float requestedTargetPocketLengthBeforeCap,
+            out float maximumRequestedPocketLength,
+            out bool retryOverride)
+        {
+            retryOverride = requestedTargetPocketLength > 0f;
+            requestedTargetPocketLengthBeforeCap = retryOverride
+                ? requestedTargetPocketLength
+                : adaptiveTargetPocketLength;
+            maximumRequestedPocketLength = retryOverride
+                ? MaximumRetryPocketLaneLength
+                : MaximumWidthBasedPocketLaneLength;
+            return retryOverride
+                ? math.clamp(requestedTargetPocketLength, MinimumPocketLaneLength, maximumRequestedPocketLength)
+                : adaptiveTargetPocketLength;
+        }
+
         internal static float GetEffectiveMinimumPocketLength()
         {
             return math.max(0f, MinimumPocketLaneLength - SplitLengthBuffer - MinimumPocketLaneLengthTolerance);
@@ -155,6 +184,35 @@ namespace PocketTurnLanes.Tool.SplitGeometry
         {
             float furthestSafePosition = fromStart ? maxSplit : minSplit;
             return GetCurveDistanceFromNode(bezier, fromStart, furthestSafePosition);
+        }
+
+        internal static bool TryCalculateSafeSplitTargetPlan(
+            Bezier4x3 bezier,
+            bool fromStart,
+            float minSplit,
+            float maxSplit,
+            float intersectionDistance,
+            float targetPocketLength,
+            out SafeSplitTargetPlan plan)
+        {
+            plan = default;
+            plan.MaxDistanceFromNode = GetMaximumSplitDistanceFromNode(bezier, fromStart, minSplit, maxSplit);
+            if (!HasMinimumPocketLength(plan.MaxDistanceFromNode - intersectionDistance))
+            {
+                return false;
+            }
+
+            plan.TargetDistance = GetGridAlignedSplitDistance(
+                intersectionDistance,
+                targetPocketLength,
+                MinimumPocketLaneLength,
+                plan.MaxDistanceFromNode);
+            float desiredPosition = GetCurvePositionAtDistance(bezier, fromStart, plan.TargetDistance);
+            plan.CurvePosition = math.clamp(desiredPosition, minSplit, maxSplit);
+            plan.SplitDistance = GetCurveDistanceFromNode(bezier, fromStart, plan.CurvePosition);
+            plan.PocketDistance = math.max(0f, plan.SplitDistance - intersectionDistance);
+            plan.HitPosition = MathUtils.Position(bezier, plan.CurvePosition);
+            return true;
         }
 
         internal static Bezier4x3 ComputeMergedBezier(Entity nodeEntity, Edge edge1, Curve curve1, Edge edge2, Curve curve2)

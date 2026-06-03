@@ -91,25 +91,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 }
             }
 
-            ReplacementCandidate replacementCandidate = new ReplacementCandidate
-            {
-                Node = candidate.Node,
-                SplitNode = Entity.Null,
-                OriginalEdge = candidate.ShortEdge,
-                PocketEdge = previewOriginalEdge,
-                SourcePrefab = candidate.SourcePrefab,
-                TargetPrefab = candidate.TargetPrefab,
-                LaneRepairMode = candidate.LaneRepairMode,
-                InvertTarget = candidate.InvertTarget,
-                HasTargetUpgrade = candidate.HasTargetUpgrade,
-                TargetUpgrade = candidate.TargetUpgrade,
-                HitPosition = candidate.ExpectedHitPosition,
-                OriginalForwardLanes = candidate.OriginalForwardLanes,
-                OriginalBackwardLanes = candidate.OriginalBackwardLanes,
-                TargetForwardLanes = candidate.TargetForwardLanes,
-                TargetBackwardLanes = candidate.TargetBackwardLanes,
-                FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
-            };
+            ReplacementCandidate replacementCandidate = CreateShortEdgeReplacementCandidate(
+                candidate,
+                Entity.Null,
+                previewOriginalEdge,
+                false);
 
             if (!TryBuildReplacementDefinitionRequest(replacementCandidate, out ReplacementDefinitionRequest request))
             {
@@ -139,24 +125,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 continuationRequest.PreviewOnly = true;
             }
 
-            JobHandle createDefinitionJobHandle = new CreateReplacementDefinitionJob
-            {
-                Request = request,
-                ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-            }.Schedule(result);
-
-            m_ToolOutputBarrier.AddJobHandleForProducer(createDefinitionJobHandle);
+            JobHandle createDefinitionJobHandle = ScheduleReplacementDefinition(request, result);
             result = createDefinitionJobHandle;
 
             int createdDefinitions = 1;
             if (queueContinuationPreview)
             {
-                JobHandle continuationDefinitionJobHandle = new CreateReplacementDefinitionJob
-                {
-                    Request = continuationRequest,
-                    ECB = m_ToolOutputBarrier.CreateCommandBuffer()
-                }.Schedule(result);
-                m_ToolOutputBarrier.AddJobHandleForProducer(continuationDefinitionJobHandle);
+                JobHandle continuationDefinitionJobHandle = ScheduleReplacementDefinition(continuationRequest, result);
                 result = continuationDefinitionJobHandle;
                 createdDefinitions++;
                 Mod.LogDiagnostic($"[IntersectionTool] Queued continuation source hover preview definition for short-edge fallback continuation={FormatEntity(candidate.ContinuationEdge)} continuationPreview={FormatEntity(continuationPreviewEdge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} flags={continuationRequest.Flags} continuationComposition=source-definition detail={continuationPreviewDetail} buildDetail={continuationBuildDetail}.");
