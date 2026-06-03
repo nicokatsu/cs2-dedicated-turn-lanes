@@ -202,7 +202,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             out RoadLaneProfile profile,
             out string detail)
         {
-            profile = CreateEmptyRoadLaneProfile("RoadBuilderConfig");
+            profile = RoadLaneProfile.CreateEmpty("RoadBuilderConfig");
             detail = "roadBuilderConfig=none";
 
             if (!TryGetConfigLanes(prefabEntity, out List<RoadBuilderLaneConfig> lanes, out detail))
@@ -295,7 +295,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     16);
             }
 
-            detail = $"roadBuilderConfig=matched prefab={GetPrefabNameFromPrefab(prefabEntity)} lanes={lanes.Count} totalWidth={totalWidth:0.##}m busLanes={busLanes} tramLanes={tramLanes} independentTramLanes={independentTramLanes} publicTransportTramLanes={publicTransportTramLanes} busLayout={profile.BusLaneLayout} tramLayout={profile.TramTrackLayout} semanticSample={semanticSample}";
+            detail = $"roadBuilderConfig=matched prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} lanes={lanes.Count} totalWidth={totalWidth:0.##}m busLanes={busLanes} tramLanes={tramLanes} independentTramLanes={independentTramLanes} publicTransportTramLanes={publicTransportTramLanes} busLayout={profile.BusLaneLayout} tramLayout={profile.TramTrackLayout} semanticSample={semanticSample}";
             return profile.BusLaneLayout.HasAny || !profile.TramTrackCounts.IsEmpty;
         }
 
@@ -350,35 +350,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             detail = $"roadBuilderConfig=loaded prefab={prefabBase.name} lanes={lanes.Count} configType={config.GetType().FullName}";
             return lanes.Count > 0;
-        }
-
-        private static RoadLaneProfile CreateEmptyRoadLaneProfile(string source)
-        {
-            return new RoadLaneProfile
-            {
-                DrivableLaneEnvelopeDetail = "<none>",
-                MarkedParkingDetail = "<none>",
-                TramTrackDetail = "<none>",
-                IndependentTramDetail = "<none>",
-                PublicTransportTramDetail = "<none>",
-                BusLaneDetail = "<none>",
-                Source = source
-            };
-        }
-
-        private string GetPrefabNameFromPrefab(Entity prefabEntity)
-        {
-            if (prefabEntity == Entity.Null)
-            {
-                return "<null prefab>";
-            }
-
-            if (m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase))
-            {
-                return prefabBase.name;
-            }
-
-            return $"<unresolved {FormatEntity(prefabEntity)}>";
         }
 
         private static string FormatEntity(Entity entity)

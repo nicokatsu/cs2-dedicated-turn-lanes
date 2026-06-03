@@ -64,6 +64,20 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public string PublicTransportTramDetail;
         public string BusLaneDetail;
         public string Source;
+
+        public static RoadLaneProfile CreateEmpty(string source)
+        {
+            return new RoadLaneProfile
+            {
+                DrivableLaneEnvelopeDetail = "<none>",
+                MarkedParkingDetail = "<none>",
+                TramTrackDetail = "<none>",
+                IndependentTramDetail = "<none>",
+                PublicTransportTramDetail = "<none>",
+                BusLaneDetail = "<none>",
+                Source = source
+            };
+        }
     }
 
     internal struct DirectionalLaneOffsetProfile

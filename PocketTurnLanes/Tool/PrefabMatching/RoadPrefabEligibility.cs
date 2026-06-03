@@ -40,7 +40,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             bool isBridge = EntityManager.HasComponent<BridgeData>(prefabEntity);
-            detail = $"prefab={GetPrefabNameFromPrefab(prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} bridgeData={isBridge}";
+            detail = $"prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} bridgeData={isBridge}";
             return isBridge;
         }
 
@@ -66,12 +66,12 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             if (!EntityManager.TryGetComponent(prefabEntity, out RoadData roadData))
             {
-                detail = $"prefab={GetPrefabNameFromPrefab(prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} roadData=missing useHighwayRules=False";
+                detail = $"prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} roadData=missing useHighwayRules=False";
                 return false;
             }
 
             bool isHighway = IsHighwayRoadData(roadData);
-            detail = $"prefab={GetPrefabNameFromPrefab(prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} roadFlags={roadData.m_Flags} useHighwayRules={isHighway}";
+            detail = $"prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} prefabEntity={FormatEntity(prefabEntity)} roadFlags={roadData.m_Flags} useHighwayRules={isHighway}";
             return isHighway;
         }
 
@@ -93,7 +93,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             Entity contentEntity = prerequisiteData.m_ContentPrerequisite;
-            string contentName = GetPrefabNameFromPrefab(contentEntity);
+            string contentName = PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, contentEntity);
             string contentFlags = "<missing ContentData>";
             string dlcId = "<missing>";
             if (EntityManager.TryGetComponent(contentEntity, out ContentData contentData))
@@ -104,21 +104,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             detail = $"contentPrerequisite={contentName} contentEntity={FormatEntity(contentEntity)} contentFlags={contentFlags} dlcId={dlcId} contentType={(isDlc ? "dlc" : "base")}";
-        }
-
-        private string GetPrefabNameFromPrefab(Entity prefabEntity)
-        {
-            if (prefabEntity == Entity.Null)
-            {
-                return "<null prefab>";
-            }
-
-            if (m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase))
-            {
-                return prefabBase.name;
-            }
-
-            return $"<unresolved {FormatEntity(prefabEntity)}>";
         }
 
         private static string FormatEntity(Entity entity)

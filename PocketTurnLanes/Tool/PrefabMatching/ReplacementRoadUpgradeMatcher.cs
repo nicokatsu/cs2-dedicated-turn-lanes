@@ -33,7 +33,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             bool invert,
             string tramUpgradeDetail)
         {
-            return $"candidate={GetPrefabNameFromPrefab(candidatePrefab)} candidateRoad={candidateProfile.RoadCounts} candidateTramTracks={candidateProfile.TramTrackCounts} invert={invert} {tramUpgradeDetail}";
+            return $"candidate={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, candidatePrefab)} candidateRoad={candidateProfile.RoadCounts} candidateTramTracks={candidateProfile.TramTrackCounts} invert={invert} {tramUpgradeDetail}";
         }
 
         internal bool TryFindMatchingTramUpgrade(
@@ -50,18 +50,18 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             out string detail)
         {
             targetUpgrade = default;
-            targetProfile = RoadLaneProfileBuilder.CreateEmptyRoadLaneProfile("TramUpgrade:missing");
+            targetProfile = RoadLaneProfile.CreateEmpty("TramUpgrade:missing");
             detail = "tramUpgrade=not-scanned";
 
             if (prefabEntity == Entity.Null || requiredTramCounts.IsEmpty)
             {
-                detail = $"tramUpgrade=skipped prefab={GetPrefabNameFromPrefab(prefabEntity)} requiredTram={requiredTramCounts}";
+                detail = $"tramUpgrade=skipped prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} requiredTram={requiredTramCounts}";
                 return false;
             }
 
             if (!EntityManager.TryGetBuffer(prefabEntity, true, out DynamicBuffer<NetGeometryComposition> compositions))
             {
-                detail = $"tramUpgrade=missing-compositions prefab={GetPrefabNameFromPrefab(prefabEntity)}";
+                detail = $"tramUpgrade=missing-compositions prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)}";
                 return false;
             }
 
@@ -157,11 +157,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                         out targetProfile,
                         out string sourceUpgradeDetail))
                 {
-                    detail = $"tramUpgrade=source-flags-fallback prefab={GetPrefabNameFromPrefab(prefabEntity)} scannedCompositions={scanned} trackMasks={trackMasks} laneProfiles={laneProfiles} effectiveMatches={effectiveMatches} tramMatches={tramMatches} independentTramMatches={independentTramMatches} publicTransportTramMatches={publicTransportTramMatches} roadPreferredMatches={roadPreferredMatches} {sourceUpgradeDetail}";
+                    detail = $"tramUpgrade=source-flags-fallback prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} scannedCompositions={scanned} trackMasks={trackMasks} laneProfiles={laneProfiles} effectiveMatches={effectiveMatches} tramMatches={tramMatches} independentTramMatches={independentTramMatches} publicTransportTramMatches={publicTransportTramMatches} roadPreferredMatches={roadPreferredMatches} {sourceUpgradeDetail}";
                     return true;
                 }
 
-                detail = $"tramUpgrade=no-match prefab={GetPrefabNameFromPrefab(prefabEntity)} scannedCompositions={scanned} trackMasks={trackMasks} laneProfiles={laneProfiles} effectiveMatches={effectiveMatches} tramMatches={tramMatches} independentTramMatches={independentTramMatches} publicTransportTramMatches={publicTransportTramMatches} roadPreferredMatches={roadPreferredMatches} desiredRoad={desiredRoadCounts} desiredEffective={desiredEffectiveCounts} requiredTram={requiredTramCounts} orientedDesiredRoad={orientedDesiredRoadCounts} orientedDesiredEffective={orientedDesiredEffectiveCounts} orientedRequiredTram={orientedRequiredTramCounts} invertTarget={invertTarget}";
+                detail = $"tramUpgrade=no-match prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} scannedCompositions={scanned} trackMasks={trackMasks} laneProfiles={laneProfiles} effectiveMatches={effectiveMatches} tramMatches={tramMatches} independentTramMatches={independentTramMatches} publicTransportTramMatches={publicTransportTramMatches} roadPreferredMatches={roadPreferredMatches} desiredRoad={desiredRoadCounts} desiredEffective={desiredEffectiveCounts} requiredTram={requiredTramCounts} orientedDesiredRoad={orientedDesiredRoadCounts} orientedDesiredEffective={orientedDesiredEffectiveCounts} orientedRequiredTram={orientedRequiredTramCounts} invertTarget={invertTarget}";
                 return false;
             }
 
@@ -172,7 +172,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             targetProfile = bestProfile;
             targetProfile.Source = $"TramUpgrade:{targetFlags}";
             RoadLaneCounts bestEffectiveCounts = RoadLaneCounts.Add(bestProfile.RoadCounts, bestProfile.IndependentTramCounts);
-            detail = $"tramUpgrade=matched prefab={GetPrefabNameFromPrefab(prefabEntity)} upgradeFlags={targetFlags} rawUpgradeFlags={bestUpgradeFlags} upgradedRoad={bestProfile.RoadCounts} upgradedEffective={bestEffectiveCounts} upgradedIndependentTram={bestProfile.IndependentTramCounts} upgradedPublicTransportTram={bestProfile.PublicTransportTramCounts} upgradedTramTracks={bestProfile.TramTrackCounts} upgradedTramTrackLayout={bestProfile.TramTrackLayout} upgradedTramDetail={bestProfile.TramTrackDetail} upgradedPublicTransportTramDetail={bestProfile.PublicTransportTramDetail} upgradedBusLayout={bestProfile.BusLaneLayout} upgradedBusDetail={bestProfile.BusLaneDetail} scannedCompositions={scanned} trackMasks={trackMasks} laneProfiles={laneProfiles} effectiveMatches={effectiveMatches} tramMatches={tramMatches} independentTramMatches={independentTramMatches} publicTransportTramMatches={publicTransportTramMatches} roadPreferredMatches={roadPreferredMatches} invertTarget={invertTarget}";
+            detail = $"tramUpgrade=matched prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} upgradeFlags={targetFlags} rawUpgradeFlags={bestUpgradeFlags} upgradedRoad={bestProfile.RoadCounts} upgradedEffective={bestEffectiveCounts} upgradedIndependentTram={bestProfile.IndependentTramCounts} upgradedPublicTransportTram={bestProfile.PublicTransportTramCounts} upgradedTramTracks={bestProfile.TramTrackCounts} upgradedTramTrackLayout={bestProfile.TramTrackLayout} upgradedTramDetail={bestProfile.TramTrackDetail} upgradedPublicTransportTramDetail={bestProfile.PublicTransportTramDetail} upgradedBusLayout={bestProfile.BusLaneLayout} upgradedBusDetail={bestProfile.BusLaneDetail} scannedCompositions={scanned} trackMasks={trackMasks} laneProfiles={laneProfiles} effectiveMatches={effectiveMatches} tramMatches={tramMatches} independentTramMatches={independentTramMatches} publicTransportTramMatches={publicTransportTramMatches} roadPreferredMatches={roadPreferredMatches} invertTarget={invertTarget}";
             return true;
         }
 
@@ -187,18 +187,18 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         {
             invertTarget = false;
             targetUpgrade = default;
-            targetProfile = RoadLaneProfileBuilder.CreateEmptyRoadLaneProfile("BusUpgrade:missing");
+            targetProfile = RoadLaneProfile.CreateEmpty("BusUpgrade:missing");
             detail = "busUpgrade=not-scanned";
 
             if (prefabEntity == Entity.Null || !sourceProfile.BusLaneLayout.HasAny)
             {
-                detail = $"busUpgrade=skipped prefab={GetPrefabNameFromPrefab(prefabEntity)} sourceBusLayout={sourceProfile.BusLaneLayout}";
+                detail = $"busUpgrade=skipped prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} sourceBusLayout={sourceProfile.BusLaneLayout}";
                 return false;
             }
 
             if (!EntityManager.TryGetBuffer(prefabEntity, true, out DynamicBuffer<NetGeometryComposition> compositions))
             {
-                detail = $"busUpgrade=missing-compositions prefab={GetPrefabNameFromPrefab(prefabEntity)}";
+                detail = $"busUpgrade=missing-compositions prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)}";
                 return false;
             }
 
@@ -283,7 +283,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             if (bestUpgradeFlags == default(CompositionFlags))
             {
-                detail = $"busUpgrade=no-match prefab={GetPrefabNameFromPrefab(prefabEntity)} scannedCompositions={scanned} nonDefaultMasks={nonDefaultMasks} laneProfiles={laneProfiles} calculatedProfiles={calculatedProfiles} directProfiles={directProfiles} parkingProfiles={parkingProfiles} busProfiles={busProfiles} publicTransportTramProfiles={publicTransportTramProfiles} laneMatches={laneMatches} desiredRoad={desiredRoadCounts} sourceBusLayout={sourceProfile.BusLaneLayout}";
+                detail = $"busUpgrade=no-match prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} scannedCompositions={scanned} nonDefaultMasks={nonDefaultMasks} laneProfiles={laneProfiles} calculatedProfiles={calculatedProfiles} directProfiles={directProfiles} parkingProfiles={parkingProfiles} busProfiles={busProfiles} publicTransportTramProfiles={publicTransportTramProfiles} laneMatches={laneMatches} desiredRoad={desiredRoadCounts} sourceBusLayout={sourceProfile.BusLaneLayout}";
                 return false;
             }
 
@@ -294,7 +294,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             targetUpgrade = new Upgraded { m_Flags = targetFlags };
             targetProfile = bestProfile;
             targetProfile.Source = $"BusUpgrade:{targetFlags}";
-            detail = $"busUpgrade=matched prefab={GetPrefabNameFromPrefab(prefabEntity)} upgradeFlags={targetFlags} rawUpgradeFlags={bestUpgradeFlags} upgradedRoad={bestProfile.RoadCounts} upgradedBusLayout={bestProfile.BusLaneLayout} upgradedBusDetail={bestProfile.BusLaneDetail} upgradedTramTracks={bestProfile.TramTrackCounts} upgradedPublicTransportTram={bestProfile.PublicTransportTramCounts} scannedCompositions={scanned} nonDefaultMasks={nonDefaultMasks} laneProfiles={laneProfiles} calculatedProfiles={calculatedProfiles} directProfiles={directProfiles} parkingProfiles={parkingProfiles} busProfiles={busProfiles} publicTransportTramProfiles={publicTransportTramProfiles} laneMatches={laneMatches} layoutScore={bestScore} invertTarget={invertTarget}";
+            detail = $"busUpgrade=matched prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} upgradeFlags={targetFlags} rawUpgradeFlags={bestUpgradeFlags} upgradedRoad={bestProfile.RoadCounts} upgradedBusLayout={bestProfile.BusLaneLayout} upgradedBusDetail={bestProfile.BusLaneDetail} upgradedTramTracks={bestProfile.TramTrackCounts} upgradedPublicTransportTram={bestProfile.PublicTransportTramCounts} scannedCompositions={scanned} nonDefaultMasks={nonDefaultMasks} laneProfiles={laneProfiles} calculatedProfiles={calculatedProfiles} directProfiles={directProfiles} parkingProfiles={parkingProfiles} busProfiles={busProfiles} publicTransportTramProfiles={publicTransportTramProfiles} laneMatches={laneMatches} layoutScore={bestScore} invertTarget={invertTarget}";
             return true;
         }
 
@@ -434,21 +434,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             return count;
-        }
-
-        private string GetPrefabNameFromPrefab(Entity prefabEntity)
-        {
-            if (prefabEntity == Entity.Null)
-            {
-                return "<null prefab>";
-            }
-
-            if (m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase))
-            {
-                return prefabBase.name;
-            }
-
-            return $"<unresolved {FormatEntity(prefabEntity)}>";
         }
 
         private static string FormatEntity(Entity entity)

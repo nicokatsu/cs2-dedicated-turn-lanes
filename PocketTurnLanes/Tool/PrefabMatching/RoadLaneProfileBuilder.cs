@@ -40,20 +40,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         private EntityManager EntityManager => m_EntityManager;
 
-        internal static RoadLaneProfile CreateEmptyRoadLaneProfile(string source)
-        {
-            return new RoadLaneProfile
-            {
-                DrivableLaneEnvelopeDetail = "<none>",
-                MarkedParkingDetail = "<none>",
-                TramTrackDetail = "<none>",
-                IndependentTramDetail = "<none>",
-                PublicTransportTramDetail = "<none>",
-                BusLaneDetail = "<none>",
-                Source = source
-            };
-        }
-
         internal bool TryGetRoadLaneProfile(
             Entity edgeEntity,
             Entity fallbackPrefab,
@@ -76,7 +62,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return true;
             }
 
-            profile = CreateEmptyRoadLaneProfile("Missing");
+            profile = RoadLaneProfile.CreateEmpty("Missing");
             return false;
         }
 
@@ -84,7 +70,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             Entity compositionEntity,
             out RoadLaneProfile profile)
         {
-            profile = CreateEmptyRoadLaneProfile("Composition");
+            profile = RoadLaneProfile.CreateEmpty("Composition");
             if (compositionEntity == Entity.Null ||
                 !EntityManager.TryGetBuffer(compositionEntity, true, out DynamicBuffer<NetCompositionLane> lanes))
             {
@@ -103,7 +89,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             Entity prefabEntity,
             out RoadLaneProfile profile)
         {
-            profile = CreateEmptyRoadLaneProfile("Missing");
+            profile = RoadLaneProfile.CreateEmpty("Missing");
 
             if (prefabEntity == Entity.Null)
             {
@@ -139,7 +125,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return true;
             }
 
-            profile = CreateEmptyRoadLaneProfile("Missing");
+            profile = RoadLaneProfile.CreateEmpty("Missing");
             return false;
         }
 
@@ -148,7 +134,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             CompositionFlags mask,
             out RoadLaneProfile profile)
         {
-            profile = CreateEmptyRoadLaneProfile("NetGeometryComposition");
+            profile = RoadLaneProfile.CreateEmpty("NetGeometryComposition");
 
             if (!EntityManager.TryGetBuffer(prefabEntity, true, out DynamicBuffer<NetGeometryComposition> compositions))
             {
@@ -192,7 +178,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             string source,
             out RoadLaneProfile profile)
         {
-            profile = CreateEmptyRoadLaneProfile(source);
+            profile = RoadLaneProfile.CreateEmpty(source);
 
             if (!EntityManager.TryGetBuffer(prefabEntity, true, out DynamicBuffer<NetGeometrySection> sections))
             {
@@ -229,8 +215,8 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
             catch (Exception ex)
             {
-                Mod.LogException(ex, $"[IntersectionTool] Failed to calculate road lanes for prefab={GetPrefabNameFromPrefab(prefabEntity)} entity={FormatEntity(prefabEntity)} compositionFlags={compositionFlags} source={source}.");
-                profile = CreateEmptyRoadLaneProfile(source);
+                Mod.LogException(ex, $"[IntersectionTool] Failed to calculate road lanes for prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} entity={FormatEntity(prefabEntity)} compositionFlags={compositionFlags} source={source}.");
+                profile = RoadLaneProfile.CreateEmpty(source);
                 return false;
             }
             finally
@@ -535,21 +521,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             bool markedParking = angleDegrees >= MinimumMarkedParkingSlotAngleDegrees;
             detail = $"lane={FormatEntity(lanePrefab)} flags={flags} slotAngle={angleDegrees:0.#}deg slotSize=({parkingLaneData.m_SlotSize.x:0.##},{parkingLaneData.m_SlotSize.y:0.##}) threshold={MinimumMarkedParkingSlotAngleDegrees:0.#}deg";
             return markedParking;
-        }
-
-        private string GetPrefabNameFromPrefab(Entity prefabEntity)
-        {
-            if (prefabEntity == Entity.Null)
-            {
-                return "<null prefab>";
-            }
-
-            if (m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase))
-            {
-                return prefabBase.name;
-            }
-
-            return $"<unresolved {FormatEntity(prefabEntity)}>";
         }
 
         private static string FormatEntity(Entity entity)
