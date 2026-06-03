@@ -462,17 +462,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                int randomSeed = EntityManager.TryGetComponent(candidate.Edge, out PseudoRandomSeed seed)
-                    ? seed.m_Seed
-                    : candidate.Edge.Index;
-
                 SplitDefinitionRequest request = new SplitDefinitionRequest
                 {
                     Edge = candidate.Edge,
                     Prefab = candidate.SourcePrefab,
                     HitPosition = candidate.HitPosition,
                     CurvePosition = candidate.CurvePosition,
-                    RandomSeed = randomSeed
+                    RandomSeed = GetDefinitionRandomSeed(candidate.Edge)
                 };
 
                 JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(request, result);

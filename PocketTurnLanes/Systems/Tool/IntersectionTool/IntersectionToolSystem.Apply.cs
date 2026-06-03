@@ -489,17 +489,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             splitDistance = GetCurveDistanceFromNode(curve, nodeIsStart, splitPosition);
             pocketDistance = math.max(0f, splitDistance - candidate.ExpectedIntersectionDistance);
             float3 hitPosition = MathUtils.Position(curve.m_Bezier, splitPosition);
-            int randomSeed = EntityManager.TryGetComponent(mergedEdge, out PseudoRandomSeed seed)
-                ? seed.m_Seed
-                : mergedEdge.Index;
-
             request = new SplitDefinitionRequest
             {
                 Edge = mergedEdge,
                 Prefab = prefabRef.m_Prefab,
                 HitPosition = hitPosition,
                 CurvePosition = splitPosition,
-                RandomSeed = randomSeed
+                RandomSeed = GetDefinitionRandomSeed(mergedEdge)
             };
 
             Mod.LogDiagnostic($"[IntersectionTool] Prepared balanced road-node split mergedEdge={FormatEntity(mergedEdge)} shortEdge={FormatEntity(candidate.ShortEdge)} continuation={FormatEntity(candidate.ContinuationEdge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} targetPrefab={GetPrefabNameFromPrefab(prefabRef.m_Prefab)} split={splitPosition:0.###} splitDistance={splitDistance:0.##}m nearMargin={candidate.ExpectedIntersectionDistance:0.##}m farMargin={candidate.ExpectedFarIntersectionDistance:0.##}m usable={usableLength:0.##}m half={halfUsableLength:0.##}m requestedPocket={targetPocketLength:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###} laneRepair=balanced-opposite-target.");

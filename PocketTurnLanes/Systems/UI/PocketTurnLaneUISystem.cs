@@ -34,10 +34,7 @@ namespace PocketTurnLanes.Systems.UI
 
         protected override void OnUpdate()
         {
-            if (m_ToolEnabledBinding.value != m_IntersectionToolSystem.IsToolEnabled)
-            {
-                m_ToolEnabledBinding.Update(m_IntersectionToolSystem.IsToolEnabled);
-            }
+            SyncToolEnabledBinding();
         }
 
         private void ToggleTool()
@@ -50,13 +47,32 @@ namespace PocketTurnLanes.Systems.UI
             {
                 m_IntersectionToolSystem.EnableTool();
             }
+        }
 
-            m_ToolEnabledBinding.Update(m_IntersectionToolSystem.IsToolEnabled);
+        private void SyncToolEnabledBinding()
+        {
+            if (m_IntersectionToolSystem == null)
+            {
+                return;
+            }
+
+            UpdateToolEnabledBinding(m_IntersectionToolSystem.IsToolEnabled);
+        }
+
+        private void UpdateToolEnabledBinding(bool enabled)
+        {
+            if (m_ToolEnabledBinding == null ||
+                m_ToolEnabledBinding.value == enabled)
+            {
+                return;
+            }
+
+            m_ToolEnabledBinding.Update(enabled);
         }
 
         private void OnToolEnabledChanged(bool enabled)
         {
-            m_ToolEnabledBinding?.Update(enabled);
+            UpdateToolEnabledBinding(enabled);
         }
     }
 }

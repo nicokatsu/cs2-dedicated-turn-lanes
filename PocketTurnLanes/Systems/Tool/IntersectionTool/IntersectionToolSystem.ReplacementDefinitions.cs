@@ -216,12 +216,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 flags |= CreationFlags.Invert;
             }
 
-            int randomSeed = EntityManager.TryGetComponent(candidate.PocketEdge, out PseudoRandomSeed seed)
-                ? seed.m_Seed
-                : candidate.PocketEdge.Index;
-            int fixedIndex = EntityManager.TryGetComponent(candidate.PocketEdge, out Fixed fixedData)
-                ? fixedData.m_Index
-                : -1;
+            int randomSeed = GetDefinitionRandomSeed(candidate.PocketEdge);
+            int fixedIndex = GetDefinitionFixedIndex(candidate.PocketEdge);
 
             request = new ReplacementDefinitionRequest
             {
@@ -298,12 +294,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            int randomSeed = EntityManager.TryGetComponent(sourceEdge, out PseudoRandomSeed seed)
-                ? seed.m_Seed
-                : sourceEdge.Index;
-            int fixedIndex = EntityManager.TryGetComponent(sourceEdge, out Fixed fixedData)
-                ? fixedData.m_Index
-                : -1;
+            int randomSeed = GetDefinitionRandomSeed(sourceEdge);
+            int fixedIndex = GetDefinitionFixedIndex(sourceEdge);
 
             request = new ReplacementDefinitionRequest
             {
@@ -318,6 +310,20 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 RandomSeed = randomSeed
             };
             return true;
+        }
+
+        private int GetDefinitionRandomSeed(Entity edge)
+        {
+            return EntityManager.TryGetComponent(edge, out PseudoRandomSeed seed)
+                ? seed.m_Seed
+                : edge.Index;
+        }
+
+        private int GetDefinitionFixedIndex(Entity edge)
+        {
+            return EntityManager.TryGetComponent(edge, out Fixed fixedData)
+                ? fixedData.m_Index
+                : -1;
         }
     }
 }

@@ -106,17 +106,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             plan.CurvePosition = targetPlan.CurvePosition;
             plan.SplitDistance = targetPlan.SplitDistance;
             plan.PocketDistance = targetPlan.PocketDistance;
-            int randomSeed = EntityManager.TryGetComponent(edgeEntity, out PseudoRandomSeed seed)
-                ? seed.m_Seed
-                : edgeEntity.Index;
-
             plan.Request = new SplitDefinitionRequest
             {
                 Edge = edgeEntity,
                 Prefab = prefabRef.m_Prefab,
                 HitPosition = targetPlan.HitPosition,
                 CurvePosition = plan.CurvePosition,
-                RandomSeed = randomSeed
+                RandomSeed = GetDefinitionRandomSeed(edgeEntity)
             };
 
             return true;
@@ -253,9 +249,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            int randomSeed = EntityManager.TryGetComponent(edgeEntity, out PseudoRandomSeed seed)
-                ? seed.m_Seed
-                : edgeEntity.Index;
             bool hasUpgraded = EntityManager.TryGetComponent(edgeEntity, out Upgraded upgraded);
 
             candidate = new NodeMergeCandidate
@@ -294,7 +287,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     EndNode = endNode,
                     MergedCurve = mergedBezier,
                     MergedLength = mergedLength,
-                    RandomSeed = randomSeed,
+                    RandomSeed = GetDefinitionRandomSeed(edgeEntity),
                     HasUpgraded = hasUpgraded,
                     Upgraded = upgraded,
                     FirstDeletion = new EdgeDeletionDefinitionRequest
@@ -466,9 +459,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             splitDistance = GetCurveDistanceFromNode(mergedBezier, nodeIsStartOnMergedEdge, splitPosition);
             float pocketDistance = math.max(0f, splitDistance - nearIntersectionDistance);
             float3 hitPosition = MathUtils.Position(mergedBezier, splitPosition);
-            int randomSeed = EntityManager.TryGetComponent(continuationEdge, out PseudoRandomSeed continuationSeed)
-                ? continuationSeed.m_Seed
-                : continuationEdge.Index;
             bool hasMergedUpgraded = EntityManager.TryGetComponent(continuationEdge, out Upgraded mergedUpgraded);
             FarIntersectionTrafficSnapshot farSnapshot = m_SplitLaneConnectionFixSystem != null
                 ? m_SplitLaneConnectionFixSystem.CaptureFarIntersectionTrafficSnapshot(farNode, continuationEdge)
@@ -514,7 +504,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     EndNode = endNode,
                     MergedCurve = mergedBezier,
                     MergedLength = mergedLength,
-                    RandomSeed = randomSeed,
+                    RandomSeed = GetDefinitionRandomSeed(continuationEdge),
                     HasUpgraded = hasMergedUpgraded,
                     Upgraded = mergedUpgraded,
                     FirstDeletion = new EdgeDeletionDefinitionRequest
