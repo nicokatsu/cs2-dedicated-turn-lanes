@@ -27,6 +27,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         private EntityManager EntityManager => m_EntityManager;
 
+        private static string FormatEntity(Entity entity)
+        {
+            return DiagnosticFormat.Entity(entity);
+        }
+
         internal string BuildTramUpgradeRejectSample(
             Entity candidatePrefab,
             RoadLaneProfile candidateProfile,
@@ -34,6 +39,28 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             string tramUpgradeDetail)
         {
             return $"candidate={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, candidatePrefab)} candidateRoad={candidateProfile.RoadCounts} candidateTramTracks={candidateProfile.TramTrackCounts} invert={invert} {tramUpgradeDetail}";
+        }
+
+        internal string BuildBusUpgradeRejectSample(
+            Entity candidatePrefab,
+            string candidateName,
+            bool candidateIsSourcePrefab,
+            RoadLaneProfile candidateProfile,
+            bool defaultLaneMatch,
+            string busUpgradeDetail)
+        {
+            return $"candidate={candidateName} candidateEntity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} candidateSource={candidateProfile.Source} defaultLaneMatch={defaultLaneMatch} {busUpgradeDetail}";
+        }
+
+        internal string BuildRoadBuilderBusUpgradeSample(
+            Entity candidatePrefab,
+            string candidateName,
+            bool candidateIsSourcePrefab,
+            RoadLaneProfile candidateProfile,
+            bool defaultLaneMatch,
+            string busUpgradeDetail)
+        {
+            return $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultLaneMatch={defaultLaneMatch} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} {busUpgradeDetail}";
         }
 
         internal bool TryFindMatchingTramUpgrade(

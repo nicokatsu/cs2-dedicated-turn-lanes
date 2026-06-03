@@ -769,62 +769,98 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
             else
             {
-                bool defaultLaneMatch = RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert);
-                bool shouldScanBusUpgrade = sourceProfile.BusLaneLayout.HasAny &&
-                                            (!defaultLaneMatch || !candidateProfile.BusLaneLayout.HasAny);
-                string busUpgradeDetail = "busUpgrade=not-scanned";
-                bool hasBusUpgradeMatch = false;
-                bool busUpgradeInvert = false;
-                Upgraded busTargetUpgrade = default;
-                RoadLaneProfile busTargetProfile = default;
-
-                if (shouldScanBusUpgrade)
-                {
-                    hasBusUpgradeMatch = m_RoadUpgradeMatcher.TryFindMatchingBusUpgrade(
+                if (!TryMatchBusReplacementCandidate(
                         candidatePrefab,
+                        candidateName,
+                        candidateIsSourcePrefab,
+                        candidateLooksLikeRoadBuilder,
+                        candidateProfile,
                         sourceProfile,
                         desiredCounts,
-                        out busUpgradeInvert,
-                        out busTargetUpgrade,
-                        out busTargetProfile,
-                        out busUpgradeDetail);
-                }
-
-                if (hasBusUpgradeMatch)
+                        ref stats,
+                        ref match,
+                        out invert))
                 {
-                    stats.BusUpgradeCandidates++;
-                    invert = busUpgradeInvert;
-                    match.HasTargetUpgrade = true;
-                    match.TargetUpgrade = busTargetUpgrade;
-                    match.TargetLayoutProfile = busTargetProfile;
-                    CopyTargetTramProfile(busTargetProfile, ref match);
-                    match.TramMatchDetail = $"mode=bus-upgrade-preserve sourceBusLayout={sourceProfile.BusLaneLayout} targetUpgrade={busTargetUpgrade.m_Flags} {busUpgradeDetail}";
-                }
-                else
-                {
-                    if (shouldScanBusUpgrade)
-                    {
-                        stats.AddBusUpgradeRejection(
-                            $"candidate={candidateName} candidateEntity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} candidateSource={candidateProfile.Source} defaultLaneMatch={defaultLaneMatch} {busUpgradeDetail}",
-                            6);
-                    }
-
-                    if (candidateLooksLikeRoadBuilder)
-                    {
-                        stats.AddRoadBuilderBusUpgradeSample(
-                            $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} isSource={candidateIsSourcePrefab} defaultLaneMatch={defaultLaneMatch} candidateRoad={candidateProfile.RoadCounts} candidateBusLayout={candidateProfile.BusLaneLayout} {busUpgradeDetail}",
-                            16);
-                    }
-
-                    if (!defaultLaneMatch)
-                    {
-                        return false;
-                    }
+                    return false;
                 }
             }
 
             match.Invert = invert;
             return true;
+        }
+
+        private bool TryMatchBusReplacementCandidate(
+            Entity candidatePrefab,
+            string candidateName,
+            bool candidateIsSourcePrefab,
+            bool candidateLooksLikeRoadBuilder,
+            RoadLaneProfile candidateProfile,
+            RoadLaneProfile sourceProfile,
+            RoadLaneCounts desiredCounts,
+            ref ReplacementSearchStats stats,
+            ref CandidateLaneMatch match,
+            out bool invert)
+        {
+            bool defaultLaneMatch = RoadLaneCountMatcher.TryMatch(candidateProfile.RoadCounts, desiredCounts, out invert);
+            bool shouldScanBusUpgrade = sourceProfile.BusLaneLayout.HasAny &&
+                                        (!defaultLaneMatch || !candidateProfile.BusLaneLayout.HasAny);
+            string busUpgradeDetail = "busUpgrade=not-scanned";
+            bool hasBusUpgradeMatch = false;
+            bool busUpgradeInvert = false;
+            Upgraded busTargetUpgrade = default;
+            RoadLaneProfile busTargetProfile = default;
+
+            if (shouldScanBusUpgrade)
+            {
+                hasBusUpgradeMatch = m_RoadUpgradeMatcher.TryFindMatchingBusUpgrade(
+                    candidatePrefab,
+                    sourceProfile,
+                    desiredCounts,
+                    out busUpgradeInvert,
+                    out busTargetUpgrade,
+                    out busTargetProfile,
+                    out busUpgradeDetail);
+            }
+
+            if (hasBusUpgradeMatch)
+            {
+                stats.BusUpgradeCandidates++;
+                invert = busUpgradeInvert;
+                match.HasTargetUpgrade = true;
+                match.TargetUpgrade = busTargetUpgrade;
+                match.TargetLayoutProfile = busTargetProfile;
+                CopyTargetTramProfile(busTargetProfile, ref match);
+                match.TramMatchDetail = $"mode=bus-upgrade-preserve sourceBusLayout={sourceProfile.BusLaneLayout} targetUpgrade={busTargetUpgrade.m_Flags} {busUpgradeDetail}";
+                return true;
+            }
+
+            if (shouldScanBusUpgrade)
+            {
+                stats.AddBusUpgradeRejection(
+                    m_RoadUpgradeMatcher.BuildBusUpgradeRejectSample(
+                        candidatePrefab,
+                        candidateName,
+                        candidateIsSourcePrefab,
+                        candidateProfile,
+                        defaultLaneMatch,
+                        busUpgradeDetail),
+                    6);
+            }
+
+            if (candidateLooksLikeRoadBuilder)
+            {
+                stats.AddRoadBuilderBusUpgradeSample(
+                    m_RoadUpgradeMatcher.BuildRoadBuilderBusUpgradeSample(
+                        candidatePrefab,
+                        candidateName,
+                        candidateIsSourcePrefab,
+                        candidateProfile,
+                        defaultLaneMatch,
+                        busUpgradeDetail),
+                    16);
+            }
+
+            return defaultLaneMatch;
         }
 
         private static void CopyTargetTramProfile(
