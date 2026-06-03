@@ -151,20 +151,14 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 float retryPocketLength = candidate.TargetPocketLength + SplitRetryStep;
                 string retryDetail = $"mode=fixed-step step={SplitRetryStep:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m";
 
-                if (!TryBuildSplitDefinitionRequest(
+                if (!TryBuildSplitDefinitionPlan(
                         candidate.Node,
                         candidate.Edge,
-                        out SplitDefinitionRequest request,
-                        out float splitPosition,
-                        out float splitDistance,
-                        out float intersectionDistance,
-                        out float pocketDistance,
-                        out float targetDistance,
-                        out float targetPocketLength,
+                        out SplitDefinitionPlan splitPlan,
                         retryPocketLength))
                 {
                     exhaustedCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m.");
                     if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not be prepared; {retryDetail}"))
                     {
                         exhaustedFallbackCount++;
@@ -173,11 +167,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (splitDistance < candidate.SplitDistance + MinimumRetryProgress)
+                if (splitPlan.SplitDistance < candidate.SplitDistance + MinimumRetryProgress)
                 {
                     exhaustedCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} previous={candidate.SplitDistance:0.##}m next={splitDistance:0.##}m.");
-                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not move far enough; {retryDetail} previous={candidate.SplitDistance:0.##}m next={splitDistance:0.##}m"))
+                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m.");
+                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not move far enough; {retryDetail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m"))
                     {
                         exhaustedFallbackCount++;
                     }
@@ -198,13 +192,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     InvertTarget = candidate.InvertTarget,
                     HasTargetUpgrade = candidate.HasTargetUpgrade,
                     TargetUpgrade = candidate.TargetUpgrade,
-                    CurvePosition = splitPosition,
-                    HitPosition = request.HitPosition,
-                    TargetDistance = targetDistance,
-                    TargetPocketLength = targetPocketLength,
-                    SplitDistance = splitDistance,
-                    IntersectionDistance = intersectionDistance,
-                    PocketDistance = pocketDistance,
+                    CurvePosition = splitPlan.CurvePosition,
+                    HitPosition = splitPlan.Request.HitPosition,
+                    TargetDistance = splitPlan.TargetDistance,
+                    TargetPocketLength = splitPlan.TargetPocketLength,
+                    SplitDistance = splitPlan.SplitDistance,
+                    IntersectionDistance = splitPlan.IntersectionDistance,
+                    PocketDistance = splitPlan.PocketDistance,
                     OriginalForwardLanes = candidate.OriginalForwardLanes,
                     OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                     TargetForwardLanes = candidate.TargetForwardLanes,
@@ -212,7 +206,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     Attempt = nextAttempt,
                     FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
                 });
-                Mod.LogDiagnostic($"[IntersectionTool] Preview split missing edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)}; retry attempt={nextAttempt} {retryDetail} requestedPocket={targetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m split={splitPosition:0.###} target={targetDistance:0.##}m distance={splitDistance:0.##}m intersection={intersectionDistance:0.##}m pocket={pocketDistance:0.##}m.");
+                Mod.LogDiagnostic($"[IntersectionTool] Preview split missing edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)}; retry attempt={nextAttempt} {retryDetail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m split={splitPlan.CurvePosition:0.###} target={splitPlan.TargetDistance:0.##}m distance={splitPlan.SplitDistance:0.##}m intersection={splitPlan.IntersectionDistance:0.##}m pocket={splitPlan.PocketDistance:0.##}m.");
             }
 
             if (needsRetry)
@@ -407,16 +401,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             for (int i = 0; i < candidates.Count; i++)
             {
                 SplitCandidate candidate = candidates[i];
-                if (!TryBuildSplitDefinitionRequest(
+                if (!TryBuildSplitDefinitionPlan(
                         candidate.Node,
                         candidate.Edge,
-                        out SplitDefinitionRequest request,
-                        out float splitPosition,
-                        out float splitDistance,
-                        out float intersectionDistance,
-                        out float pocketDistance,
-                        out float targetDistance,
-                        out float targetPocketLength,
+                        out SplitDefinitionPlan splitPlan,
                         candidate.TargetPocketLength))
                 {
                     Mod.LogDiagnostic($"[IntersectionTool] Cannot rebuild preview split edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={candidate.Attempt}.");
@@ -425,7 +413,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
                 JobHandle createDefinitionJobHandle = new CreateSplitDefinitionJob
                 {
-                    Request = request,
+                    Request = splitPlan.Request,
                     ECB = m_ToolOutputBarrier.CreateCommandBuffer()
                 }.Schedule(result);
 
@@ -442,13 +430,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     InvertTarget = candidate.InvertTarget,
                     HasTargetUpgrade = candidate.HasTargetUpgrade,
                     TargetUpgrade = candidate.TargetUpgrade,
-                    CurvePosition = splitPosition,
-                    HitPosition = request.HitPosition,
-                    TargetDistance = targetDistance,
-                    TargetPocketLength = targetPocketLength,
-                    SplitDistance = splitDistance,
-                    IntersectionDistance = intersectionDistance,
-                    PocketDistance = pocketDistance,
+                    CurvePosition = splitPlan.CurvePosition,
+                    HitPosition = splitPlan.Request.HitPosition,
+                    TargetDistance = splitPlan.TargetDistance,
+                    TargetPocketLength = splitPlan.TargetPocketLength,
+                    SplitDistance = splitPlan.SplitDistance,
+                    IntersectionDistance = splitPlan.IntersectionDistance,
+                    PocketDistance = splitPlan.PocketDistance,
                     OriginalForwardLanes = candidate.OriginalForwardLanes,
                     OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                     TargetForwardLanes = candidate.TargetForwardLanes,

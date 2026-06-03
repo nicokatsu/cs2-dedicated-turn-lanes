@@ -21,6 +21,17 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int RandomSeed;
         }
 
+        private struct SplitDefinitionPlan
+        {
+            public SplitDefinitionRequest Request;
+            public float CurvePosition;
+            public float SplitDistance;
+            public float IntersectionDistance;
+            public float PocketDistance;
+            public float TargetDistance;
+            public float TargetPocketLength;
+        }
+
         private struct EdgeDeletionDefinitionRequest
         {
             public Entity Edge;

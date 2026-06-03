@@ -61,7 +61,7 @@ namespace PocketTurnLanes
             }
 
             updateSystem.UpdateAt<IntersectionToolSystem>(SystemUpdatePhase.ToolUpdate);
-            TrafficIntegration.RegisterLaneConnectionSystems(updateSystem, trafficRepairEnabled, trafficDetected);
+            SplitLaneConnectionRepairSystemRegistration.Register(updateSystem, trafficRepairEnabled, trafficDetected);
             updateSystem.UpdateAt<PocketTurnLaneUISystem>(SystemUpdatePhase.UIUpdate);
         }
 
