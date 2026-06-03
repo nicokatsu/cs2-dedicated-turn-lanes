@@ -142,10 +142,10 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
-            object config = TryGetPropertyValue(prefabBase, "Config");
+            object config = TryGetPropertyValue(prefabBase, "Config", out string configError);
             if (config == null)
             {
-                detail = $"roadBuilderVisibility=unknown reason=missing-config prefab={prefabBase.name} prefabType={prefabBase.GetType().FullName}";
+                detail = $"roadBuilderVisibility=unknown reason=missing-config prefab={prefabBase.name} prefabType={prefabBase.GetType().FullName} configRead={FormatPropertyRead(configError)}";
                 return false;
             }
 
@@ -313,22 +313,24 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
-            object config = TryGetPropertyValue(prefabBase, "Config");
+            object config = TryGetPropertyValue(prefabBase, "Config", out string configError);
             if (config == null ||
                 config.GetType().FullName?.StartsWith("RoadBuilder.Domain.Configurations.", StringComparison.Ordinal) != true)
             {
-                detail = $"roadBuilderConfig=not-roadbuilder prefabType={prefabBase.GetType().FullName}";
+                detail = $"roadBuilderConfig=not-roadbuilder prefabType={prefabBase.GetType().FullName} configRead={FormatPropertyRead(configError)}";
                 return false;
             }
 
-            object rawLanes = TryGetPropertyValue(config, "Lanes");
+            object rawLanes = TryGetPropertyValue(config, "Lanes", out string lanesError);
             if (!(rawLanes is IEnumerable enumerable))
             {
-                detail = $"roadBuilderConfig=missing-lanes configType={config.GetType().FullName}";
+                detail = $"roadBuilderConfig=missing-lanes configType={config.GetType().FullName} lanesRead={FormatPropertyRead(lanesError)}";
                 return false;
             }
 
             lanes = new List<RoadBuilderLaneConfig>();
+            string propertyReadErrors = "<none>";
+            int propertyReadErrorCount = 0;
             foreach (object laneObject in enumerable)
             {
                 if (laneObject == null)
@@ -336,19 +338,28 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     continue;
                 }
 
+                object groupPrefabName = TryGetPropertyValue(laneObject, "GroupPrefabName", out string groupPrefabError);
+                object sectionPrefabName = TryGetPropertyValue(laneObject, "SectionPrefabName", out string sectionPrefabError);
+                object groupOptions = TryGetPropertyValue(laneObject, "GroupOptions", out string groupOptionsError);
+                object invert = TryGetPropertyValue(laneObject, "Invert", out string invertError);
+                AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, groupPrefabError);
+                AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, sectionPrefabError);
+                AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, groupOptionsError);
+                AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, invertError);
+
                 RoadBuilderLaneConfig lane = new RoadBuilderLaneConfig
                 {
-                    GroupPrefabName = TryGetPropertyValue(laneObject, "GroupPrefabName") as string ?? string.Empty,
-                    SectionPrefabName = TryGetPropertyValue(laneObject, "SectionPrefabName") as string ?? string.Empty,
-                    GroupOptions = ReadGroupOptions(TryGetPropertyValue(laneObject, "GroupOptions")),
-                    Invert = TryGetPropertyValue(laneObject, "Invert") is bool invert && invert
+                    GroupPrefabName = groupPrefabName as string ?? string.Empty,
+                    SectionPrefabName = sectionPrefabName as string ?? string.Empty,
+                    GroupOptions = ReadGroupOptions(groupOptions, ref propertyReadErrors, ref propertyReadErrorCount),
+                    Invert = invert is bool invertValue && invertValue
                 };
                 lane.Width = GetLaneWidth(lane);
                 ClassifyLane(ref lane);
                 lanes.Add(lane);
             }
 
-            detail = $"roadBuilderConfig=loaded prefab={prefabBase.name} lanes={lanes.Count} configType={config.GetType().FullName}";
+            detail = $"roadBuilderConfig=loaded prefab={prefabBase.name} lanes={lanes.Count} configType={config.GetType().FullName} propertyReadErrors={propertyReadErrors}";
             return lanes.Count > 0;
         }
 
@@ -382,32 +393,48 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         private static string GetConfigVisibilityDetail(object config)
         {
             Type configType = config.GetType();
-            string configId = TryGetPropertyValue(config, "ID")?.ToString() ?? "<missing>";
-            string configName = TryGetPropertyValue(config, "Name")?.ToString() ?? "<missing>";
-            string playsets = FormatPlaysets(TryGetPropertyValue(config, "Playsets"));
+            string propertyReadErrors = "<none>";
+            int propertyReadErrorCount = 0;
+            object configIdValue = TryGetPropertyValue(config, "ID", out string configIdError);
+            object configNameValue = TryGetPropertyValue(config, "Name", out string configNameError);
+            object playsetsValue = TryGetPropertyValue(config, "Playsets", out string playsetsError);
+            AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, configIdError);
+            AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, configNameError);
+            AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, playsetsError);
+            string configId = configIdValue?.ToString() ?? "<missing>";
+            string configName = configNameValue?.ToString() ?? "<missing>";
+            string playsets = FormatPlaysets(playsetsValue);
             string currentPlayset = TryGetStaticPropertyValue(
                     configType.Assembly.GetType("RoadBuilder.Utilities.PdxModsUtil"),
-                    "CurrentPlayset")
+                    "CurrentPlayset",
+                    out string currentPlaysetError)
                 ?.ToString() ?? "<missing>";
+            AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, currentPlaysetError);
             object settings = TryGetStaticPropertyValue(
                 configType.Assembly.GetType("RoadBuilder.Mod"),
-                "Settings");
-            string noPlaysetIsolation = TryGetPropertyValue(settings, "NoPlaysetIsolation")?.ToString() ?? "<missing>";
+                "Settings",
+                out string settingsError);
+            AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, settingsError);
+            object noPlaysetIsolationValue = TryGetPropertyValue(settings, "NoPlaysetIsolation", out string noPlaysetIsolationError);
+            AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, noPlaysetIsolationError);
+            string noPlaysetIsolation = noPlaysetIsolationValue?.ToString() ?? "<missing>";
 
-            return $"configId={configId} configName={configName} playsets={playsets} currentPlayset={currentPlayset} noPlaysetIsolation={noPlaysetIsolation} configType={configType.FullName}";
+            return $"configId={configId} configName={configName} playsets={playsets} currentPlayset={currentPlayset} noPlaysetIsolation={noPlaysetIsolation} configType={configType.FullName} propertyReadErrors={propertyReadErrors}";
         }
 
-        private static object TryGetStaticPropertyValue(Type type, string propertyName)
+        private static object TryGetStaticPropertyValue(Type type, string propertyName, out string error)
         {
+            error = string.Empty;
             if (type == null)
             {
+                error = $"missingType.{propertyName}";
                 return null;
             }
 
             PropertyInfo property = type.GetProperty(
                 propertyName,
                 BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            return property == null ? null : property.GetValue(null);
+            return TryGetPropertyValue(property, null, propertyName, out error);
         }
 
         private static string FormatPlaysets(object rawPlaysets)
@@ -439,18 +466,54 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         private static object TryGetPropertyValue(object instance, string propertyName)
         {
+            return TryGetPropertyValue(instance, propertyName, out _);
+        }
+
+        private static object TryGetPropertyValue(object instance, string propertyName, out string error)
+        {
+            error = string.Empty;
             if (instance == null)
             {
+                error = $"missingInstance.{propertyName}";
                 return null;
             }
 
             PropertyInfo property = instance.GetType().GetProperty(
                 propertyName,
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            return property == null ? null : property.GetValue(instance);
+            return TryGetPropertyValue(property, instance, propertyName, out error);
         }
 
-        private static Dictionary<string, string> ReadGroupOptions(object rawOptions)
+        private static object TryGetPropertyValue(PropertyInfo property, object instance, string propertyName, out string error)
+        {
+            error = string.Empty;
+            if (property == null)
+            {
+                error = $"missingProperty.{propertyName}";
+                return null;
+            }
+
+            try
+            {
+                return property.GetValue(instance);
+            }
+            catch (TargetInvocationException ex)
+            {
+                Exception inner = ex.InnerException ?? ex;
+                error = $"getterError.{property.DeclaringType?.FullName}.{property.Name}:{inner.GetType().Name}:{inner.Message}";
+                return null;
+            }
+            catch (Exception ex)
+            {
+                error = $"propertyReadError.{property.DeclaringType?.FullName}.{property.Name}:{ex.GetType().Name}:{ex.Message}";
+                return null;
+            }
+        }
+
+        private static Dictionary<string, string> ReadGroupOptions(
+            object rawOptions,
+            ref string propertyReadErrors,
+            ref int propertyReadErrorCount)
         {
             Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (rawOptions == null)
@@ -481,15 +544,36 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                         continue;
                     }
 
-                    string key = TryGetPropertyValue(item, "Key")?.ToString() ?? string.Empty;
+                    object keyValue = TryGetPropertyValue(item, "Key", out string keyError);
+                    object valueValue = TryGetPropertyValue(item, "Value", out string valueError);
+                    AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, keyError);
+                    AppendPropertyReadError(ref propertyReadErrors, ref propertyReadErrorCount, valueError);
+                    string key = keyValue?.ToString() ?? string.Empty;
                     if (!string.IsNullOrEmpty(key))
                     {
-                        result[key] = TryGetPropertyValue(item, "Value")?.ToString() ?? string.Empty;
+                        result[key] = valueValue?.ToString() ?? string.Empty;
                     }
                 }
             }
 
             return result;
+        }
+
+        private static void AppendPropertyReadError(ref string samples, ref int sampleCount, string error)
+        {
+            if (string.IsNullOrEmpty(error) ||
+                error.StartsWith("missingProperty.", StringComparison.Ordinal) ||
+                error.StartsWith("missingInstance.", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            ReplacementPrefabDiagnostics.AppendLogSample(ref samples, ref sampleCount, error, 8);
+        }
+
+        private static string FormatPropertyRead(string error)
+        {
+            return string.IsNullOrEmpty(error) ? "ok" : error;
         }
 
         private static string GetOption(Dictionary<string, string> options, string optionName)

@@ -138,6 +138,21 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
+            try
+            {
+                return OnUpdateCore(inputDeps);
+            }
+            catch (Exception ex)
+            {
+                string state = GetUnhandledUpdateState();
+                TryRecoverFromUnhandledUpdateException(state);
+                Mod.LogException(ex, $"[IntersectionTool] Unhandled exception during tool update; restored vanilla mutation systems and disabled the tool to avoid leaving preview mutation guards stuck. {state}");
+                return inputDeps;
+            }
+        }
+
+        private JobHandle OnUpdateCore(JobHandle inputDeps)
+        {
             JobHandle result = inputDeps;
 
             if (m_ClearSplitDefinitions)
@@ -378,6 +393,33 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             return result;
+        }
+
+        private string GetUnhandledUpdateState()
+        {
+            return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} queuedReplacements={m_QueuedReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} frame={UnityEngine.Time.frameCount}";
+        }
+
+        private void TryRecoverFromUnhandledUpdateException(string state)
+        {
+            try
+            {
+                UpdateHoveredIntersection(Entity.Null);
+                ResetPreviewState();
+                SetToolEnabled(false);
+                if (m_ToolSystem != null && m_ToolSystem.activeTool == this)
+                {
+                    m_ToolSystem.activeTool = m_DefaultToolSystem;
+                }
+            }
+            catch (Exception recoveryException)
+            {
+                Mod.LogException(recoveryException, $"[IntersectionTool] Failed while recovering from unhandled tool update exception. {state}");
+            }
+            finally
+            {
+                SetVanillaMutationSystemsEnabled(true);
+            }
         }
 
         public override bool TrySetPrefab(PrefabBase prefab)

@@ -119,7 +119,7 @@ namespace PocketTurnLanes.Tool.Traffic
             }
             catch (Exception ex)
             {
-                error = ex.Message;
+                error = $"compatibilityCheckFailed error={ex.GetType().Name}:{ex.Message} modifiedConnections={FormatType(modifiedConnectionsType)} dataOwner={FormatType(dataOwnerType)} modifiedLaneConnections={FormatType(modifiedLaneConnectionsType)} generatedConnection={FormatType(generatedConnectionType)} modDefaults={FormatType(modDefaultsSystemType)}";
                 return false;
             }
         }
@@ -159,22 +159,32 @@ namespace PocketTurnLanes.Tool.Traffic
 
         public int GetBufferLength(object buffer)
         {
-            return (int)buffer.GetType().GetProperty("Length").GetValue(buffer);
+            PropertyInfo property = RequireBufferProperty(buffer, "Length", "read buffer length");
+            object value = GetPropertyValue(property, buffer, null, "read buffer length");
+            if (value is int length)
+            {
+                return length;
+            }
+
+            throw CreateCompatibilityException($"read buffer length returned non-int valueType={value?.GetType().FullName ?? "<null>"} member={FormatMember(property)} bufferType={FormatType(buffer?.GetType())}");
         }
 
         public object GetBufferItem(object buffer, int index)
         {
-            return buffer.GetType().GetProperty("Item").GetValue(buffer, new object[] { index });
+            PropertyInfo property = RequireBufferProperty(buffer, "Item", "read buffer item");
+            return GetPropertyValue(property, buffer, new object[] { index }, $"read buffer item index={index}");
         }
 
         public void ClearBuffer(object buffer)
         {
-            buffer.GetType().GetMethod("Clear").Invoke(buffer, null);
+            MethodInfo method = RequireBufferMethod(buffer, "Clear", 0, "clear buffer");
+            InvokeMethod(method, buffer, null, "clear buffer");
         }
 
         public void AddBufferElement(object buffer, object element)
         {
-            buffer.GetType().GetMethod("Add").Invoke(buffer, new[] { element });
+            MethodInfo method = RequireBufferMethod(buffer, "Add", 1, "add buffer element");
+            InvokeMethod(method, buffer, new[] { element }, $"add buffer element elementType={FormatType(element?.GetType())}");
         }
 
         public Entity GetModifiedConnectionEdge(object element)
@@ -325,7 +335,7 @@ namespace PocketTurnLanes.Tool.Traffic
         private static FieldInfo RequireField(Type type, string name)
         {
             return type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                   ?? throw new MissingFieldException(type.FullName, name);
+                   ?? throw CreateCompatibilityException($"missing field type={FormatType(type)} field={name}");
         }
 
         private static MethodInfo MakeEntityManagerGeneric(string name, Type genericType, params Type[] parameterTypes)
@@ -339,10 +349,114 @@ namespace PocketTurnLanes.Tool.Traffic
 
             if (method == null)
             {
-                throw new MissingMethodException(typeof(EntityManager).FullName, name);
+                throw CreateCompatibilityException($"missing EntityManager generic method operation={name} genericType={FormatType(genericType)} parameters={FormatParameterTypes(parameterTypes)}");
             }
 
             return method.MakeGenericMethod(genericType);
+        }
+
+        private static PropertyInfo RequireBufferProperty(object buffer, string name, string operation)
+        {
+            Type bufferType = buffer?.GetType();
+            if (bufferType == null)
+            {
+                throw CreateCompatibilityException($"{operation} failed because buffer is <null> member={name}");
+            }
+
+            PropertyInfo property = bufferType.GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+            if (property == null)
+            {
+                throw CreateCompatibilityException($"{operation} missing property bufferType={FormatType(bufferType)} property={name}");
+            }
+
+            return property;
+        }
+
+        private static MethodInfo RequireBufferMethod(object buffer, string name, int parameterCount, string operation)
+        {
+            Type bufferType = buffer?.GetType();
+            if (bufferType == null)
+            {
+                throw CreateCompatibilityException($"{operation} failed because buffer is <null> method={name}");
+            }
+
+            MethodInfo method = bufferType
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .FirstOrDefault(candidate =>
+                    candidate.Name == name &&
+                    candidate.GetParameters().Length == parameterCount);
+            if (method == null)
+            {
+                throw CreateCompatibilityException($"{operation} missing method bufferType={FormatType(bufferType)} method={name} parameterCount={parameterCount}");
+            }
+
+            return method;
+        }
+
+        private static object GetPropertyValue(PropertyInfo property, object instance, object[] index, string operation)
+        {
+            try
+            {
+                return property.GetValue(instance, index);
+            }
+            catch (TargetInvocationException ex)
+            {
+                Exception inner = ex.InnerException ?? ex;
+                throw CreateCompatibilityException($"{operation} property getter failed member={FormatMember(property)} error={inner.GetType().Name}:{inner.Message}", inner);
+            }
+            catch (Exception ex)
+            {
+                throw CreateCompatibilityException($"{operation} property access failed member={FormatMember(property)} error={ex.GetType().Name}:{ex.Message}", ex);
+            }
+        }
+
+        private static object InvokeMethod(MethodInfo method, object instance, object[] parameters, string operation)
+        {
+            try
+            {
+                return method.Invoke(instance, parameters);
+            }
+            catch (TargetInvocationException ex)
+            {
+                Exception inner = ex.InnerException ?? ex;
+                throw CreateCompatibilityException($"{operation} method invocation failed member={FormatMember(method)} error={inner.GetType().Name}:{inner.Message}", inner);
+            }
+            catch (Exception ex)
+            {
+                throw CreateCompatibilityException($"{operation} method access failed member={FormatMember(method)} error={ex.GetType().Name}:{ex.Message}", ex);
+            }
+        }
+
+        private static InvalidOperationException CreateCompatibilityException(string message, Exception inner = null)
+        {
+            return inner == null
+                ? new InvalidOperationException($"Traffic API compatibility check failed: {message}")
+                : new InvalidOperationException($"Traffic API compatibility check failed: {message}", inner);
+        }
+
+        private static string FormatType(Type type)
+        {
+            if (type == null)
+            {
+                return "<null>";
+            }
+
+            AssemblyName assemblyName = type.Assembly.GetName();
+            return $"{type.FullName}, assembly={assemblyName.Name}, version={assemblyName.Version}";
+        }
+
+        private static string FormatMember(MemberInfo member)
+        {
+            return member == null
+                ? "<null>"
+                : $"{FormatType(member.DeclaringType)}.{member.Name}";
+        }
+
+        private static string FormatParameterTypes(Type[] parameterTypes)
+        {
+            return parameterTypes == null || parameterTypes.Length == 0
+                ? "<none>"
+                : string.Join(",", parameterTypes.Select(type => type == null ? "<null>" : type.FullName));
         }
 
         private static bool ParametersMatch(MethodInfo method, Type genericType, Type[] parameterTypes)
