@@ -235,7 +235,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             RoadLaneCounts originalCounts = sourceProfile.RoadCounts;
-            RoadLaneCounts desiredCounts = GetDesiredPocketLaneCounts(originalCounts, nodeIsEnd);
+            RoadLaneCounts desiredCounts = GetDesiredPocketLaneCounts(originalCounts, nodeIsStart);
 
             bool sourceHasUpgraded = EntityManager.TryGetComponent(edgeEntity, out Upgraded sourceUpgraded);
             context = new SourceReplacementContext
@@ -528,19 +528,9 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             };
         }
 
-        private static RoadLaneCounts GetDesiredPocketLaneCounts(RoadLaneCounts originalCounts, bool nodeIsEnd)
+        private static RoadLaneCounts GetDesiredPocketLaneCounts(RoadLaneCounts originalCounts, bool currentNodeIsStart)
         {
-            RoadLaneCounts desiredCounts = originalCounts;
-            if (nodeIsEnd)
-            {
-                desiredCounts.Forward++;
-            }
-            else
-            {
-                desiredCounts.Backward++;
-            }
-
-            return desiredCounts;
+            return originalCounts.WithAddedIncomingAtNode(currentNodeIsStart);
         }
 
         private struct SourceReplacementContext

@@ -1,6 +1,6 @@
 namespace PocketTurnLanes.Tool.PrefabMatching
 {
-    internal static class ApproachNodeLaneProfile
+    internal static class ContinuationTargetLaneProfileMatcher
     {
         public static bool CountsMatchAtNodes(
             RoadLaneCounts targetCounts,
@@ -8,18 +8,21 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             RoadLaneCounts continuationCounts,
             bool continuationNodeIsStart)
         {
-            return GetIncomingCount(targetCounts, targetNodeIsStart) == GetIncomingCount(continuationCounts, continuationNodeIsStart) &&
-                   GetOutgoingCount(targetCounts, targetNodeIsStart) == GetOutgoingCount(continuationCounts, continuationNodeIsStart);
+            return RoadLaneCountMatcher.CountsMatchAtNodeSides(
+                targetCounts,
+                targetNodeIsStart,
+                continuationCounts,
+                continuationNodeIsStart);
         }
 
         public static int GetIncomingCount(RoadLaneCounts counts, bool nodeIsStart)
         {
-            return nodeIsStart ? counts.Backward : counts.Forward;
+            return counts.GetIncomingAtNode(nodeIsStart);
         }
 
         public static int GetOutgoingCount(RoadLaneCounts counts, bool nodeIsStart)
         {
-            return nodeIsStart ? counts.Forward : counts.Backward;
+            return counts.GetOutgoingAtNode(nodeIsStart);
         }
 
         public static string FormatCounts(RoadLaneCounts counts, bool nodeIsStart)
@@ -33,18 +36,20 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             DirectionalLaneOffsetProfile continuationLayout,
             bool continuationNodeIsStart)
         {
-            return GetIncomingLayoutCount(targetLayout, targetNodeIsStart) == GetIncomingLayoutCount(continuationLayout, continuationNodeIsStart) &&
-                   GetOutgoingLayoutCount(targetLayout, targetNodeIsStart) == GetOutgoingLayoutCount(continuationLayout, continuationNodeIsStart);
+            return targetLayout.CountsMatchAtNodeSides(
+                continuationLayout,
+                targetNodeIsStart,
+                continuationNodeIsStart);
         }
 
         public static int GetIncomingLayoutCount(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
         {
-            return nodeIsStart ? layout.BackwardCount : layout.ForwardCount;
+            return layout.GetIncomingCountAtNode(nodeIsStart);
         }
 
         public static int GetOutgoingLayoutCount(DirectionalLaneOffsetProfile layout, bool nodeIsStart)
         {
-            return nodeIsStart ? layout.ForwardCount : layout.BackwardCount;
+            return layout.GetOutgoingCountAtNode(nodeIsStart);
         }
 
         public static string FormatLayout(DirectionalLaneOffsetProfile layout, bool nodeIsStart)

@@ -635,7 +635,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            return ApproachNodeLaneProfile.TryMatchContinuationToReplacementTarget(
+            return ContinuationTargetLaneProfileMatcher.TryMatchContinuationToReplacementTarget(
                 prefabMatch,
                 continuationProfile,
                 currentNodeIsStartOnShortEdge,

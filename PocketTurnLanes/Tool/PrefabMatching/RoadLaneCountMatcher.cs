@@ -32,6 +32,31 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             };
         }
 
+        public int GetIncomingAtNode(bool nodeIsStart)
+        {
+            return nodeIsStart ? Backward : Forward;
+        }
+
+        public int GetOutgoingAtNode(bool nodeIsStart)
+        {
+            return nodeIsStart ? Forward : Backward;
+        }
+
+        public RoadLaneCounts WithAddedIncomingAtNode(bool nodeIsStart)
+        {
+            RoadLaneCounts counts = this;
+            if (nodeIsStart)
+            {
+                counts.Backward++;
+            }
+            else
+            {
+                counts.Forward++;
+            }
+
+            return counts;
+        }
+
         public override string ToString()
         {
             return BicycleOnly > 0
@@ -99,6 +124,16 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             return invert
                 ? CountsEqual(candidateCounts, desiredCounts.Swapped())
                 : CountsEqual(candidateCounts, desiredCounts);
+        }
+
+        public static bool CountsMatchAtNodeSides(
+            RoadLaneCounts targetCounts,
+            bool targetNodeIsStart,
+            RoadLaneCounts continuationCounts,
+            bool continuationNodeIsStart)
+        {
+            return targetCounts.GetIncomingAtNode(targetNodeIsStart) == continuationCounts.GetIncomingAtNode(continuationNodeIsStart) &&
+                   targetCounts.GetOutgoingAtNode(targetNodeIsStart) == continuationCounts.GetOutgoingAtNode(continuationNodeIsStart);
         }
     }
 }

@@ -89,6 +89,25 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         public bool HasAny => ForwardCount > 0 || BackwardCount > 0;
 
+        public int GetIncomingCountAtNode(bool nodeIsStart)
+        {
+            return nodeIsStart ? BackwardCount : ForwardCount;
+        }
+
+        public int GetOutgoingCountAtNode(bool nodeIsStart)
+        {
+            return nodeIsStart ? ForwardCount : BackwardCount;
+        }
+
+        public bool CountsMatchAtNodeSides(
+            DirectionalLaneOffsetProfile continuationLayout,
+            bool targetNodeIsStart,
+            bool continuationNodeIsStart)
+        {
+            return GetIncomingCountAtNode(targetNodeIsStart) == continuationLayout.GetIncomingCountAtNode(continuationNodeIsStart) &&
+                   GetOutgoingCountAtNode(targetNodeIsStart) == continuationLayout.GetOutgoingCountAtNode(continuationNodeIsStart);
+        }
+
         public DirectionalLaneOffsetProfile Oriented(bool invert)
         {
             if (!invert)
