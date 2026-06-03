@@ -77,10 +77,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
-            for (int i = 0; i < lanes.Length; i++)
-            {
-                AccumulateLaneProfile(lanes[i].m_Flags, lanes[i].m_Lane, lanes[i].m_Position.x, ref profile);
-            }
+            AccumulateCompositionLanes(lanes, ref profile);
 
             return profile.RoadCounts.Total > 0;
         }
@@ -98,10 +95,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             if (EntityManager.TryGetBuffer(prefabEntity, true, out DynamicBuffer<DefaultNetLane> lanes))
             {
-                for (int i = 0; i < lanes.Length; i++)
-                {
-                    AccumulateLaneProfile(lanes[i].m_Flags, lanes[i].m_Lane, lanes[i].m_Position.x, ref profile);
-                }
+                AccumulateDefaultNetLanes(lanes, ref profile);
 
                 if (profile.RoadCounts.Total > 0)
                 {
@@ -150,10 +144,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     continue;
                 }
 
-                for (int j = 0; j < lanes.Length; j++)
-                {
-                    AccumulateLaneProfile(lanes[j].m_Flags, lanes[j].m_Lane, lanes[j].m_Position.x, ref profile);
-                }
+                AccumulateCompositionLanes(lanes, ref profile);
 
                 return profile.RoadCounts.Total > 0;
             }
@@ -205,10 +196,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     m_GetNetLaneDataLookup(),
                     m_GetNetPieceLaneLookup());
 
-                for (int i = 0; i < lanes.Length; i++)
-                {
-                    AccumulateLaneProfile(lanes[i].m_Flags, lanes[i].m_Lane, lanes[i].m_Position.x, ref profile);
-                }
+                AccumulateCompositionLanes(lanes, ref profile);
 
                 profile.Source = source;
                 return profile.RoadCounts.Total > 0;
@@ -233,6 +221,43 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
         }
 
+        private void AccumulateDefaultNetLanes(
+            DynamicBuffer<DefaultNetLane> lanes,
+            ref RoadLaneProfile profile)
+        {
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                AccumulateLaneProfile(lanes[i].m_Flags, lanes[i].m_Lane, lanes[i].m_Position.x, ref profile);
+            }
+        }
+
+        private void AccumulateCompositionLanes(
+            DynamicBuffer<NetCompositionLane> lanes,
+            ref RoadLaneProfile profile)
+        {
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                AccumulateCompositionLane(lanes[i], ref profile);
+            }
+        }
+
+        private void AccumulateCompositionLanes(
+            NativeList<NetCompositionLane> lanes,
+            ref RoadLaneProfile profile)
+        {
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                AccumulateCompositionLane(lanes[i], ref profile);
+            }
+        }
+
+        private void AccumulateCompositionLane(
+            NetCompositionLane lane,
+            ref RoadLaneProfile profile)
+        {
+            AccumulateLaneProfile(lane.m_Flags, lane.m_Lane, lane.m_Position.x, ref profile);
+        }
+
         private void AccumulateLaneProfile(
             LaneFlags flags,
             Entity lanePrefab,
@@ -242,20 +267,48 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             LaneFlags effectiveFlags = GetEffectiveLaneFlags(flags, lanePrefab);
             string flagMergeDetail = FormatEffectiveLaneFlags(flags, effectiveFlags);
 
+            AccumulateRoadAndEnvelope(effectiveFlags, lanePrefab, lateralOffset, flagMergeDetail, ref profile);
+            TryRecordMarkedParking(effectiveFlags, lanePrefab, flagMergeDetail, ref profile);
+            AccumulateTramSemantics(effectiveFlags, lanePrefab, lateralOffset, flagMergeDetail, ref profile);
+            AccumulateBusSemantics(effectiveFlags, lanePrefab, lateralOffset, flagMergeDetail, ref profile);
+        }
+
+        private void AccumulateRoadAndEnvelope(
+            LaneFlags effectiveFlags,
+            Entity lanePrefab,
+            float lateralOffset,
+            string flagMergeDetail,
+            ref RoadLaneProfile profile)
+        {
             RoadLaneCountMatcher.CountRoadLane(effectiveFlags, ref profile.RoadCounts);
             if (IsDrivablePocketLengthLane(effectiveFlags) &&
                 TryGetLanePrefabWidth(lanePrefab, out float laneWidth))
             {
                 AddDrivableLaneEnvelope(effectiveFlags, lateralOffset, laneWidth, flagMergeDetail, ref profile);
             }
+        }
 
+        private void TryRecordMarkedParking(
+            LaneFlags effectiveFlags,
+            Entity lanePrefab,
+            string flagMergeDetail,
+            ref RoadLaneProfile profile)
+        {
             if (!profile.HasMarkedParking &&
                 IsMarkedParkingLane(effectiveFlags, lanePrefab, out string detail))
             {
                 profile.HasMarkedParking = true;
                 profile.MarkedParkingDetail = detail + flagMergeDetail;
             }
+        }
 
+        private void AccumulateTramSemantics(
+            LaneFlags effectiveFlags,
+            Entity lanePrefab,
+            float lateralOffset,
+            string flagMergeDetail,
+            ref RoadLaneProfile profile)
+        {
             if (IsTramTrackLane(effectiveFlags, lanePrefab, out string tramDetail))
             {
                 AddDirectionalLane(effectiveFlags, ref profile.TramTrackCounts);
@@ -285,7 +338,15 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     }
                 }
             }
+        }
 
+        private void AccumulateBusSemantics(
+            LaneFlags effectiveFlags,
+            Entity lanePrefab,
+            float lateralOffset,
+            string flagMergeDetail,
+            ref RoadLaneProfile profile)
+        {
             if (IsBusRoadLane(effectiveFlags, lanePrefab, out string busDetail))
             {
                 AddDirectionalOffset(effectiveFlags, lateralOffset, ref profile.BusLaneLayout);
