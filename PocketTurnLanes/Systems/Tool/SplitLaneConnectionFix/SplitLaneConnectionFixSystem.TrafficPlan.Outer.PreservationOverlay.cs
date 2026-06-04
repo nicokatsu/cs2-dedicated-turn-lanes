@@ -51,17 +51,15 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 mapping.Method = method;
                 mapping.IsPreservationOnly = true;
                 mapping.HasPreservedPathMethods = true;
-                TrafficMappingPlanMerge.AddOrMergeFinal(plan.BySource, mapping);
                 SourceLaneKey sourceKey = new SourceLaneKey(mapping.SourceEdge, mapping.SourceLaneIndex);
-                plan.PreservationSourceKeys.Add(sourceKey);
+                TrafficMappingPlanPreservation.AddOrMergePreservationMapping(
+                    plan,
+                    mapping,
+                    sourceKey,
+                    targetEndpoint);
                 plan.PreservationRuntimeConnections++;
                 plan.PreservationOverlayRuntimeConnections++;
                 runtimeSources.Add(sourceKey);
-                TrafficMappingPlanPreservation.CountPreservedConnectionStats(
-                    plan,
-                    method,
-                    mapping.IsUnsafe,
-                    targetEndpoint);
             }
 
             int added = plan.PreservationRuntimeConnections - beforeRuntime;
@@ -148,15 +146,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     }
 
                     LaneMapping mapping = TrafficMappingPlanPreservation.CreatePreservationMapping(generated, method);
-                    TrafficMappingPlanMerge.AddOrMergeFinal(plan.BySource, mapping);
-                    plan.PreservationSourceKeys.Add(sourceKey);
+                    TrafficMappingPlanPreservation.AddOrMergePreservationMapping(
+                        plan,
+                        mapping,
+                        sourceKey,
+                        targetEndpoint);
                     plan.PreservationOverlaySnapshotConnections++;
                     overlaySources.Add(sourceKey);
-                    TrafficMappingPlanPreservation.CountPreservedConnectionStats(
-                        plan,
-                        method,
-                        mapping.IsUnsafe,
-                        targetEndpoint);
                 }
             }
 

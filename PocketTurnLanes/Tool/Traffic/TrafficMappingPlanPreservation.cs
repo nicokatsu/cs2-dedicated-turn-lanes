@@ -52,6 +52,21 @@ namespace PocketTurnLanes.Tool.Traffic
             CountPreservedTrackStats(plan, method, targetEndpoint);
         }
 
+        public static void AddOrMergePreservationMapping(
+            TrafficMappingPlan plan,
+            LaneMapping mapping,
+            SourceLaneKey sourceKey,
+            LaneEndpoint targetEndpoint)
+        {
+            TrafficMappingPlanMerge.AddOrMergeFinal(plan.BySource, mapping);
+            plan.PreservationSourceKeys.Add(sourceKey);
+            CountPreservedConnectionStats(
+                plan,
+                mapping.Method,
+                mapping.IsUnsafe,
+                targetEndpoint);
+        }
+
         private static void CountPreservedTrackStats(
             TrafficMappingPlan plan,
             PathMethod method,
