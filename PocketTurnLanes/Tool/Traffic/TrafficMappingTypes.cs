@@ -21,6 +21,7 @@ namespace PocketTurnLanes.Tool.Traffic
         public bool IsUnsafe;
         public bool HasTrafficMaps;
         public bool HasPreservedPathMethods;
+        public bool PreserveSharedTrack;
     }
 
     internal readonly struct ConnectionKey : IEquatable<ConnectionKey>

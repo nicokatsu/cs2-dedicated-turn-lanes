@@ -174,7 +174,23 @@ namespace PocketTurnLanes.Tool.Traffic
 
         public static PathMethod GetRoadRepairPathMethod(PathMethod method)
         {
-            return PathMethod.Road | (method & PathMethod.Bicycle);
+            return GetRoadRepairPathMethod(method, preserveSharedTrack: false);
+        }
+
+        public static PathMethod GetRoadRepairPathMethod(PathMethod method, bool preserveSharedTrack)
+        {
+            PathMethod repairMethod = PathMethod.Road | (method & PathMethod.Bicycle);
+            if (preserveSharedTrack)
+            {
+                repairMethod |= method & PathMethod.Track;
+            }
+
+            return SanitizeTrafficPathMethod(repairMethod);
+        }
+
+        public static bool HasSharedTrackPath(PathMethod method)
+        {
+            return (method & (PathMethod.Road | PathMethod.Track)) == (PathMethod.Road | PathMethod.Track);
         }
 
         public static PathMethod RestrictTrafficPathMethodToEndpoints(

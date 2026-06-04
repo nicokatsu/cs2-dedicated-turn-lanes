@@ -41,7 +41,7 @@ namespace PocketTurnLanes.Tool.Traffic
 
         public static LaneMapping NormalizeRoadRepairMapping(LaneMapping mapping)
         {
-            mapping.Method = TrafficPathMethods.GetRoadRepairPathMethod(mapping.Method);
+            mapping.Method = TrafficPathMethods.GetRoadRepairPathMethod(mapping.Method, mapping.PreserveSharedTrack);
             mapping.IsPreservationOnly = false;
             mapping.IsUnsafe = false;
             return mapping;
@@ -87,6 +87,7 @@ namespace PocketTurnLanes.Tool.Traffic
                 existing.IsBranch |= mapping.IsBranch;
                 existing.IsPreservationOnly &= mapping.IsPreservationOnly;
                 existing.HasPreservedPathMethods = hasPreservedPathMethods;
+                existing.PreserveSharedTrack |= mapping.PreserveSharedTrack;
                 existing.IsUnsafe = mode == TrafficPathMethodMergeMode.Center
                     ? existing.IsUnsafe || mapping.IsUnsafe
                     : preserveUnsafe && (existing.IsUnsafe || mapping.IsUnsafe);

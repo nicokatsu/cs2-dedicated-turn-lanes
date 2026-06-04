@@ -75,14 +75,16 @@ namespace PocketTurnLanes.Tool.Traffic
                     return false;
                 }
 
+                PathMethod method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target);
                 result.Add(new LaneMapping
                 {
                     SourceEdge = sourceLanes[sourceIndex].Edge,
                     TargetEdge = target.Edge,
                     SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
                     TargetLaneIndex = assignedTargets[sourceIndex],
-                    Method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target),
-                    IsBranch = false
+                    Method = method,
+                    IsBranch = false,
+                    PreserveSharedTrack = TrafficPathMethods.HasSharedTrackPath(method)
                 });
             }
 
@@ -93,13 +95,14 @@ namespace PocketTurnLanes.Tool.Traffic
                 return false;
             }
 
+            PathMethod branchMethod = TrafficPathMethods.GetMappingMethod(branchSource, branchTarget);
             result.Add(new LaneMapping
             {
                 SourceEdge = branchSource.Edge,
                 TargetEdge = branchTarget.Edge,
                 SourceLaneIndex = branchSourceLaneIndex,
                 TargetLaneIndex = extraTargetLaneIndex,
-                Method = TrafficPathMethods.GetMappingMethod(branchSource, branchTarget),
+                Method = branchMethod,
                 IsBranch = true
             });
 
@@ -189,14 +192,16 @@ namespace PocketTurnLanes.Tool.Traffic
                 }
 
                 used.Add(key);
+                PathMethod method = RemapSnapshotMethod(snapshotMapping.Method, source, target);
                 result.Add(new LaneMapping
                 {
                     SourceEdge = sourceEdge,
                     TargetEdge = targetEdge,
                     SourceLaneIndex = source.LaneIndex,
                     TargetLaneIndex = target.LaneIndex,
-                    Method = RemapSnapshotMethod(snapshotMapping.Method, source, target),
-                    IsBranch = false
+                    Method = method,
+                    IsBranch = false,
+                    PreserveSharedTrack = TrafficPathMethods.HasSharedTrackPath(method)
                 });
             }
 
@@ -260,14 +265,16 @@ namespace PocketTurnLanes.Tool.Traffic
                     return false;
                 }
 
+                PathMethod method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target);
                 result[sourceIndex] = new LaneMapping
                 {
                     SourceEdge = sourceLanes[sourceIndex].Edge,
                     TargetEdge = target.Edge,
                     SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
                     TargetLaneIndex = target.LaneIndex,
-                    Method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target),
-                    IsBranch = false
+                    Method = method,
+                    IsBranch = false,
+                    PreserveSharedTrack = TrafficPathMethods.HasSharedTrackPath(method)
                 };
             }
 
