@@ -9,6 +9,12 @@ namespace PocketTurnLanes.Tool.Traffic
 {
     internal static class TrafficLaneMappingBuilder
     {
+        private enum TargetAssignmentMode
+        {
+            DirectOrder,
+            ExistingThenLateralFallback
+        }
+
         public static bool TryBuildDesiredMappings(
             IReadOnlyList<LaneEndpoint> sourceLanes,
             IReadOnlyList<LaneEndpoint> selectedTargets,
@@ -45,91 +51,20 @@ namespace PocketTurnLanes.Tool.Traffic
                 }
             }
 
-            int[] assignedTargets = new int[sourceLanes.Count];
-            for (int i = 0; i < assignedTargets.Length; i++)
+            if (!TryAssignTargetsByExistingOrLateral(
+                    sourceLanes,
+                    originalTargets,
+                    existingConnectors,
+                    preferExistingConnectors ? TargetAssignmentMode.ExistingThenLateralFallback : TargetAssignmentMode.DirectOrder,
+                    extraTargetLaneIndex,
+                    formatLaneOrder,
+                    "no remaining original target",
+                    "originalTargets",
+                    out int[] assignedTargets,
+                    out int existingAssignments,
+                    out reason))
             {
-                assignedTargets[i] = -1;
-            }
-
-            HashSet<int> usedTargets = new HashSet<int>();
-            int existingAssignments = 0;
-            if (!preferExistingConnectors)
-            {
-                for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
-                {
-                    assignedTargets[sourceIndex] = originalTargets[sourceIndex].LaneIndex;
-                    usedTargets.Add(assignedTargets[sourceIndex]);
-                }
-            }
-            else
-            {
-                for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
-                {
-                    LaneEndpoint source = sourceLanes[sourceIndex];
-                    float bestScore = float.MaxValue;
-                    int bestTarget = -1;
-
-                    for (int connectorIndex = 0; connectorIndex < existingConnectors.Count; connectorIndex++)
-                    {
-                        ConnectorLane connector = existingConnectors[connectorIndex];
-                        if (connector.SourceLaneIndex != source.LaneIndex ||
-                            connector.TargetLaneIndex == extraTargetLaneIndex ||
-                            usedTargets.Contains(connector.TargetLaneIndex) ||
-                            !TrafficLaneEndpointHelpers.TryFind(originalTargets, connector.TargetLaneIndex, out LaneEndpoint target))
-                        {
-                            continue;
-                        }
-
-                        float score = math.abs(source.Lateral - target.Lateral);
-                        if (score < bestScore)
-                        {
-                            bestScore = score;
-                            bestTarget = connector.TargetLaneIndex;
-                        }
-                    }
-
-                    if (bestTarget >= 0)
-                    {
-                        assignedTargets[sourceIndex] = bestTarget;
-                        usedTargets.Add(bestTarget);
-                        existingAssignments++;
-                    }
-                }
-            }
-
-            for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
-            {
-                if (assignedTargets[sourceIndex] >= 0)
-                {
-                    continue;
-                }
-
-                float bestFallbackScore = float.MaxValue;
-                int bestFallbackTarget = -1;
-                for (int targetIndex = 0; targetIndex < originalTargets.Count; targetIndex++)
-                {
-                    LaneEndpoint target = originalTargets[targetIndex];
-                    if (usedTargets.Contains(target.LaneIndex))
-                    {
-                        continue;
-                    }
-
-                    float score = math.abs(sourceLanes[sourceIndex].Lateral - target.Lateral);
-                    if (score < bestFallbackScore)
-                    {
-                        bestFallbackScore = score;
-                        bestFallbackTarget = target.LaneIndex;
-                    }
-                }
-
-                if (bestFallbackTarget < 0)
-                {
-                    reason = $"no remaining original target for source={sourceLanes[sourceIndex].LaneIndex} assigned={string.Join(",", assignedTargets)} originalTargets={FormatLaneOrder(originalTargets, formatLaneOrder)}";
-                    return false;
-                }
-
-                assignedTargets[sourceIndex] = bestFallbackTarget;
-                usedTargets.Add(assignedTargets[sourceIndex]);
+                return false;
             }
 
             List<LaneMapping> result = new List<LaneMapping>(sourceLanes.Count + 1);
@@ -301,15 +236,83 @@ namespace PocketTurnLanes.Tool.Traffic
                 return false;
             }
 
-            int[] assignedTargets = new int[sourceLanes.Count];
+            if (!TryAssignTargetsByExistingOrLateral(
+                    sourceLanes,
+                    targetLanes,
+                    existingConnectors,
+                    TargetAssignmentMode.ExistingThenLateralFallback,
+                    excludedTargetLaneIndex: -1,
+                    formatLaneOrder,
+                    "no remaining reverse target",
+                    "targetOrder",
+                    out int[] assignedTargets,
+                    out int existingAssignments,
+                    out reason))
+            {
+                return false;
+            }
+
+            LaneMapping[] result = new LaneMapping[sourceLanes.Count];
+            for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
+            {
+                if (!TrafficLaneEndpointHelpers.TryFind(targetLanes, assignedTargets[sourceIndex], out LaneEndpoint target))
+                {
+                    reason = $"assigned reverse target missing source={sourceLanes[sourceIndex].LaneIndex} target={assignedTargets[sourceIndex]}";
+                    return false;
+                }
+
+                result[sourceIndex] = new LaneMapping
+                {
+                    SourceEdge = sourceLanes[sourceIndex].Edge,
+                    TargetEdge = target.Edge,
+                    SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
+                    TargetLaneIndex = target.LaneIndex,
+                    Method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target),
+                    IsBranch = false
+                };
+            }
+
+            mappings = result;
+            mappingSource = existingAssignments == sourceLanes.Count
+                ? "reverse-existing-connectors"
+                : existingAssignments > 0
+                    ? $"reverse-existing-connectors+fallback({existingAssignments}/{sourceLanes.Count})"
+                    : "reverse-lateral-fallback";
+            return true;
+        }
+
+        private static bool TryAssignTargetsByExistingOrLateral(
+            IReadOnlyList<LaneEndpoint> sourceLanes,
+            IReadOnlyList<LaneEndpoint> targetLanes,
+            IReadOnlyList<ConnectorLane> existingConnectors,
+            TargetAssignmentMode assignmentMode,
+            int excludedTargetLaneIndex,
+            Func<IReadOnlyList<LaneEndpoint>, string> formatLaneOrder,
+            string noRemainingTargetReason,
+            string targetOrderFieldName,
+            out int[] assignedTargets,
+            out int existingAssignments,
+            out string reason)
+        {
+            assignedTargets = new int[sourceLanes.Count];
             for (int i = 0; i < assignedTargets.Length; i++)
             {
                 assignedTargets[i] = -1;
             }
 
+            reason = string.Empty;
+            existingAssignments = 0;
             HashSet<int> usedTargets = new HashSet<int>();
-            int existingAssignments = 0;
-            if (existingConnectors != null)
+
+            if (assignmentMode == TargetAssignmentMode.DirectOrder)
+            {
+                for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
+                {
+                    assignedTargets[sourceIndex] = targetLanes[sourceIndex].LaneIndex;
+                    usedTargets.Add(assignedTargets[sourceIndex]);
+                }
+            }
+            else if (existingConnectors != null)
             {
                 for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
                 {
@@ -321,6 +324,7 @@ namespace PocketTurnLanes.Tool.Traffic
                     {
                         ConnectorLane connector = existingConnectors[connectorIndex];
                         if (connector.SourceLaneIndex != source.LaneIndex ||
+                            connector.TargetLaneIndex == excludedTargetLaneIndex ||
                             usedTargets.Contains(connector.TargetLaneIndex) ||
                             !TrafficLaneEndpointHelpers.TryFind(targetLanes, connector.TargetLaneIndex, out LaneEndpoint target))
                         {
@@ -371,7 +375,7 @@ namespace PocketTurnLanes.Tool.Traffic
 
                 if (bestFallbackTarget < 0)
                 {
-                    reason = $"no remaining reverse target for source={sourceLanes[sourceIndex].LaneIndex} assigned={string.Join(",", assignedTargets)} targetOrder={FormatLaneOrder(targetLanes, formatLaneOrder)}";
+                    reason = $"{noRemainingTargetReason} for source={sourceLanes[sourceIndex].LaneIndex} assigned={string.Join(",", assignedTargets)} {targetOrderFieldName}={FormatLaneOrder(targetLanes, formatLaneOrder)}";
                     return false;
                 }
 
@@ -379,32 +383,6 @@ namespace PocketTurnLanes.Tool.Traffic
                 usedTargets.Add(assignedTargets[sourceIndex]);
             }
 
-            LaneMapping[] result = new LaneMapping[sourceLanes.Count];
-            for (int sourceIndex = 0; sourceIndex < sourceLanes.Count; sourceIndex++)
-            {
-                if (!TrafficLaneEndpointHelpers.TryFind(targetLanes, assignedTargets[sourceIndex], out LaneEndpoint target))
-                {
-                    reason = $"assigned reverse target missing source={sourceLanes[sourceIndex].LaneIndex} target={assignedTargets[sourceIndex]}";
-                    return false;
-                }
-
-                result[sourceIndex] = new LaneMapping
-                {
-                    SourceEdge = sourceLanes[sourceIndex].Edge,
-                    TargetEdge = target.Edge,
-                    SourceLaneIndex = sourceLanes[sourceIndex].LaneIndex,
-                    TargetLaneIndex = target.LaneIndex,
-                    Method = TrafficPathMethods.GetMappingMethod(sourceLanes[sourceIndex], target),
-                    IsBranch = false
-                };
-            }
-
-            mappings = result;
-            mappingSource = existingAssignments == sourceLanes.Count
-                ? "reverse-existing-connectors"
-                : existingAssignments > 0
-                    ? $"reverse-existing-connectors+fallback({existingAssignments}/{sourceLanes.Count})"
-                    : "reverse-lateral-fallback";
             return true;
         }
 
