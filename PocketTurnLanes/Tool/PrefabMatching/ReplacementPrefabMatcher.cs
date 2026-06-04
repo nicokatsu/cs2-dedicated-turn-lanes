@@ -163,12 +163,12 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             if (!found)
             {
-                Mod.LogDiagnostic($"[IntersectionTool] No pocket lane replacement prefab found sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourcePublicTransportTramDetail={sourceProfile.PublicTransportTramDetail} sourceTramTracks={sourceProfile.TramTrackCounts} sourceTramTrackLayout={sourceProfile.TramTrackLayout} sourceTramDetail={sourceProfile.TramTrackDetail} sourceHasUpgraded={sourceHasUpgraded} sourceTramUpgradeFlags={sourceTramUpgradeFlags} sourceBusLayout={sourceProfile.BusLaneLayout} sourceBusDetail={sourceProfile.BusLaneDetail} sourceUtility={sourceProfile.GetUtilityProfile()} sourceUtilityDetail={sourceProfile.UtilityLaneDetail} sourceElectricityDetail={sourceProfile.ElectricityConnectionDetail} sourceWaterDetail={sourceProfile.WaterPipeConnectionDetail} sourceComposition={sourceProfile.CompositionFlagsDetail} originalLanes={originalCounts} desiredLanes={desiredCounts} originalEffectiveLanes={originalEffectiveCounts} desiredEffectiveLanes={desiredEffectiveCounts} width={sourceGeometry.m_DefaultWidth:0.##}m scanned={stats.Scanned} bridgeQueryExcluded=True highwayExcluded={stats.HighwayExcluded} dlcBlocked={stats.DlcBlocked} widthMatches={stats.WidthMatches} widthCandidateSample={stats.WidthCandidateSample} roadBuilderCandidateSample={stats.RoadBuilderCandidateSample} roadBuilderDiscarded={stats.RoadBuilderDiscarded} roadBuilderDiscardedSample={stats.RoadBuilderDiscardedSample} roadBuilderNotInPlaysetExcluded={stats.RoadBuilderNotInPlaysetExcluded} roadBuilderNotInPlaysetSample={stats.RoadBuilderNotInPlaysetSample} roadBuilderVisibilityUnknown={stats.RoadBuilderVisibilityUnknown} roadBuilderVisibilityUnknownSample={stats.RoadBuilderVisibilityUnknownSample} parkingExcluded={stats.ParkingExcluded} independentTramCandidates={stats.IndependentTramCandidates} publicTransportTramCandidates={stats.PublicTransportTramCandidates} tramUpgradeCandidates={stats.TramUpgradeCandidates} tramUpgradeRejected={stats.TramUpgradeRejected} tramUpgradeRejectSample={stats.TramUpgradeRejectSample} busUpgradeCandidates={stats.BusUpgradeCandidates} busUpgradeRejected={stats.BusUpgradeRejected} busUpgradeRejectSample={stats.BusUpgradeRejectSample} utilityRejected={stats.UtilityRejected} utilityRejectSample={stats.UtilityRejectSample} roadBuilderBusUpgradeSample={stats.RoadBuilderBusUpgradeSample} layoutScored={stats.LayoutScored} busLayoutCandidates={stats.BusLayoutCandidates} bestBusLayoutCandidate={stats.BestBusLayoutCandidateDetail} sourcePrefabLaneMatches={stats.SourcePrefabLaneMatches} laneMatches=0 missingLaneData={stats.MissingLaneData}.");
+                Mod.LogDiagnostic($"[IntersectionTool] No pocket lane replacement prefab found sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourcePublicTransportTramDetail={sourceProfile.PublicTransportTramDetail} sourceTramTracks={sourceProfile.TramTrackCounts} sourceTramTrackLayout={sourceProfile.TramTrackLayout} sourceTramDetail={sourceProfile.TramTrackDetail} sourceHasUpgraded={sourceHasUpgraded} sourceTramUpgradeFlags={sourceTramUpgradeFlags} sourceBusLayout={sourceProfile.BusLaneLayout} sourceBusDetail={sourceProfile.BusLaneDetail} originalLanes={originalCounts} desiredLanes={desiredCounts} originalEffectiveLanes={originalEffectiveCounts} desiredEffectiveLanes={desiredEffectiveCounts} width={sourceGeometry.m_DefaultWidth:0.##}m scanned={stats.Scanned} bridgeQueryExcluded=True highwayExcluded={stats.HighwayExcluded} dlcBlocked={stats.DlcBlocked} widthMatches={stats.WidthMatches} widthCandidateSample={stats.WidthCandidateSample} roadBuilderCandidateSample={stats.RoadBuilderCandidateSample} roadBuilderDiscarded={stats.RoadBuilderDiscarded} roadBuilderDiscardedSample={stats.RoadBuilderDiscardedSample} roadBuilderNotInPlaysetExcluded={stats.RoadBuilderNotInPlaysetExcluded} roadBuilderNotInPlaysetSample={stats.RoadBuilderNotInPlaysetSample} roadBuilderVisibilityUnknown={stats.RoadBuilderVisibilityUnknown} roadBuilderVisibilityUnknownSample={stats.RoadBuilderVisibilityUnknownSample} parkingExcluded={stats.ParkingExcluded} independentTramCandidates={stats.IndependentTramCandidates} publicTransportTramCandidates={stats.PublicTransportTramCandidates} tramUpgradeCandidates={stats.TramUpgradeCandidates} tramUpgradeRejected={stats.TramUpgradeRejected} tramUpgradeRejectSample={stats.TramUpgradeRejectSample} busUpgradeCandidates={stats.BusUpgradeCandidates} busUpgradeRejected={stats.BusUpgradeRejected} busUpgradeRejectSample={stats.BusUpgradeRejectSample} roadBuilderBusUpgradeSample={stats.RoadBuilderBusUpgradeSample} layoutScored={stats.LayoutScored} busLayoutCandidates={stats.BusLayoutCandidates} bestBusLayoutCandidate={stats.BestBusLayoutCandidateDetail} sourcePrefabLaneMatches={stats.SourcePrefabLaneMatches} laneMatches=0 missingLaneData={stats.MissingLaneData}.");
                 return false;
             }
 
             match = bestMatch;
-            Mod.LogDiagnostic($"[IntersectionTool] Replacement prefab selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, match.Prefab)} targetIsSourcePrefab={match.TargetIsSourcePrefab} targetDlc={match.TargetIsDlc} targetContent={match.TargetContentDetail} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={match.SourceIndependentTramCounts} targetIndependentTram={match.TargetIndependentTramCounts} sourcePublicTransportTram={match.SourcePublicTransportTramCounts} targetPublicTransportTram={match.TargetPublicTransportTramCounts} sourceTramTracks={match.SourceTramTrackCounts} targetTramTracks={match.TargetTramTrackCounts} targetHasIndependentTram={match.TargetHasIndependentTram} targetHasPublicTransportTram={match.TargetHasPublicTransportTram} tramUpgradeFallback={match.TargetUsesTramUpgradeFallback} targetUpgrade={(match.HasTargetUpgrade ? match.TargetUpgrade.m_Flags.ToString() : "none")} tramMatch={match.TramMatchDetail} sourceTramTrackLayout={match.SourceTramTrackLayout} targetTramTrackLayout={match.TargetTramTrackLayout} sourceBusLayout={match.SourceBusLaneLayout} sourceBusDetail={match.SourceBusLaneDetail} targetBusLayout={match.TargetBusLaneLayout} targetBusDetail={match.TargetBusLaneDetail} sourceUtility={match.SourceUtilityProfile} targetUtility={match.TargetUtilityProfile} targetUtilityFixFlags={match.TargetUtilityFixFlags} utilityMatch={match.UtilityMatchDetail} layoutScore={match.LayoutScore} tramLayoutScore={match.TramLayoutScore} busLayoutScore={match.BusLayoutScore} layoutDetail={match.LayoutScoreDetail} width={sourceGeometry.m_DefaultWidth:0.##}m originalLanes={match.OriginalCounts} desiredLanes={match.TargetCounts} originalEffectiveLanes={match.OriginalEffectiveCounts} desiredEffectiveLanes={match.TargetEffectiveCounts} candidateLanes={match.CandidateCounts} scanned={stats.Scanned} bridgeQueryExcluded=True highwayExcluded={stats.HighwayExcluded} dlcBlocked={stats.DlcBlocked} widthMatches={stats.WidthMatches} widthCandidateSample={stats.WidthCandidateSample} roadBuilderCandidateSample={stats.RoadBuilderCandidateSample} roadBuilderDiscarded={stats.RoadBuilderDiscarded} roadBuilderDiscardedSample={stats.RoadBuilderDiscardedSample} roadBuilderNotInPlaysetExcluded={stats.RoadBuilderNotInPlaysetExcluded} roadBuilderNotInPlaysetSample={stats.RoadBuilderNotInPlaysetSample} roadBuilderVisibilityUnknown={stats.RoadBuilderVisibilityUnknown} roadBuilderVisibilityUnknownSample={stats.RoadBuilderVisibilityUnknownSample} parkingExcluded={stats.ParkingExcluded} independentTramCandidates={stats.IndependentTramCandidates} publicTransportTramCandidates={stats.PublicTransportTramCandidates} tramUpgradeCandidates={stats.TramUpgradeCandidates} tramUpgradeRejected={stats.TramUpgradeRejected} busUpgradeCandidates={stats.BusUpgradeCandidates} busUpgradeRejected={stats.BusUpgradeRejected} busUpgradeRejectSample={stats.BusUpgradeRejectSample} utilityRejected={stats.UtilityRejected} utilityRejectSample={stats.UtilityRejectSample} roadBuilderBusUpgradeSample={stats.RoadBuilderBusUpgradeSample} layoutScored={stats.LayoutScored} busLayoutCandidates={stats.BusLayoutCandidates} bestBusLayoutCandidate={stats.BestBusLayoutCandidateDetail} sourcePrefabLaneMatches={stats.SourcePrefabLaneMatches} laneMatches={stats.LaneMatches} missingLaneData={stats.MissingLaneData} score={match.Score}.");
+            Mod.LogDiagnostic($"[IntersectionTool] Replacement prefab selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceDlc={sourceIsDlc} sourceContent={sourceContentDetail} targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, match.Prefab)} targetIsSourcePrefab={match.TargetIsSourcePrefab} targetDlc={match.TargetIsDlc} targetContent={match.TargetContentDetail} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} laneSource={sourceProfile.Source} sourceMarkedParking={sourceProfile.HasMarkedParking} sourceMarkedParkingDetail={sourceProfile.MarkedParkingDetail} sourceIndependentTram={match.SourceIndependentTramCounts} targetIndependentTram={match.TargetIndependentTramCounts} sourcePublicTransportTram={match.SourcePublicTransportTramCounts} targetPublicTransportTram={match.TargetPublicTransportTramCounts} sourceTramTracks={match.SourceTramTrackCounts} targetTramTracks={match.TargetTramTrackCounts} targetHasIndependentTram={match.TargetHasIndependentTram} targetHasPublicTransportTram={match.TargetHasPublicTransportTram} tramUpgradeFallback={match.TargetUsesTramUpgradeFallback} targetUpgrade={(match.HasTargetUpgrade ? match.TargetUpgrade.m_Flags.ToString() : "none")} tramMatch={match.TramMatchDetail} sourceTramTrackLayout={match.SourceTramTrackLayout} targetTramTrackLayout={match.TargetTramTrackLayout} sourceBusLayout={match.SourceBusLaneLayout} sourceBusDetail={match.SourceBusLaneDetail} targetBusLayout={match.TargetBusLaneLayout} targetBusDetail={match.TargetBusLaneDetail} layoutScore={match.LayoutScore} tramLayoutScore={match.TramLayoutScore} busLayoutScore={match.BusLayoutScore} layoutDetail={match.LayoutScoreDetail} width={sourceGeometry.m_DefaultWidth:0.##}m originalLanes={match.OriginalCounts} desiredLanes={match.TargetCounts} originalEffectiveLanes={match.OriginalEffectiveCounts} desiredEffectiveLanes={match.TargetEffectiveCounts} candidateLanes={match.CandidateCounts} scanned={stats.Scanned} bridgeQueryExcluded=True highwayExcluded={stats.HighwayExcluded} dlcBlocked={stats.DlcBlocked} widthMatches={stats.WidthMatches} widthCandidateSample={stats.WidthCandidateSample} roadBuilderCandidateSample={stats.RoadBuilderCandidateSample} roadBuilderDiscarded={stats.RoadBuilderDiscarded} roadBuilderDiscardedSample={stats.RoadBuilderDiscardedSample} roadBuilderNotInPlaysetExcluded={stats.RoadBuilderNotInPlaysetExcluded} roadBuilderNotInPlaysetSample={stats.RoadBuilderNotInPlaysetSample} roadBuilderVisibilityUnknown={stats.RoadBuilderVisibilityUnknown} roadBuilderVisibilityUnknownSample={stats.RoadBuilderVisibilityUnknownSample} parkingExcluded={stats.ParkingExcluded} independentTramCandidates={stats.IndependentTramCandidates} publicTransportTramCandidates={stats.PublicTransportTramCandidates} tramUpgradeCandidates={stats.TramUpgradeCandidates} tramUpgradeRejected={stats.TramUpgradeRejected} busUpgradeCandidates={stats.BusUpgradeCandidates} busUpgradeRejected={stats.BusUpgradeRejected} busUpgradeRejectSample={stats.BusUpgradeRejectSample} roadBuilderBusUpgradeSample={stats.RoadBuilderBusUpgradeSample} layoutScored={stats.LayoutScored} busLayoutCandidates={stats.BusLayoutCandidates} bestBusLayoutCandidate={stats.BestBusLayoutCandidateDetail} sourcePrefabLaneMatches={stats.SourcePrefabLaneMatches} laneMatches={stats.LaneMatches} missingLaneData={stats.MissingLaneData} score={match.Score}.");
             return true;
         }
 
@@ -496,10 +496,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 TargetBusLaneOffsetProfile = scoreResult.OrientedTargetBusLayout,
                 SourceBusLaneDetail = source.Profile.BusLaneDetail,
                 TargetBusLaneDetail = candidateMatch.TargetLayoutProfile.BusLaneDetail,
-                SourceUtilityProfile = source.Profile.GetUtilityProfile(),
-                TargetUtilityProfile = candidateMatch.TargetUtilityProfile,
-                TargetUtilityFixFlags = candidateMatch.TargetUtilityFixFlags,
-                UtilityMatchDetail = candidateMatch.UtilityMatchDetail,
                 LayoutScoreDetail = scoreResult.LayoutScoreDetail,
                 LayoutScore = scoreResult.LayoutScore,
                 TramLayoutScore = scoreResult.TramLayoutScore,
@@ -575,9 +571,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             public Upgraded TargetUpgrade;
             public RoadLaneProfile TargetLayoutProfile;
             public string TramMatchDetail;
-            public ReplacementUtilityProfile TargetUtilityProfile;
-            public CompositionFlags TargetUtilityFixFlags;
-            public string UtilityMatchDetail;
         }
 
         internal bool TryGetRoadLaneProfile(
@@ -628,9 +621,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 TargetLayoutProfile = candidateProfile,
                 TramMatchDetail = sourceHasTramTracks
                     ? $"sourceIndependentTram={sourceProfile.IndependentTramCounts} sourcePublicTransportTram={sourceProfile.PublicTransportTramCounts} sourceTramTracks={sourceProfile.TramTrackCounts} candidateIndependentTram={candidateProfile.IndependentTramCounts} candidatePublicTransportTram={candidateProfile.PublicTransportTramCounts} candidateTramTracks={candidateProfile.TramTrackCounts} candidateTramDetail={candidateProfile.TramTrackDetail}"
-                    : "sourceTramTracks=none",
-                TargetUtilityProfile = candidateProfile.GetUtilityProfile(),
-                UtilityMatchDetail = "utility=not-evaluated"
+                    : "sourceTramTracks=none"
             };
 
             bool invert = false;
@@ -774,16 +765,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             match.Invert = invert;
-            if (!TryRequireUtilityCompatibility(
-                    candidatePrefab,
-                    candidateName,
-                    sourceProfile,
-                    ref stats,
-                    ref match))
-            {
-                return false;
-            }
-
             return true;
         }
 
@@ -859,76 +840,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             return defaultLaneMatch;
-        }
-
-        private bool TryRequireUtilityCompatibility(
-            Entity candidatePrefab,
-            string candidateName,
-            RoadLaneProfile sourceProfile,
-            ref ReplacementSearchStats stats,
-            ref CandidateLaneMatch match)
-        {
-            ReplacementUtilityProfile sourceUtility = sourceProfile.GetUtilityProfile();
-            CompositionFlags utilityFlags = match.HasTargetUpgrade
-                ? match.TargetUpgrade.m_Flags
-                : default;
-            if (match.Invert)
-            {
-                utilityFlags.m_General |= CompositionFlags.General.Invert;
-            }
-
-            match.TargetUtilityFixFlags = utilityFlags;
-            RoadLaneProfile targetUtilityProfile = match.TargetLayoutProfile;
-            string targetUtilityProfileSource = "layout-profile";
-            if ((sourceUtility.RequiresAny || match.Invert || match.HasTargetUpgrade) &&
-                m_RoadLaneProfileBuilder.TryCalculateRoadLaneProfile(
-                    candidatePrefab,
-                    utilityFlags,
-                    $"UtilityFix:{utilityFlags}",
-                    out RoadLaneProfile calculatedUtilityProfile))
-            {
-                targetUtilityProfile = calculatedUtilityProfile;
-                targetUtilityProfileSource = "calculated-final-utility-flags";
-            }
-
-            ReplacementUtilityProfile targetUtility = targetUtilityProfile.GetUtilityProfile();
-            match.TargetUtilityProfile = targetUtility;
-            if (!sourceUtility.RequiresAny)
-            {
-                match.UtilityMatchDetail = $"utility=not-required source={sourceUtility} target={targetUtility} targetProfileSource={targetUtilityProfileSource} noDirectionScore=True";
-                return true;
-            }
-
-            string rejectReason = null;
-            if (sourceUtility.LaneLayout.HasAny && !targetUtility.LaneLayout.HasAny)
-            {
-                rejectReason = "missing-utility-lanes";
-            }
-            else if (sourceUtility.UtilityTypes != Game.Net.UtilityTypes.None &&
-                     (targetUtility.UtilityTypes & sourceUtility.UtilityTypes) != sourceUtility.UtilityTypes)
-            {
-                rejectReason = $"missing-utility-types sourceTypes={sourceUtility.UtilityTypes} targetTypes={targetUtility.UtilityTypes}";
-            }
-            else if (sourceUtility.ElectricityConnection && !targetUtility.ElectricityConnection)
-            {
-                rejectReason = "missing-electricity-connection";
-            }
-            else if (sourceUtility.WaterPipeConnection && !targetUtility.WaterPipeConnection)
-            {
-                rejectReason = "missing-water-pipe-connection";
-            }
-
-            if (rejectReason != null)
-            {
-                match.UtilityMatchDetail = $"utility=rejected reason={rejectReason} source={sourceUtility} target={targetUtility} targetUtilityFixFlags={utilityFlags} targetProfileSource={targetUtilityProfileSource} sourceLaneDetail={sourceUtility.LaneDetail} targetLaneDetail={targetUtility.LaneDetail} sourceElectricity={sourceUtility.ElectricityDetail} targetElectricity={targetUtility.ElectricityDetail} sourceWater={sourceUtility.WaterDetail} targetWater={targetUtility.WaterDetail} sourceComposition={sourceUtility.CompositionDetail} targetComposition={targetUtility.CompositionDetail} noDirectionScore=True";
-                stats.AddUtilityRejection(
-                    $"candidate={candidateName} entity={FormatEntity(candidatePrefab)} {match.UtilityMatchDetail}",
-                    8);
-                return false;
-            }
-
-            match.UtilityMatchDetail = $"utility=compatible source={sourceUtility} target={targetUtility} targetUtilityFixFlags={utilityFlags} targetProfileSource={targetUtilityProfileSource} sourceLaneDetail={sourceUtility.LaneDetail} targetLaneDetail={targetUtility.LaneDetail} noDirectionScore=True";
-            return true;
         }
 
         private static void CopyTargetTramProfile(

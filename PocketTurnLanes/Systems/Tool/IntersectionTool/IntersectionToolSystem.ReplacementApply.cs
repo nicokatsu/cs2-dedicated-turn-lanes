@@ -14,79 +14,29 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 {
     public partial class IntersectionToolSystem
     {
-        private bool VerifyAppliedReplacements()
+        private void VerifyAppliedReplacements()
         {
             m_VerifyAppliedReplacements = false;
-            m_UtilityRetryReplacementCandidates.Clear();
 
             int verifiedCount = 0;
             int missingCount = 0;
             int replacedEntityCount = 0;
-            int utilityFixQueuedCount = 0;
-            int utilityFailedCount = 0;
-            int utilityWaitingCount = 0;
 
             for (int i = 0; i < m_AppliedReplacementCandidates.Count; i++)
             {
                 ReplacementCandidate candidate = m_AppliedReplacementCandidates[i];
-                if (candidate.UtilityFixFrame >= 0 &&
-                    UnityEngine.Time.frameCount <= candidate.UtilityFixFrame)
-                {
-                    utilityWaitingCount++;
-                    m_UtilityRetryReplacementCandidates.Add(candidate);
-                    Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement utility verification waiting one frame for post-replacement fix original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} attempts={candidate.UtilityFixAttempts}/{MaxReplacementUtilityFixAttempts} fixFrame={candidate.UtilityFixFrame} frame={UnityEngine.Time.frameCount} TrafficRepairDefer=utility-fix-pending.");
-                    continue;
-                }
-
                 if (IsReplacementTargetVisible(candidate, candidate.PocketEdge, out string visibleDetail))
                 {
-                    if (!TryVerifyReplacementUtilityForTraffic(
-                            ref candidate,
-                            candidate.PocketEdge,
-                            visibleDetail,
-                            out string utilityDetail))
-                    {
-                        if (TryQueuePostReplacementUtilityFix(ref candidate, candidate.PocketEdge, utilityDetail))
-                        {
-                            utilityFixQueuedCount++;
-                        }
-                        else
-                        {
-                            utilityFailedCount++;
-                        }
-
-                        continue;
-                    }
-
                     verifiedCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement verified edge={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} detail={visibleDetail} utility={utilityDetail}.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement verified edge={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} detail={visibleDetail}.");
                     DeferSplitLaneConnectionFix(candidate, candidate.PocketEdge, "verified-pocket-edge");
                     continue;
                 }
 
                 if (TryFindReplacementResultEdge(candidate, out Entity resultEdge))
                 {
-                    candidate.PocketEdge = resultEdge;
-                    if (!TryVerifyReplacementUtilityForTraffic(
-                            ref candidate,
-                            resultEdge,
-                            "replacement-result-edge",
-                            out string utilityDetail))
-                    {
-                        if (TryQueuePostReplacementUtilityFix(ref candidate, resultEdge, utilityDetail))
-                        {
-                            utilityFixQueuedCount++;
-                        }
-                        else
-                        {
-                            utilityFailedCount++;
-                        }
-
-                        continue;
-                    }
-
                     replacedEntityCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement verified via replacement entity original={FormatEntity(candidate.OriginalEdge)} result={FormatEntity(resultEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} utility={utilityDetail}.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement verified via replacement entity original={FormatEntity(candidate.PocketEdge)} result={FormatEntity(resultEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")}.");
                     DeferSplitLaneConnectionFix(candidate, resultEdge, "replacement-result-edge");
                     continue;
                 }
@@ -95,165 +45,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement not visible after apply original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(candidate.PocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} node={FormatEntity(candidate.Node)} splitNode={FormatEntity(candidate.SplitNode)}.");
             }
 
+            Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement verification complete verified={verifiedCount}, replacedEntity={replacedEntityCount}, missing={missingCount}.");
             m_AppliedReplacementCandidates.Clear();
-            if (m_UtilityRetryReplacementCandidates.Count > 0)
-            {
-                m_AppliedReplacementCandidates.AddRange(m_UtilityRetryReplacementCandidates);
-                m_VerifyAppliedReplacements = true;
-            }
-
-            Mod.LogDiagnostic($"[IntersectionTool] Pocket lane replacement verification complete verified={verifiedCount}, replacedEntity={replacedEntityCount}, missing={missingCount}, utilityFixQueued={utilityFixQueuedCount}, utilityWaiting={utilityWaitingCount}, utilityFailed={utilityFailedCount}, retryPending={m_AppliedReplacementCandidates.Count}.");
-            return m_VerifyAppliedReplacements;
-        }
-
-        private bool TryVerifyReplacementUtilityForTraffic(
-            ref ReplacementCandidate candidate,
-            Entity finalPocketEdge,
-            string visibleDetail,
-            out string detail)
-        {
-            ReplacementUtilityProfile sourceUtility = candidate.SourceUtilityProfile;
-            ReplacementUtilityProfile targetUtility = candidate.TargetUtilityProfile;
-            if (!sourceUtility.RequiresAny)
-            {
-                detail = $"status=not-required connectivityOk=True visualOk=True visualMismatch=False visible={visibleDetail} source={sourceUtility} target={targetUtility} targetUtilityFixFlags={candidate.TargetUtilityFixFlags} TrafficRepairProceed=utility-not-required";
-                return true;
-            }
-
-            if (!m_ReplacementPrefabMatcher.TryGetRoadLaneProfile(finalPocketEdge, candidate.TargetPrefab, out RoadLaneProfile finalProfile))
-            {
-                detail = $"status=missing-final-profile connectivityOk=False visualOk=False visualMismatch=True visible={visibleDetail} edge={FormatEntity(finalPocketEdge)} source={sourceUtility} target={targetUtility} targetUtilityFixFlags={candidate.TargetUtilityFixFlags}";
-                return false;
-            }
-
-            ReplacementUtilityProfile finalUtility = finalProfile.GetUtilityProfile();
-            bool laneOk = true;
-            string laneDetail = "not-required";
-            if (sourceUtility.LaneLayout.HasAny)
-            {
-                laneOk = UtilityLaneLayoutsMatch(
-                    targetUtility.LaneLayout,
-                    finalUtility.LaneLayout,
-                    out laneDetail);
-            }
-
-            bool typeOk = sourceUtility.UtilityTypes == Game.Net.UtilityTypes.None ||
-                          (finalUtility.UtilityTypes & sourceUtility.UtilityTypes) == sourceUtility.UtilityTypes;
-            bool electricityOk = !sourceUtility.ElectricityConnection || finalUtility.ElectricityConnection;
-            bool waterOk = !sourceUtility.WaterPipeConnection || finalUtility.WaterPipeConnection;
-            bool connectivityOk = typeOk && electricityOk && waterOk;
-            bool visualOk = laneOk;
-            bool visualMismatch = !visualOk;
-            detail = $"status={(connectivityOk ? "ok" : "mismatch")} connectivityOk={connectivityOk} visualOk={visualOk} visualMismatch={visualMismatch} visible={visibleDetail} edge={FormatEntity(finalPocketEdge)} finalProfile={finalProfile.Source} source={sourceUtility} target={targetUtility} final={finalUtility} lane={laneDetail} typesOk={typeOk} electricityExpected={sourceUtility.ElectricityConnection} electricityActual={finalUtility.ElectricityConnection} waterExpected={sourceUtility.WaterPipeConnection} waterActual={finalUtility.WaterPipeConnection} targetUtilityFixFlags={candidate.TargetUtilityFixFlags} sourceLaneDetail={sourceUtility.LaneDetail} targetLaneDetail={targetUtility.LaneDetail} finalLaneDetail={finalUtility.LaneDetail} sourceElectricity={sourceUtility.ElectricityDetail} targetElectricity={targetUtility.ElectricityDetail} finalElectricity={finalUtility.ElectricityDetail} sourceWater={sourceUtility.WaterDetail} targetWater={targetUtility.WaterDetail} finalWater={finalUtility.WaterDetail} sourceComposition={sourceUtility.CompositionDetail} targetComposition={targetUtility.CompositionDetail} finalComposition={finalUtility.CompositionDetail}{(connectivityOk ? " TrafficRepairProceed=utility-connectivity-ok" : string.Empty)}";
-            return connectivityOk;
-        }
-
-        private bool TryQueuePostReplacementUtilityFix(
-            ref ReplacementCandidate candidate,
-            Entity finalPocketEdge,
-            string validationDetail)
-        {
-            if (finalPocketEdge == Entity.Null ||
-                !EntityManager.Exists(finalPocketEdge) ||
-                EntityManager.HasComponent<Deleted>(finalPocketEdge))
-            {
-                Mod.LogDiagnostic($"[IntersectionTool] Post-replacement utility fix skipped: invalid final edge={FormatEntity(finalPocketEdge)} original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(candidate.PocketEdge)} validation=({validationDetail}) TrafficRepairDefer=utility-validation-invalid-edge.");
-                return false;
-            }
-
-            if (candidate.UtilityFixAttempts >= MaxReplacementUtilityFixAttempts)
-            {
-                Mod.LogDiagnostic($"[IntersectionTool] Post-replacement utility validation still failed after fix attempts original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(finalPocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} attempts={candidate.UtilityFixAttempts}/{MaxReplacementUtilityFixAttempts} validation=({validationDetail}) TrafficRepairDefer=utility-validation-failed-after-fix.");
-                return false;
-            }
-
-            CompositionFlags requiredFlags = candidate.TargetUtilityFixFlags;
-            if (candidate.HasTargetUpgrade)
-            {
-                requiredFlags |= candidate.TargetUpgrade.m_Flags;
-            }
-
-            if (requiredFlags == default(CompositionFlags))
-            {
-                Mod.LogDiagnostic($"[IntersectionTool] Post-replacement utility fix cannot determine required upgraded flags original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(finalPocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} sourceUtility={candidate.SourceUtilityProfile} targetUtility={candidate.TargetUtilityProfile} validation=({validationDetail}) TrafficRepairDefer=utility-validation-no-required-flags.");
-                return false;
-            }
-
-            bool hadUpgraded = EntityManager.TryGetComponent(finalPocketEdge, out Upgraded upgraded);
-            CompositionFlags beforeFlags = hadUpgraded
-                ? upgraded.m_Flags
-                : default;
-            upgraded.m_Flags = beforeFlags | requiredFlags;
-
-            EntityCommandBuffer ecb = m_ToolOutputBarrier.CreateCommandBuffer();
-            if (hadUpgraded)
-            {
-                ecb.SetComponent(finalPocketEdge, upgraded);
-            }
-            else
-            {
-                ecb.AddComponent(finalPocketEdge, upgraded);
-            }
-
-            if (!EntityManager.HasComponent<Updated>(finalPocketEdge))
-            {
-                ecb.AddComponent<Updated>(finalPocketEdge);
-            }
-
-            candidate.PocketEdge = finalPocketEdge;
-            candidate.UtilityFixAttempts++;
-            candidate.UtilityFixFrame = UnityEngine.Time.frameCount;
-            m_UtilityRetryReplacementCandidates.Add(candidate);
-            Mod.LogDiagnostic($"[IntersectionTool] Applied post-replacement utility fix original={FormatEntity(candidate.OriginalEdge)} pocket={FormatEntity(finalPocketEdge)} target={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} hadUpgraded={hadUpgraded} beforeFlags={beforeFlags} requiredFlags={requiredFlags} afterFlags={upgraded.m_Flags} attempts={candidate.UtilityFixAttempts}/{MaxReplacementUtilityFixAttempts} sourceUtility={candidate.SourceUtilityProfile} targetUtility={candidate.TargetUtilityProfile} validation=({validationDetail}) TrafficRepairDefer=utility-fix-applied.");
-            return true;
-        }
-
-        private static bool UtilityLaneLayoutsMatch(
-            DirectionalLaneOffsetProfile expected,
-            DirectionalLaneOffsetProfile actual,
-            out string detail)
-        {
-            if (!expected.HasAny || !actual.HasAny)
-            {
-                detail = $"expected={expected} actual={actual} hasExpected={expected.HasAny} hasActual={actual.HasAny}";
-                return false;
-            }
-
-            bool countsMatch = expected.ForwardCount == actual.ForwardCount &&
-                               expected.BackwardCount == actual.BackwardCount;
-            float forwardDiff = GetAverageOffsetDiff(
-                expected.ForwardCount,
-                expected.ForwardOffsetSum,
-                actual.ForwardCount,
-                actual.ForwardOffsetSum);
-            float backwardDiff = GetAverageOffsetDiff(
-                expected.BackwardCount,
-                expected.BackwardOffsetSum,
-                actual.BackwardCount,
-                actual.BackwardOffsetSum);
-            bool offsetMatch = forwardDiff <= UtilityLaneOffsetTolerance &&
-                               backwardDiff <= UtilityLaneOffsetTolerance;
-            detail = $"expected={expected} actual={actual} countsMatch={countsMatch} forwardOffsetDiff={forwardDiff:0.###}m backwardOffsetDiff={backwardDiff:0.###}m tolerance={UtilityLaneOffsetTolerance:0.###}m";
-            return countsMatch && offsetMatch;
-        }
-
-        private static float GetAverageOffsetDiff(
-            int expectedCount,
-            float expectedOffsetSum,
-            int actualCount,
-            float actualOffsetSum)
-        {
-            if (expectedCount == 0 && actualCount == 0)
-            {
-                return 0f;
-            }
-
-            if (expectedCount == 0 || actualCount == 0)
-            {
-                return float.MaxValue;
-            }
-
-            return math.abs(expectedOffsetSum / expectedCount - actualOffsetSum / actualCount);
         }
 
         private void DeferSplitLaneConnectionFix(ReplacementCandidate candidate, Entity finalPocketEdge, string reason)

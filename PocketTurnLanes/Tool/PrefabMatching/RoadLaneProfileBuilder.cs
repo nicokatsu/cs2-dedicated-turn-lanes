@@ -51,7 +51,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     out profile))
             {
                 profile.Source = $"Composition:{FormatEntity(composition.m_Edge)}";
-                ApplyRuntimeUtilityConnectionState(edgeEntity, fallbackPrefab, ref profile);
                 m_RoadBuilderPrefabSemantics.ApplyConfigSemantics(fallbackPrefab, ref profile);
                 return true;
             }
@@ -79,7 +78,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             AccumulateCompositionLanes(lanes, ref profile);
-            ApplyCompositionFlagsFromComposition(compositionEntity, default, ref profile);
 
             return profile.RoadCounts.Total > 0;
         }
@@ -102,8 +100,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 if (profile.RoadCounts.Total > 0)
                 {
                     profile.Source = "DefaultNetLane";
-                    SetCompositionFlags(default, "DefaultNetLane:default", ref profile);
-                    ApplyPrefabUtilityConnectionState(prefabEntity, profile.CompositionFlags, profile.Source, ref profile);
                     m_RoadBuilderPrefabSemantics.ApplyConfigSemantics(prefabEntity, ref profile);
                     return true;
                 }
@@ -149,8 +145,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 }
 
                 AccumulateCompositionLanes(lanes, ref profile);
-                ApplyCompositionFlagsFromComposition(composition.m_Composition, composition.m_Mask, ref profile);
-                ApplyPrefabUtilityConnectionState(prefabEntity, profile.CompositionFlags, "NetGeometryComposition", ref profile);
 
                 return profile.RoadCounts.Total > 0;
             }
@@ -187,7 +181,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             try
             {
                 NetCompositionData compositionData = default;
-                compositionData.m_Flags = compositionFlags;
                 NetCompositionHelpers.GetCompositionPieces(
                     pieces,
                     sections.AsNativeArray(),
@@ -204,8 +197,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     m_GetNetPieceLaneLookup());
 
                 AccumulateCompositionLanes(lanes, ref profile);
-                SetCompositionFlags(compositionFlags, source, ref profile);
-                ApplyPrefabUtilityConnectionState(prefabEntity, compositionFlags, source, ref profile);
 
                 profile.Source = source;
                 return profile.RoadCounts.Total > 0;
@@ -280,7 +271,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             TryRecordMarkedParking(effectiveFlags, lanePrefab, flagMergeDetail, ref profile);
             AccumulateTramSemantics(effectiveFlags, lanePrefab, lateralOffset, flagMergeDetail, ref profile);
             AccumulateBusSemantics(effectiveFlags, lanePrefab, lateralOffset, flagMergeDetail, ref profile);
-            AccumulateUtilitySemantics(effectiveFlags, lanePrefab, lateralOffset, flagMergeDetail, ref profile);
         }
 
         private void AccumulateRoadAndEnvelope(
@@ -367,141 +357,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
         }
 
-        private void AccumulateUtilitySemantics(
-            LaneFlags effectiveFlags,
-            Entity lanePrefab,
-            float lateralOffset,
-            string flagMergeDetail,
-            ref RoadLaneProfile profile)
-        {
-            if ((effectiveFlags & LaneFlags.Utility) == 0 ||
-                (effectiveFlags & LaneFlags.Master) != 0)
-            {
-                return;
-            }
-
-            AddDirectionalOffset(effectiveFlags, lateralOffset, ref profile.UtilityLaneLayout);
-            if (EntityManager.TryGetComponent(lanePrefab, out UtilityLaneData utilityLaneData))
-            {
-                profile.UtilityTypes |= utilityLaneData.m_UtilityTypes;
-                AppendDetail(
-                    ref profile.UtilityLaneDetail,
-                    $"lane={FormatEntity(lanePrefab)} flags={effectiveFlags} utilityTypes={utilityLaneData.m_UtilityTypes} offset={lateralOffset:0.##}m local={FormatEntity(utilityLaneData.m_LocalConnectionPrefab)} local2={FormatEntity(utilityLaneData.m_LocalConnectionPrefab2)} nodeObject={FormatEntity(utilityLaneData.m_NodeObjectPrefab)} hanging={utilityLaneData.m_Hanging:0.##}{flagMergeDetail}");
-                return;
-            }
-
-            AppendDetail(
-                ref profile.UtilityLaneDetail,
-                $"lane={FormatEntity(lanePrefab)} flags={effectiveFlags} utilityLaneData=missing offset={lateralOffset:0.##}m{flagMergeDetail}");
-        }
-
-        private void ApplyCompositionFlagsFromComposition(
-            Entity compositionEntity,
-            CompositionFlags fallbackFlags,
-            ref RoadLaneProfile profile)
-        {
-            if (compositionEntity != Entity.Null &&
-                EntityManager.TryGetComponent(compositionEntity, out NetCompositionData compositionData))
-            {
-                SetCompositionFlags(
-                    compositionData.m_Flags,
-                    $"composition={FormatEntity(compositionEntity)} data=present",
-                    ref profile);
-                return;
-            }
-
-            SetCompositionFlags(
-                fallbackFlags,
-                $"composition={FormatEntity(compositionEntity)} data=missing fallback={fallbackFlags}",
-                ref profile);
-        }
-
-        private void ApplyRuntimeUtilityConnectionState(
-            Entity edgeEntity,
-            Entity fallbackPrefab,
-            ref RoadLaneProfile profile)
-        {
-            bool hasElectricity = EntityManager.HasComponent<Game.Net.ElectricityConnection>(edgeEntity);
-            string electricityExpectedDetail = GetPrefabElectricityExpectationDetail(
-                fallbackPrefab,
-                profile.CompositionFlags,
-                out bool expectedElectricity);
-            profile.ElectricityConnection = hasElectricity;
-            profile.ElectricityConnectionDetail = $"runtime actual={hasElectricity} expectedByPrefab={expectedElectricity} {electricityExpectedDetail}";
-
-            bool hasWater = EntityManager.TryGetComponent(edgeEntity, out Game.Net.WaterPipeConnection waterPipeConnection);
-            string waterExpectedDetail = GetPrefabWaterExpectationDetail(
-                fallbackPrefab,
-                out bool expectedWater);
-            profile.WaterPipeConnection = hasWater;
-            profile.WaterPipeConnectionDetail = hasWater
-                ? $"runtime actual=True fresh={waterPipeConnection.m_FreshCapacity} sewage={waterPipeConnection.m_SewageCapacity} storm={waterPipeConnection.m_StormCapacity} expectedByPrefab={expectedWater} {waterExpectedDetail}"
-                : $"runtime actual=False expectedByPrefab={expectedWater} {waterExpectedDetail}";
-        }
-
-        private void ApplyPrefabUtilityConnectionState(
-            Entity prefabEntity,
-            CompositionFlags compositionFlags,
-            string source,
-            ref RoadLaneProfile profile)
-        {
-            string electricityDetail = GetPrefabElectricityExpectationDetail(
-                prefabEntity,
-                compositionFlags,
-                out bool expectedElectricity);
-            profile.ElectricityConnection = expectedElectricity;
-            profile.ElectricityConnectionDetail = $"prefabExpected={expectedElectricity} source={source} {electricityDetail}";
-
-            string waterDetail = GetPrefabWaterExpectationDetail(
-                prefabEntity,
-                out bool expectedWater);
-            profile.WaterPipeConnection = expectedWater;
-            profile.WaterPipeConnectionDetail = $"prefabExpected={expectedWater} source={source} {waterDetail}";
-        }
-
-        private string GetPrefabElectricityExpectationDetail(
-            Entity prefabEntity,
-            CompositionFlags compositionFlags,
-            out bool expectedElectricity)
-        {
-            expectedElectricity = false;
-            if (prefabEntity == Entity.Null ||
-                !EntityManager.TryGetComponent(prefabEntity, out ElectricityConnectionData electricityData))
-            {
-                return $"prefabElectricity=missing prefab={FormatEntity(prefabEntity)} compositionFlags={compositionFlags}";
-            }
-
-            expectedElectricity = NetCompositionHelpers.TestEdgeFlags(electricityData, compositionFlags);
-            return $"prefabElectricity=present capacity={electricityData.m_Capacity} voltage={electricityData.m_Voltage} direction={electricityData.m_Direction} requireAll={electricityData.m_CompositionAll} requireAny={electricityData.m_CompositionAny} requireNone={electricityData.m_CompositionNone} compositionFlags={compositionFlags}";
-        }
-
-        private string GetPrefabWaterExpectationDetail(
-            Entity prefabEntity,
-            out bool expectedWater)
-        {
-            expectedWater = false;
-            if (prefabEntity == Entity.Null ||
-                !EntityManager.TryGetComponent(prefabEntity, out WaterPipeConnectionData waterData))
-            {
-                return $"prefabWater=missing prefab={FormatEntity(prefabEntity)}";
-            }
-
-            expectedWater = waterData.m_FreshCapacity != 0 ||
-                            waterData.m_SewageCapacity != 0 ||
-                            waterData.m_StormCapacity != 0;
-            return $"prefabWater=present fresh={waterData.m_FreshCapacity} sewage={waterData.m_SewageCapacity} storm={waterData.m_StormCapacity}";
-        }
-
-        private static void SetCompositionFlags(
-            CompositionFlags compositionFlags,
-            string detail,
-            ref RoadLaneProfile profile)
-        {
-            profile.HasCompositionFlags = true;
-            profile.CompositionFlags = compositionFlags;
-            profile.CompositionFlagsDetail = $"{detail} flags={compositionFlags}";
-        }
-
         private static bool IsDrivablePocketLengthLane(LaneFlags flags)
         {
             if ((flags & (LaneFlags.Master | LaneFlags.Road)) != LaneFlags.Road)
@@ -573,8 +428,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 LaneFlags.Parking |
                 LaneFlags.Track |
                 LaneFlags.Pedestrian |
-                LaneFlags.Utility |
-                LaneFlags.Underground |
                 LaneFlags.PublicOnly |
                 LaneFlags.BicyclesOnly |
                 LaneFlags.Twoway;
@@ -586,17 +439,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             return rawFlags == effectiveFlags
                 ? string.Empty
                 : $" rawFlags={rawFlags} effectiveFlags={effectiveFlags}";
-        }
-
-        private static void AppendDetail(ref string detail, string sample)
-        {
-            if (detail == "<none>")
-            {
-                detail = sample;
-                return;
-            }
-
-            detail += " || " + sample;
         }
 
         private static void AddDirectionalLane(LaneFlags flags, ref RoadLaneCounts counts)

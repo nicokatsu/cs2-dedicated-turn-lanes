@@ -21,10 +21,8 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public int RoadBuilderNotInPlaysetExcluded;
         public int RoadBuilderVisibilityUnknown;
         public int HighwayExcluded;
-        public int UtilityRejected;
         public string TramUpgradeRejectSample;
         public string BusUpgradeRejectSample;
-        public string UtilityRejectSample;
         public string WidthCandidateSample;
         public string RoadBuilderCandidateSample;
         public string RoadBuilderBusUpgradeSample;
@@ -33,7 +31,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public string RoadBuilderVisibilityUnknownSample;
         public string BestBusLayoutCandidateDetail;
         private int m_BusUpgradeRejectSampleCount;
-        private int m_UtilityRejectSampleCount;
         private int m_WidthCandidateSampleCount;
         private int m_RoadBuilderCandidateSampleCount;
         private int m_RoadBuilderBusUpgradeSampleCount;
@@ -48,7 +45,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             {
                 TramUpgradeRejectSample = "<none>",
                 BusUpgradeRejectSample = "<none>",
-                UtilityRejectSample = "<none>",
                 WidthCandidateSample = "<none>",
                 RoadBuilderCandidateSample = "<none>",
                 RoadBuilderBusUpgradeSample = "<none>",
@@ -73,12 +69,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         {
             BusUpgradeRejected++;
             ReplacementPrefabDiagnostics.AppendLogSample(ref BusUpgradeRejectSample, ref m_BusUpgradeRejectSampleCount, sample, maxSamples);
-        }
-
-        public void AddUtilityRejection(string sample, int maxSamples)
-        {
-            UtilityRejected++;
-            ReplacementPrefabDiagnostics.AppendLogSample(ref UtilityRejectSample, ref m_UtilityRejectSampleCount, sample, maxSamples);
         }
 
         public void AddWidthCandidateSample(string sample, int maxSamples)

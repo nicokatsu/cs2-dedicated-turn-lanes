@@ -29,10 +29,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private const float SplitNodePositionTolerance = 2.5f;
         private const float PocketEdgeLengthTolerance = 4f;
         private const float MergedEdgeLengthTolerance = 12f;
-        private const float UtilityLaneOffsetTolerance = 0.05f;
         private const float NodeMergePreviewEdgeExitDistance = 6f;
         private const float NodeMergePreviewIntersectionBoundsMargin = 0.75f;
-        private const int MaxReplacementUtilityFixAttempts = 1;
 
         public override string toolID => $"{Mod.ModId} Intersection Tool";
         public override bool allowUnderground => true;
@@ -78,7 +76,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private readonly List<NodeMergeCandidate> m_AppliedNodeMergeCandidates = new List<NodeMergeCandidate>();
         private readonly List<ReplacementCandidate> m_QueuedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_AppliedReplacementCandidates = new List<ReplacementCandidate>();
-        private readonly List<ReplacementCandidate> m_UtilityRetryReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_PendingLaneRepairCandidates = new List<ReplacementCandidate>();
         private JobHandle m_LastToolUpdateJobHandle;
 
@@ -205,10 +202,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
                 if (m_VerifyAppliedReplacements)
                 {
-                    if (VerifyAppliedReplacements())
-                    {
-                        return result;
-                    }
+                    VerifyAppliedReplacements();
                 }
 
                 if (TryQueueFailedSplitRetries(ref result))
@@ -242,18 +236,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             EnsureVanillaMutationSystemsDisabled();
             if (SynchronizeUndergroundMode(ref result))
             {
-                return result;
-            }
-
-            if (m_VerifyAppliedReplacements)
-            {
-                if (VerifyAppliedReplacements())
-                {
-                    return result;
-                }
-
-                QueuePendingSplitLaneConnectionFixes("replacement utility verification complete");
-                ResetPreviewState();
                 return result;
             }
 
@@ -515,7 +497,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         {
             int definitionCount = CalculateEntityCountSafe(m_DefinitionQuery);
             int replacementDefinitionCount = CalculateEntityCountSafe(m_ReplacementPreviewDefinitionQuery);
-            return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} queuedReplacements={m_QueuedReplacementCandidates.Count} appliedReplacements={m_AppliedReplacementCandidates.Count} utilityRetryReplacements={m_UtilityRetryReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} definitions={definitionCount} replacementPreviewDefinitions={replacementDefinitionCount} frame={UnityEngine.Time.frameCount}";
+            return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} queuedReplacements={m_QueuedReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} definitions={definitionCount} replacementPreviewDefinitions={replacementDefinitionCount} frame={UnityEngine.Time.frameCount}";
         }
 
         public override bool TrySetPrefab(PrefabBase prefab)
