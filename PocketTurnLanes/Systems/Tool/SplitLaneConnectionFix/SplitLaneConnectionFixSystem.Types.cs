@@ -48,6 +48,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             request.BranchSourceLaneIndex = -1;
             request.ExtraTargetLaneIndex = -1;
             request.Turn = TurnDirection.Ambiguous;
+            request.CenterPlan = null;
         }
 
         private static string GetTrafficWriteOrder(RepairMode mode)
@@ -177,6 +178,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public LaneMapping[] ReverseMappings;
             public LaneMapping[] PreservationForwardMappings;
             public LaneMapping[] PreservationReverseMappings;
+            public CenterPlan CenterPlan;
             public string PreservationSkippedReason;
             public TransitionConnectionSnapshot TransitionReverseSnapshot;
             public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;

@@ -36,7 +36,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            CenterPlan centerPlan = BuildCenterPlan(request);
+            CenterPlan centerPlan = request.CenterPlan ?? BuildCenterPlan(request);
             bool centerRewriteWritten = false;
             bool centerRewriteWriteSucceeded = true;
             if (centerPlan.BySource.Count > 0 || centerPlan.LegacyOffScopeSourceKeys.Count > 0)

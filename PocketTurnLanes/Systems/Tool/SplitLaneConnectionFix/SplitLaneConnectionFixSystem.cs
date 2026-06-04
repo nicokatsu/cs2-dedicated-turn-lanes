@@ -127,7 +127,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         continue;
                     }
 
-                    if (!TryPrepareMappings(ref request))
+                    if (!TryPrepareMappings(trafficApi, ref request))
                     {
                         request.LaneDataRetries++;
                         if (request.LaneDataRetries > MaxLaneDataRetries)

@@ -8,7 +8,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
-        private bool TryPrepareMappings(ref Request request)
+        private bool TryPrepareMappings(TrafficApi trafficApi, ref Request request)
         {
             ResetRoadPreparation(ref request);
 
@@ -48,7 +48,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             request.TargetLanes = m_TargetLanes.ToArray();
             EnsurePreservationSnapshotCapturedForOuter(ref request, outerEdge, "capture-before-directional-road-mapping");
 
-            PrepareForwardRoadMappings(ref request, outerEdge, out ForwardRoadPreparationResult forwardResult);
+            PrepareForwardRoadMappings(trafficApi, null, ref request, outerEdge, emitDiagnostics: false, out _);
+            request.CenterPlan = BuildCenterPlan(request);
+            PrepareForwardRoadMappings(trafficApi, request.CenterPlan, ref request, outerEdge, emitDiagnostics: true, out ForwardRoadPreparationResult forwardResult);
 
             if (!TryPrepareReverseMappings(ref request, outerEdge, out string reverseMappingSource, out string reverseMappingReason))
             {
@@ -61,7 +63,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             return true;
         }
 
-        private void PrepareForwardRoadMappings(ref Request request, Entity outerEdge, out ForwardRoadPreparationResult result)
+        private void PrepareForwardRoadMappings(
+            TrafficApi trafficApi,
+            CenterPlan centerPlan,
+            ref Request request,
+            Entity outerEdge,
+            bool emitDiagnostics,
+            out ForwardRoadPreparationResult result)
         {
             string forwardMappingSource = "skipped";
             string forwardMappingReason = string.Empty;
@@ -76,7 +84,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 string reason = $"roadMappingSkipped=forwardLayoutMismatch source={m_SourceLanes.Count} target={m_TargetLanes.Count} expected={expectedForwardTargets}";
                 MarkForwardRoadSkipped(ref request, reason);
                 forwardMappingReason = reason;
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} rule=N->N+1 sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count} expectedTarget={expectedForwardTargets}; preserveExistingDirection=True continueReverse=True.");
+                if (emitDiagnostics)
+                {
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} mode={request.Mode} rule=N->N+1 sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count} expectedTarget={expectedForwardTargets}; preserveExistingDirection=True continueReverse=True.");
+                }
             }
             else
             {
@@ -93,28 +104,86 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     string reason = $"roadMappingSkipped=forwardTargetSubsetSelectionFailed source={m_SourceLanes.Count} target={m_TargetLanes.Count}";
                     MarkForwardRoadSkipped(ref request, reason);
                     forwardMappingReason = reason;
-                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} rule=N->N+1 sourceOrder={FormatLaneOrder(m_SourceLanes)} targetOrder={FormatLaneOrder(m_TargetLanes)} reason={reason}; preserveExistingDirection=True continueReverse=True.");
+                    if (emitDiagnostics)
+                    {
+                        Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} rule=N->N+1 sourceOrder={FormatLaneOrder(m_SourceLanes)} targetOrder={FormatLaneOrder(m_TargetLanes)} reason={reason}; preserveExistingDirection=True continueReverse=True.");
+                    }
                 }
                 else
                 {
                     turn = TrafficLaneTargetSelector.DetermineTurn(selectedTargets, extraTargetListIndex);
                     bool centerTurnEvidence = false;
-                    if (TryRefineExtraTargetFromCenterConnectors(
+                    string centerTurnEvidenceSource = "none";
+                    if (TryRefineExtraTargetFromCenterPlan(
+                            centerPlan,
+                            request.IntersectionNode,
+                            request.PocketEdge,
+                            selectedTargets,
+                            out int planExtraTargetListIndex,
+                            out TurnDirection planTurn,
+                            out string planTurnDiagnostic))
+                    {
+                        centerTurnEvidence = true;
+                        centerTurnEvidenceSource = "plan";
+                        centerTurnDiagnostic = planTurnDiagnostic;
+                        if (emitDiagnostics &&
+                            (planExtraTargetListIndex != extraTargetListIndex || planTurn != turn))
+                        {
+                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center plan turn target overrides split lateral target splitNode={FormatEntity(request.SplitNode)} oldExtra={selectedTargets[extraTargetListIndex].LaneIndex}/{turn} newExtra={selectedTargets[planExtraTargetListIndex].LaneIndex}/{planTurn} diagnostics={centerTurnDiagnostic}.");
+                        }
+
+                        extraTargetListIndex = planExtraTargetListIndex;
+                        turn = planTurn;
+                    }
+                    else if (TryRefineExtraTargetFromCenterTrafficOverride(
+                            trafficApi,
+                            request.IntersectionNode,
+                            request.PocketEdge,
+                            selectedTargets,
+                            out int trafficExtraTargetListIndex,
+                            out TurnDirection trafficTurn,
+                            out string trafficTurnDiagnostic))
+                    {
+                        centerTurnEvidence = true;
+                        centerTurnEvidenceSource = "traffic";
+                        centerTurnDiagnostic = string.IsNullOrEmpty(planTurnDiagnostic)
+                            ? trafficTurnDiagnostic
+                            : $"{planTurnDiagnostic}; {trafficTurnDiagnostic}";
+                        if (emitDiagnostics &&
+                            (trafficExtraTargetListIndex != extraTargetListIndex || trafficTurn != turn))
+                        {
+                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center Traffic override turn target overrides split lateral target splitNode={FormatEntity(request.SplitNode)} oldExtra={selectedTargets[extraTargetListIndex].LaneIndex}/{turn} newExtra={selectedTargets[trafficExtraTargetListIndex].LaneIndex}/{trafficTurn} diagnostics={centerTurnDiagnostic}.");
+                        }
+
+                        extraTargetListIndex = trafficExtraTargetListIndex;
+                        turn = trafficTurn;
+                    }
+                    else
+                    {
+                        if (TryRefineExtraTargetFromCenterConnectors(
                             request.IntersectionNode,
                             request.PocketEdge,
                             selectedTargets,
                             out int centerExtraTargetListIndex,
                             out TurnDirection centerTurn,
-                            out centerTurnDiagnostic))
-                    {
-                        centerTurnEvidence = true;
-                        if (centerExtraTargetListIndex != extraTargetListIndex || centerTurn != turn)
+                            out string runtimeTurnDiagnostic))
                         {
-                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center connector turn target overrides split lateral target splitNode={FormatEntity(request.SplitNode)} oldExtra={selectedTargets[extraTargetListIndex].LaneIndex}/{turn} newExtra={selectedTargets[centerExtraTargetListIndex].LaneIndex}/{centerTurn} diagnostics={centerTurnDiagnostic}.");
-                        }
+                            centerTurnEvidence = true;
+                            centerTurnEvidenceSource = "runtime";
+                            centerTurnDiagnostic = CombineDiagnostics(planTurnDiagnostic, trafficTurnDiagnostic, runtimeTurnDiagnostic);
+                            if (emitDiagnostics &&
+                                (centerExtraTargetListIndex != extraTargetListIndex || centerTurn != turn))
+                            {
+                                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center runtime connector turn target overrides split lateral target splitNode={FormatEntity(request.SplitNode)} oldExtra={selectedTargets[extraTargetListIndex].LaneIndex}/{turn} newExtra={selectedTargets[centerExtraTargetListIndex].LaneIndex}/{centerTurn} diagnostics={centerTurnDiagnostic}.");
+                            }
 
-                        extraTargetListIndex = centerExtraTargetListIndex;
-                        turn = centerTurn;
+                            extraTargetListIndex = centerExtraTargetListIndex;
+                            turn = centerTurn;
+                        }
+                        else
+                        {
+                            centerTurnDiagnostic = CombineDiagnostics(planTurnDiagnostic, trafficTurnDiagnostic, runtimeTurnDiagnostic);
+                        }
                     }
 
                     if (turn == TurnDirection.Ambiguous)
@@ -122,7 +191,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         string reason = $"roadMappingSkipped=forwardAmbiguousTurn extraIndex={extraTargetListIndex} centerDiagnostics={centerTurnDiagnostic}";
                         MarkForwardRoadSkipped(ref request, reason);
                         forwardMappingReason = reason;
-                        Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} selectedTargets={FormatLaneOrder(selectedTargets)} extraIndex={extraTargetListIndex} centerDiagnostics={centerTurnDiagnostic}; preserveExistingDirection=True continueReverse=True.");
+                        if (emitDiagnostics)
+                        {
+                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} selectedTargets={FormatLaneOrder(selectedTargets)} extraIndex={extraTargetListIndex} centerDiagnostics={centerTurnDiagnostic}; preserveExistingDirection=True continueReverse=True.");
+                        }
                     }
                     else
                     {
@@ -136,7 +208,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                             string reason = "roadMappingSkipped=forwardWaitingForGeneratedConnectorTemplate";
                             MarkForwardRoadSkipped(ref request, reason);
                             forwardMappingReason = reason;
-                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count} reason={reason}; preservationFallback=True continueReverse=True.");
+                            if (emitDiagnostics)
+                            {
+                                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourceCount={m_SourceLanes.Count} targetCount={m_TargetLanes.Count} reason={reason}; preservationFallback=True continueReverse=True.");
+                            }
                         }
                         else if (!TrafficLaneMappingBuilder.TryBuildDesiredMappings(
                                      m_SourceLanes,
@@ -153,10 +228,22 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                             string reason = $"roadMappingSkipped=forwardDesiredMappingFailed detail=({mappingReason})";
                             MarkForwardRoadSkipped(ref request, reason);
                             forwardMappingReason = reason;
-                            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} sourceOrder={FormatLaneOrder(m_SourceLanes)} selectedTargets={FormatLaneOrder(selectedTargets)} extraTarget={extraTargetLaneIndex} branchSource={branchSourceLaneIndex} existing={FormatConnectorLanes(m_ExistingConnectorLanes)} reason={reason}; preserveExistingDirection=True continueReverse=True.");
+                            if (emitDiagnostics)
+                            {
+                                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Forward road mapping skipped independently splitNode={FormatEntity(request.SplitNode)} sourceOrder={FormatLaneOrder(m_SourceLanes)} selectedTargets={FormatLaneOrder(selectedTargets)} extraTarget={extraTargetLaneIndex} branchSource={branchSourceLaneIndex} existing={FormatConnectorLanes(m_ExistingConnectorLanes)} reason={reason}; preserveExistingDirection=True continueReverse=True.");
+                            }
                         }
                         else
                         {
+                            if (centerTurnEvidence)
+                            {
+                                forwardMappingSource = centerTurnEvidenceSource == "traffic"
+                                    ? "center-traffic-order"
+                                    : centerTurnEvidenceSource == "plan"
+                                        ? "center-plan-order"
+                                        : "center-runtime-order";
+                            }
+
                             request.Mappings = mappings;
                             request.TargetLanes = selectedTargets.ToArray();
                             request.BranchSourceLaneIndex = branchSourceLaneIndex;
