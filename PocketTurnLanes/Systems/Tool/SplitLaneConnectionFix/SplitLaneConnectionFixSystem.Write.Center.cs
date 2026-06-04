@@ -103,7 +103,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 bool rewriteSource = plan.BySource.ContainsKey(existingKey);
                 bool legacyOffScopeSource = !rewriteSource &&
                                             plan.LegacyOffScopeSourceKeys.Contains(existingKey) &&
-                                            LooksLikeLegacyCenterOverride(trafficApi, existing, existingKey);
+                                            ExistingConnectionMatchesLegacyCenterOverride(trafficApi, existing, existingKey);
                 if (!rewriteSource && !legacyOffScopeSource)
                 {
                     kept.Add(existing);
@@ -195,7 +195,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                    writtenConnections == plan.PlannedConnections;
         }
 
-        private bool LooksLikeLegacyCenterOverride(
+        private bool ExistingConnectionMatchesLegacyCenterOverride(
             TrafficApi trafficApi,
             object modifiedConnection,
             SourceLaneKey sourceKey)
@@ -209,25 +209,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            if (generatedSnapshots.Count <= 0 || generatedSnapshots.Count > 4)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < generatedSnapshots.Count; i++)
-            {
-                TrafficGeneratedSnapshot generated = generatedSnapshots[i];
-                PathMethod method = TrafficPathMethods.SanitizeCenterTrafficPathMethod(generated.Method);
-                if (generated.SourceEdge != sourceKey.Edge ||
-                    generated.SourceLaneIndex != sourceKey.LaneIndex ||
-                    (method & ~PathMethod.Road) != 0 ||
-                    generated.IsUnsafe)
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return TrafficCenterLegacyOverrideGuard.LooksLikeLegacyCenterOverride(generatedSnapshots, sourceKey);
         }
     }
 }
