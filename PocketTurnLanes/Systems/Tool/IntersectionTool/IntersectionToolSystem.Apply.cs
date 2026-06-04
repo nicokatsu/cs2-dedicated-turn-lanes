@@ -132,7 +132,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (!HasMinimumRetryProgress(candidate.SplitDistance, splitPlan.SplitDistance))
+                if (retryRequest.RequiresMinimumProgress &&
+                    !HasMinimumRetryProgress(candidate.SplitDistance, splitPlan.SplitDistance))
                 {
                     exhaustedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Retry split cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryRequest.Detail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m.");

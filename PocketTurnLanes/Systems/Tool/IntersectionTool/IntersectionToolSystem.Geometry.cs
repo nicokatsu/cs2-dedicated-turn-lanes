@@ -949,10 +949,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 roadWidth = profile.DrivableLaneEnvelopeWidth;
                 widthSource = $"DrivableLaneEnvelope:{profile.Source}";
                 laneWidthDetail = $"lanes={profile.DrivableLaneEnvelopeCount} min={profile.DrivableLaneEnvelopeMin:0.##}m max={profile.DrivableLaneEnvelopeMax:0.##}m envelope={profile.DrivableLaneEnvelopeWidth:0.##}m buffer={DrivableLaneEnvelopeBuffer:0.##}m detail={profile.DrivableLaneEnvelopeDetail}";
-                return AlignLengthUpToPocketLengthGrid(math.clamp(
-                    roadWidth + DrivableLaneEnvelopeBuffer,
-                    MinimumWidthBasedPocketLaneLength,
-                    MaximumWidthBasedPocketLaneLength));
+                return GetWidthBasedPocketLaneLength(roadWidth);
             }
 
             laneWidthDetail = profile.Source == null
@@ -975,16 +972,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 widthSource = "MissingWidthFallback";
             }
 
-            if (roadWidth <= 0f)
-            {
-                return FallbackPocketLaneLength;
-            }
-
-            float clampedWidth = math.clamp(
-                roadWidth,
-                MinimumWidthBasedPocketLaneLength,
-                MaximumWidthBasedPocketLaneLength);
-            return AlignLengthUpToPocketLengthGrid(clampedWidth);
+            return GetWidthBasedPocketLaneLength(roadWidth);
         }
 
         private static string FormatMeters(float value)

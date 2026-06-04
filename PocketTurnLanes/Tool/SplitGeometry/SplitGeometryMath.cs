@@ -19,6 +19,7 @@ namespace PocketTurnLanes.Tool.SplitGeometry
     {
         public int NextAttempt;
         public float RequestedPocketLength;
+        public bool RequiresMinimumProgress;
         public string Detail;
     }
 
@@ -26,11 +27,12 @@ namespace PocketTurnLanes.Tool.SplitGeometry
     {
         internal const float SplitGridSize = 8f;
         internal const float PocketLengthGridSize = 8f;
-        internal const float FallbackPocketLaneLength = 24f;
-        internal const float MinimumWidthBasedPocketLaneLength = 8f;
-        internal const float MaximumWidthBasedPocketLaneLength = 32f;
+        internal const float FallbackPocketLaneLength = 32f;
+        internal const float MinimumWidthBasedPocketLaneLength = 24f;
+        internal const float MaximumWidthBasedPocketLaneLength = 40f;
         internal const float MaximumRetryPocketLaneLength = 64f;
-        internal const float DrivableLaneEnvelopeBuffer = 8f;
+        internal const float DrivableLaneEnvelopeBuffer = 16f;
+        internal const float CompactRetryPocketLaneLength = 24f;
         internal const float SplitGridAlignmentTolerance = 0.05f;
         internal const float MinimumPocketLaneLength = 8f;
         internal const float MinimumPocketLaneLengthTolerance = 0.05f;
@@ -119,6 +121,19 @@ namespace PocketTurnLanes.Tool.SplitGeometry
             return pocketLength + SplitLengthBuffer + MinimumPocketLaneLengthTolerance >= MinimumPocketLaneLength;
         }
 
+        internal static float GetWidthBasedPocketLaneLength(float roadWidth)
+        {
+            if (roadWidth <= 0f)
+            {
+                return FallbackPocketLaneLength;
+            }
+
+            return AlignLengthUpToPocketLengthGrid(math.clamp(
+                roadWidth + DrivableLaneEnvelopeBuffer,
+                MinimumWidthBasedPocketLaneLength,
+                MaximumWidthBasedPocketLaneLength));
+        }
+
         internal static float ResolveTargetPocketLength(
             float adaptiveTargetPocketLength,
             float requestedTargetPocketLength,
@@ -152,7 +167,17 @@ namespace PocketTurnLanes.Tool.SplitGeometry
             }
 
             request.NextAttempt = currentAttempt + 1;
+            if (currentAttempt == 0 &&
+                currentTargetPocketLength > CompactRetryPocketLaneLength + SplitGridAlignmentTolerance)
+            {
+                request.RequestedPocketLength = CompactRetryPocketLaneLength;
+                request.RequiresMinimumProgress = false;
+                request.Detail = $"mode=compact-compat compactPocket={CompactRetryPocketLaneLength:0.##}m previousPocket={currentTargetPocketLength:0.##}m";
+                return true;
+            }
+
             request.RequestedPocketLength = currentTargetPocketLength + SplitRetryStep;
+            request.RequiresMinimumProgress = true;
             request.Detail = $"mode=fixed-step step={SplitRetryStep:0.##}m previousPocket={currentTargetPocketLength:0.##}m";
             return true;
         }
