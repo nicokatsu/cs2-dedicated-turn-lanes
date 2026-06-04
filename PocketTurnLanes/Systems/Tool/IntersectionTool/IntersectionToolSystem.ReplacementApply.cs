@@ -41,7 +41,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 if (IsReplacementTargetVisible(candidate, candidate.PocketEdge, out string visibleDetail))
                 {
                     if (!TryVerifyReplacementUtilityForTraffic(
-                            candidate,
+                            ref candidate,
                             candidate.PocketEdge,
                             visibleDetail,
                             out string utilityDetail))
@@ -68,7 +68,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 {
                     candidate.PocketEdge = resultEdge;
                     if (!TryVerifyReplacementUtilityForTraffic(
-                            candidate,
+                            ref candidate,
                             resultEdge,
                             "replacement-result-edge",
                             out string utilityDetail))
@@ -107,7 +107,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         }
 
         private bool TryVerifyReplacementUtilityForTraffic(
-            ReplacementCandidate candidate,
+            ref ReplacementCandidate candidate,
             Entity finalPocketEdge,
             string visibleDetail,
             out string detail)
@@ -127,68 +127,25 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             ReplacementUtilityProfile finalUtility = finalProfile.GetUtilityProfile();
-            bool visualOk = true;
+            bool laneOk = true;
             string laneDetail = "not-required";
             if (sourceUtility.LaneLayout.HasAny)
             {
-                visualOk = UtilityLaneLayoutsMatch(
+                laneOk = UtilityLaneLayoutsMatch(
                     targetUtility.LaneLayout,
                     finalUtility.LaneLayout,
                     out laneDetail);
             }
 
-            ReplacementUtilityValidation validation = new ReplacementUtilityValidation
-            {
-                TypeOk = sourceUtility.UtilityTypes == Game.Net.UtilityTypes.None ||
-                         (finalUtility.UtilityTypes & sourceUtility.UtilityTypes) == sourceUtility.UtilityTypes,
-                ElectricityOk = !sourceUtility.ElectricityConnection || finalUtility.ElectricityConnection,
-                WaterOk = !sourceUtility.WaterPipeConnection || finalUtility.WaterPipeConnection,
-                VisualOk = visualOk
-            };
-
-            detail = FormatReplacementUtilityValidationDetail(
-                candidate,
-                finalPocketEdge,
-                visibleDetail,
-                finalProfile,
-                finalUtility,
-                validation,
-                laneDetail);
-            return validation.ConnectivityOk;
-        }
-
-        private string FormatReplacementUtilityValidationDetail(
-            ReplacementCandidate candidate,
-            Entity finalPocketEdge,
-            string visibleDetail,
-            RoadLaneProfile finalProfile,
-            ReplacementUtilityProfile finalUtility,
-            ReplacementUtilityValidation validation,
-            string laneDetail)
-        {
-            ReplacementUtilityProfile sourceUtility = candidate.SourceUtilityProfile;
-            ReplacementUtilityProfile targetUtility = candidate.TargetUtilityProfile;
-            return $"status={validation.Status} connectivityOk={validation.ConnectivityOk} visualOk={validation.VisualOk} visualMismatch={validation.VisualMismatch} visible={visibleDetail} edge={FormatEntity(finalPocketEdge)} finalProfile={finalProfile.Source} source={sourceUtility} target={targetUtility} final={finalUtility} lane={laneDetail} typesOk={validation.TypeOk} electricityExpected={sourceUtility.ElectricityConnection} electricityActual={finalUtility.ElectricityConnection} waterExpected={sourceUtility.WaterPipeConnection} waterActual={finalUtility.WaterPipeConnection} targetUtilityFixFlags={candidate.TargetUtilityFixFlags} sourceLaneDetail={sourceUtility.LaneDetail} targetLaneDetail={targetUtility.LaneDetail} finalLaneDetail={finalUtility.LaneDetail} sourceElectricity={sourceUtility.ElectricityDetail} targetElectricity={targetUtility.ElectricityDetail} finalElectricity={finalUtility.ElectricityDetail} sourceWater={sourceUtility.WaterDetail} targetWater={targetUtility.WaterDetail} finalWater={finalUtility.WaterDetail} sourceComposition={sourceUtility.CompositionDetail} targetComposition={targetUtility.CompositionDetail} finalComposition={finalUtility.CompositionDetail}{validation.TrafficRepairProceedDetail}";
-        }
-
-        private struct ReplacementUtilityValidation
-        {
-            public bool TypeOk;
-            public bool ElectricityOk;
-            public bool WaterOk;
-            public bool VisualOk;
-
-            public bool ConnectivityOk => TypeOk && ElectricityOk && WaterOk;
-
-            public bool VisualMismatch => !VisualOk;
-
-            public string Status => ConnectivityOk
-                ? "ok"
-                : "mismatch";
-
-            public string TrafficRepairProceedDetail => ConnectivityOk
-                ? " TrafficRepairProceed=utility-connectivity-ok"
-                : string.Empty;
+            bool typeOk = sourceUtility.UtilityTypes == Game.Net.UtilityTypes.None ||
+                          (finalUtility.UtilityTypes & sourceUtility.UtilityTypes) == sourceUtility.UtilityTypes;
+            bool electricityOk = !sourceUtility.ElectricityConnection || finalUtility.ElectricityConnection;
+            bool waterOk = !sourceUtility.WaterPipeConnection || finalUtility.WaterPipeConnection;
+            bool connectivityOk = typeOk && electricityOk && waterOk;
+            bool visualOk = laneOk;
+            bool visualMismatch = !visualOk;
+            detail = $"status={(connectivityOk ? "ok" : "mismatch")} connectivityOk={connectivityOk} visualOk={visualOk} visualMismatch={visualMismatch} visible={visibleDetail} edge={FormatEntity(finalPocketEdge)} finalProfile={finalProfile.Source} source={sourceUtility} target={targetUtility} final={finalUtility} lane={laneDetail} typesOk={typeOk} electricityExpected={sourceUtility.ElectricityConnection} electricityActual={finalUtility.ElectricityConnection} waterExpected={sourceUtility.WaterPipeConnection} waterActual={finalUtility.WaterPipeConnection} targetUtilityFixFlags={candidate.TargetUtilityFixFlags} sourceLaneDetail={sourceUtility.LaneDetail} targetLaneDetail={targetUtility.LaneDetail} finalLaneDetail={finalUtility.LaneDetail} sourceElectricity={sourceUtility.ElectricityDetail} targetElectricity={targetUtility.ElectricityDetail} finalElectricity={finalUtility.ElectricityDetail} sourceWater={sourceUtility.WaterDetail} targetWater={targetUtility.WaterDetail} finalWater={finalUtility.WaterDetail} sourceComposition={sourceUtility.CompositionDetail} targetComposition={targetUtility.CompositionDetail} finalComposition={finalUtility.CompositionDetail}{(connectivityOk ? " TrafficRepairProceed=utility-connectivity-ok" : string.Empty)}";
+            return connectivityOk;
         }
 
         private bool TryQueuePostReplacementUtilityFix(
