@@ -1,7 +1,9 @@
 using Colossal.Mathematics;
 using Game.Common;
 using Game.Net;
+using Game.Prefabs;
 using Game.Tools;
+using PocketTurnLanes.Tool.PrefabMatching;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Collections;
 using Unity.Entities;
@@ -152,6 +154,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int OriginalBackwardLanes;
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
+            public ReplacementUtilityProfile SourceUtilityProfile;
+            public ReplacementUtilityProfile TargetUtilityProfile;
+            public CompositionFlags TargetUtilityFixFlags;
             public int Attempt;
             public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
         }
@@ -187,6 +192,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int OriginalBackwardLanes;
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
+            public ReplacementUtilityProfile SourceUtilityProfile;
+            public ReplacementUtilityProfile TargetUtilityProfile;
+            public CompositionFlags TargetUtilityFixFlags;
             public NodeMergeDefinitionRequest MergeRequest;
             public TransitionConnectionSnapshot TransitionReverseSnapshot;
             public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;
@@ -230,6 +238,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int OriginalBackwardLanes;
             public int TargetForwardLanes;
             public int TargetBackwardLanes;
+            public ReplacementUtilityProfile SourceUtilityProfile;
+            public ReplacementUtilityProfile TargetUtilityProfile;
+            public CompositionFlags TargetUtilityFixFlags;
+            public int UtilityFixAttempts;
+            public int UtilityFixFrame;
             public Entity TransitionOuterEdge;
             public TransitionConnectionSnapshot TransitionReverseSnapshot;
             public FarIntersectionTrafficSnapshot FarIntersectionSnapshot;

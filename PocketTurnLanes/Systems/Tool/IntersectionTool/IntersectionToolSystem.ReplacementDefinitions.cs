@@ -62,6 +62,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
                 TargetForwardLanes = prefabMatch.TargetCounts.Forward,
                 TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                SourceUtilityProfile = prefabMatch.SourceUtilityProfile,
+                TargetUtilityProfile = prefabMatch.TargetUtilityProfile,
+                TargetUtilityFixFlags = prefabMatch.TargetUtilityFixFlags,
                 Attempt = 0
             };
         }
@@ -115,6 +118,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                 TargetForwardLanes = candidate.TargetForwardLanes,
                 TargetBackwardLanes = candidate.TargetBackwardLanes,
+                SourceUtilityProfile = candidate.SourceUtilityProfile,
+                TargetUtilityProfile = candidate.TargetUtilityProfile,
+                TargetUtilityFixFlags = candidate.TargetUtilityFixFlags,
                 Attempt = 0,
                 FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
             };
@@ -143,6 +149,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                 TargetForwardLanes = candidate.TargetForwardLanes,
                 TargetBackwardLanes = candidate.TargetBackwardLanes,
+                SourceUtilityProfile = candidate.SourceUtilityProfile,
+                TargetUtilityProfile = candidate.TargetUtilityProfile,
+                TargetUtilityFixFlags = candidate.TargetUtilityFixFlags,
+                UtilityFixFrame = -1,
                 FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
             };
         }
@@ -171,6 +181,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                 TargetForwardLanes = candidate.TargetForwardLanes,
                 TargetBackwardLanes = candidate.TargetBackwardLanes,
+                SourceUtilityProfile = candidate.SourceUtilityProfile,
+                TargetUtilityProfile = candidate.TargetUtilityProfile,
+                TargetUtilityFixFlags = candidate.TargetUtilityFixFlags,
+                UtilityFixFrame = -1,
                 FarIntersectionSnapshot = candidate.FarIntersectionSnapshot
             };
 

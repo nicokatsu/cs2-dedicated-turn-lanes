@@ -74,6 +74,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_VerifyAppliedNodeMerges = false;
             m_QueuedReplacementCandidates.Clear();
             m_AppliedReplacementCandidates.Clear();
+            m_UtilityRetryReplacementCandidates.Clear();
             m_PendingLaneRepairCandidates.Clear();
             m_VerifyAppliedReplacements = false;
         }

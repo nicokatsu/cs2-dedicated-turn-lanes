@@ -1,4 +1,5 @@
 using Game.Net;
+using Game.Prefabs;
 using Unity.Entities;
 
 namespace PocketTurnLanes.Tool.PrefabMatching
@@ -32,6 +33,10 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public DirectionalLaneOffsetProfile TargetBusLaneOffsetProfile;
         public string SourceBusLaneDetail;
         public string TargetBusLaneDetail;
+        public ReplacementUtilityProfile SourceUtilityProfile;
+        public ReplacementUtilityProfile TargetUtilityProfile;
+        public CompositionFlags TargetUtilityFixFlags;
+        public string UtilityMatchDetail;
         public string LayoutScoreDetail;
         public int LayoutScore;
         public int TramLayoutScore;
@@ -52,6 +57,12 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public DirectionalLaneOffsetProfile IndependentTramLayout;
         public DirectionalLaneOffsetProfile PublicTransportTramLayout;
         public DirectionalLaneOffsetProfile BusLaneLayout;
+        public DirectionalLaneOffsetProfile UtilityLaneLayout;
+        public UtilityTypes UtilityTypes;
+        public bool ElectricityConnection;
+        public bool WaterPipeConnection;
+        public bool HasCompositionFlags;
+        public CompositionFlags CompositionFlags;
         public int DrivableLaneEnvelopeCount;
         public float DrivableLaneEnvelopeMin;
         public float DrivableLaneEnvelopeMax;
@@ -63,6 +74,10 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public string IndependentTramDetail;
         public string PublicTransportTramDetail;
         public string BusLaneDetail;
+        public string UtilityLaneDetail;
+        public string ElectricityConnectionDetail;
+        public string WaterPipeConnectionDetail;
+        public string CompositionFlagsDetail;
         public string Source;
 
         public static RoadLaneProfile CreateEmpty(string source)
@@ -75,8 +90,50 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 IndependentTramDetail = "<none>",
                 PublicTransportTramDetail = "<none>",
                 BusLaneDetail = "<none>",
+                UtilityLaneDetail = "<none>",
+                ElectricityConnectionDetail = "<none>",
+                WaterPipeConnectionDetail = "<none>",
+                CompositionFlagsDetail = "<none>",
                 Source = source
             };
+        }
+
+        public ReplacementUtilityProfile GetUtilityProfile()
+        {
+            return new ReplacementUtilityProfile
+            {
+                LaneLayout = UtilityLaneLayout,
+                UtilityTypes = UtilityTypes,
+                ElectricityConnection = ElectricityConnection,
+                WaterPipeConnection = WaterPipeConnection,
+                HasCompositionFlags = HasCompositionFlags,
+                CompositionFlags = CompositionFlags,
+                LaneDetail = UtilityLaneDetail,
+                ElectricityDetail = ElectricityConnectionDetail,
+                WaterDetail = WaterPipeConnectionDetail,
+                CompositionDetail = CompositionFlagsDetail
+            };
+        }
+    }
+
+    internal struct ReplacementUtilityProfile
+    {
+        public DirectionalLaneOffsetProfile LaneLayout;
+        public UtilityTypes UtilityTypes;
+        public bool ElectricityConnection;
+        public bool WaterPipeConnection;
+        public bool HasCompositionFlags;
+        public CompositionFlags CompositionFlags;
+        public string LaneDetail;
+        public string ElectricityDetail;
+        public string WaterDetail;
+        public string CompositionDetail;
+
+        public bool RequiresAny => LaneLayout.HasAny || ElectricityConnection || WaterPipeConnection || UtilityTypes != Game.Net.UtilityTypes.None;
+
+        public override string ToString()
+        {
+            return $"lanes={LaneLayout} types={UtilityTypes} electricity={ElectricityConnection} water={WaterPipeConnection} composition={(HasCompositionFlags ? CompositionFlags.ToString() : "<unknown>")}";
         }
     }
 

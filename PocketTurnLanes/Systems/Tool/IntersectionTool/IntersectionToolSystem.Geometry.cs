@@ -279,6 +279,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
                 TargetForwardLanes = prefabMatch.TargetCounts.Forward,
                 TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                SourceUtilityProfile = prefabMatch.SourceUtilityProfile,
+                TargetUtilityProfile = prefabMatch.TargetUtilityProfile,
+                TargetUtilityFixFlags = prefabMatch.TargetUtilityFixFlags,
                 MergeRequest = new NodeMergeDefinitionRequest
                 {
                     Prefab = sourcePrefab,
@@ -495,6 +498,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = continuationRoadCounts.Backward,
                 TargetForwardLanes = prefabMatch.TargetCounts.Forward,
                 TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                SourceUtilityProfile = prefabMatch.SourceUtilityProfile,
+                TargetUtilityProfile = prefabMatch.TargetUtilityProfile,
+                TargetUtilityFixFlags = prefabMatch.TargetUtilityFixFlags,
                 FarIntersectionSnapshot = farSnapshot,
                 MergeRequest = new NodeMergeDefinitionRequest
                 {
@@ -600,6 +606,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 OriginalBackwardLanes = prefabMatch.OriginalCounts.Backward,
                 TargetForwardLanes = prefabMatch.TargetCounts.Forward,
                 TargetBackwardLanes = prefabMatch.TargetCounts.Backward,
+                SourceUtilityProfile = prefabMatch.SourceUtilityProfile,
+                TargetUtilityProfile = prefabMatch.TargetUtilityProfile,
+                TargetUtilityFixFlags = prefabMatch.TargetUtilityFixFlags,
                 TransitionReverseSnapshot = reverseSnapshot
             };
 
