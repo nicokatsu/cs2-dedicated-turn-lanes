@@ -378,7 +378,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     tempNodeCount++;
                     Temp temp = temps[i];
                     if ((temp.m_Flags & TempFlags.Replace) != TempFlags.Replace ||
-                        (temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0)
+                        !TempEntityHelpers.IsUsableTemp(temp))
                     {
                         continue;
                     }

@@ -23,7 +23,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 {
                     Temp temp = temps[i];
                     if ((temp.m_Flags & TempFlags.Replace) != TempFlags.Replace ||
-                        (temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0)
+                        !TempEntityHelpers.IsUsableTemp(temp))
                     {
                         continue;
                     }
@@ -64,7 +64,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 {
                     Entity edgeEntity = entities[i];
                     Temp temp = temps[i];
-                    if ((temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0 ||
+                    if (!TempEntityHelpers.IsUsableTemp(temp) ||
                         !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
                         !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
                         !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
@@ -155,7 +155,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     }
 
                     Temp temp = temps[i];
-                    if ((temp.m_Flags & (TempFlags.Delete | TempFlags.Cancel)) != (TempFlags)0 ||
+                    if (!TempEntityHelpers.IsUsableTemp(temp) ||
                         !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
                         !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
                         !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
