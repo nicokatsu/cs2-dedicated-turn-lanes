@@ -6,6 +6,7 @@ using Game.Prefabs;
 using Game.Tools;
 using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.PrefabMatching;
+using PocketTurnLanes.Tool.SplitGeometry;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -113,44 +114,40 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (candidate.Attempt >= MaxSplitRetryAttempts)
+                if (!TryCreateSplitRetryRequest(candidate.Attempt, candidate.TargetPocketLength, out SplitRetryRequest retryRequest))
                 {
                     exhaustedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Split still failed edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} after {candidate.Attempt} retry attempt(s); leaving it unchanged.");
                     continue;
                 }
 
-                int nextAttempt = candidate.Attempt + 1;
-                float retryPocketLength = candidate.TargetPocketLength + SplitRetryStep;
-                string retryDetail = $"mode=fixed-step step={SplitRetryStep:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m";
-
                 if (!TryBuildSplitDefinitionPlan(
                         candidate.Node,
                         candidate.Edge,
                         out SplitDefinitionPlan splitPlan,
-                        retryPocketLength))
+                        retryRequest.RequestedPocketLength))
                 {
                     exhaustedCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Retry split cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Retry split cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryRequest.Detail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryRequest.RequestedPocketLength:0.##}m.");
                     continue;
                 }
 
-                if (splitPlan.SplitDistance < candidate.SplitDistance + MinimumRetryProgress)
+                if (!HasMinimumRetryProgress(candidate.SplitDistance, splitPlan.SplitDistance))
                 {
                     exhaustedCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Retry split cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m.");
+                    Mod.LogDiagnostic($"[IntersectionTool] Retry split cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryRequest.Detail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m.");
                     continue;
                 }
 
                 JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(splitPlan.Request, result);
 
-                m_PreviewCandidates.Add(UpdateSplitCandidate(candidate, splitPlan, nextAttempt));
+                m_PreviewCandidates.Add(UpdateSplitCandidate(candidate, splitPlan, retryRequest.NextAttempt));
 
                 retryCount++;
                 retryNode = candidate.Node;
                 lastRetryEdge = candidate.Edge;
                 result = createDefinitionJobHandle;
-                Mod.LogDiagnostic($"[IntersectionTool] Retrying failed split edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={nextAttempt} {retryDetail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m target={splitPlan.TargetDistance:0.##}m split={splitPlan.CurvePosition:0.###} distance={splitPlan.SplitDistance:0.##}m intersection={splitPlan.IntersectionDistance:0.##}m pocket={splitPlan.PocketDistance:0.##}m.");
+                Mod.LogDiagnostic($"[IntersectionTool] Retrying failed split edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={retryRequest.NextAttempt} {retryRequest.Detail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryRequest.RequestedPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m target={splitPlan.TargetDistance:0.##}m split={splitPlan.CurvePosition:0.###} distance={splitPlan.SplitDistance:0.##}m intersection={splitPlan.IntersectionDistance:0.##}m pocket={splitPlan.PocketDistance:0.##}m.");
             }
 
             m_AppliedCandidates.Clear();

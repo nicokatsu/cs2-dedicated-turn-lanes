@@ -15,6 +15,13 @@ namespace PocketTurnLanes.Tool.SplitGeometry
         public float3 HitPosition;
     }
 
+    internal struct SplitRetryRequest
+    {
+        public int NextAttempt;
+        public float RequestedPocketLength;
+        public string Detail;
+    }
+
     internal static class SplitGeometryMath
     {
         internal const float SplitGridSize = 8f;
@@ -134,6 +141,25 @@ namespace PocketTurnLanes.Tool.SplitGeometry
         internal static float GetEffectiveMinimumPocketLength()
         {
             return math.max(0f, MinimumPocketLaneLength - SplitLengthBuffer - MinimumPocketLaneLengthTolerance);
+        }
+
+        internal static bool TryCreateSplitRetryRequest(int currentAttempt, float currentTargetPocketLength, out SplitRetryRequest request)
+        {
+            request = default;
+            if (currentAttempt >= MaxSplitRetryAttempts)
+            {
+                return false;
+            }
+
+            request.NextAttempt = currentAttempt + 1;
+            request.RequestedPocketLength = currentTargetPocketLength + SplitRetryStep;
+            request.Detail = $"mode=fixed-step step={SplitRetryStep:0.##}m previousPocket={currentTargetPocketLength:0.##}m";
+            return true;
+        }
+
+        internal static bool HasMinimumRetryProgress(float previousSplitDistance, float nextSplitDistance)
+        {
+            return nextSplitDistance >= previousSplitDistance + MinimumRetryProgress;
         }
 
         internal static float GetCurvePositionAtDistance(Curve curve, bool fromStart, float distance)

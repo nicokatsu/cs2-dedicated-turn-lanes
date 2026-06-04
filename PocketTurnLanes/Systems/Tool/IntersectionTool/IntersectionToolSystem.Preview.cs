@@ -7,6 +7,7 @@ using Game.Prefabs;
 using Game.Tools;
 using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.PrefabMatching;
+using PocketTurnLanes.Tool.SplitGeometry;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -135,7 +136,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (candidate.Attempt >= MaxSplitRetryAttempts)
+                if (!TryCreateSplitRetryRequest(candidate.Attempt, candidate.TargetPocketLength, out SplitRetryRequest retryRequest))
                 {
                     exhaustedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Preview split still has no generated node edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={candidate.Attempt} distance={candidate.SplitDistance:0.##}m; no more retry room.");
@@ -147,19 +148,15 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                int nextAttempt = candidate.Attempt + 1;
-                float retryPocketLength = candidate.TargetPocketLength + SplitRetryStep;
-                string retryDetail = $"mode=fixed-step step={SplitRetryStep:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m";
-
                 if (!TryBuildSplitDefinitionPlan(
                         candidate.Node,
                         candidate.Edge,
                         out SplitDefinitionPlan splitPlan,
-                        retryPocketLength))
+                        retryRequest.RequestedPocketLength))
                 {
                     exhaustedCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m.");
-                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not be prepared; {retryDetail}"))
+                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryRequest.Detail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryRequest.RequestedPocketLength:0.##}m.");
+                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not be prepared; {retryRequest.Detail}"))
                     {
                         exhaustedFallbackCount++;
                     }
@@ -167,11 +164,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (splitPlan.SplitDistance < candidate.SplitDistance + MinimumRetryProgress)
+                if (!HasMinimumRetryProgress(candidate.SplitDistance, splitPlan.SplitDistance))
                 {
                     exhaustedCount++;
-                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryDetail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m.");
-                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not move far enough; {retryDetail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m"))
+                    Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryRequest.Detail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m.");
+                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not move far enough; {retryRequest.Detail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m"))
                     {
                         exhaustedFallbackCount++;
                     }
@@ -181,8 +178,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
                 retryCount++;
                 needsRetry = true;
-                m_NextPreviewCandidates.Add(UpdateSplitCandidate(candidate, splitPlan, nextAttempt));
-                Mod.LogDiagnostic($"[IntersectionTool] Preview split missing edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)}; retry attempt={nextAttempt} {retryDetail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m split={splitPlan.CurvePosition:0.###} target={splitPlan.TargetDistance:0.##}m distance={splitPlan.SplitDistance:0.##}m intersection={splitPlan.IntersectionDistance:0.##}m pocket={splitPlan.PocketDistance:0.##}m.");
+                m_NextPreviewCandidates.Add(UpdateSplitCandidate(candidate, splitPlan, retryRequest.NextAttempt));
+                Mod.LogDiagnostic($"[IntersectionTool] Preview split missing edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)}; retry attempt={retryRequest.NextAttempt} {retryRequest.Detail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryRequest.RequestedPocketLength:0.##}m previousPocket={candidate.TargetPocketLength:0.##}m split={splitPlan.CurvePosition:0.###} target={splitPlan.TargetDistance:0.##}m distance={splitPlan.SplitDistance:0.##}m intersection={splitPlan.IntersectionDistance:0.##}m pocket={splitPlan.PocketDistance:0.##}m.");
             }
 
             if (needsRetry)
