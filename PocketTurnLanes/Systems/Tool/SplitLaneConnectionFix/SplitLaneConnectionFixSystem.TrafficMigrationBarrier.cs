@@ -29,10 +29,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return ObserveTrafficMigrationSentinel(trafficApi, ref request, sentinelNode, frame);
             }
 
-            if (trafficApi.HasModifiedLaneConnectionsBuffer(EntityManager, sentinelNode))
+            if (trafficApi.TryGetModifiedLaneConnectionsLength(EntityManager, sentinelNode, out int existingLength))
             {
-                object existingBuffer = trafficApi.GetModifiedLaneConnectionsBuffer(EntityManager, sentinelNode, true);
-                int existingLength = trafficApi.GetBufferLength(existingBuffer);
                 if (existingLength > 0)
                 {
                     request.TrafficMigrationBarrierState = TrafficMigrationBarrierState.Passed;
@@ -48,15 +46,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            object sentinelBuffer = trafficApi.GetOrAddModifiedLaneConnectionsBuffer(EntityManager, sentinelNode);
-            trafficApi.ClearBuffer(sentinelBuffer);
-            trafficApi.EnsureModifiedConnectionsTag(EntityManager, sentinelNode);
+            int previousSentinelLength = trafficApi.EnsureEmptyModifiedLaneConnectionsSentinel(EntityManager, sentinelNode);
 
             request.TrafficMigrationBarrierState = TrafficMigrationBarrierState.SentinelQueued;
             request.TrafficMigrationSentinelNode = sentinelNode;
             request.TrafficMigrationSentinelFrame = frame;
             request.EarliestTrafficWriteFrame = Math.Max(request.EarliestTrafficWriteFrame, frame + 1);
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic migration barrier queued empty Traffic sentinel splitNode={FormatEntity(request.SplitNode)} centerNode={FormatEntity(request.IntersectionNode)} sentinelNode={FormatEntity(sentinelNode)} sentinelFrame={frame} earliestWriteFrame={request.EarliestTrafficWriteFrame} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}. Waiting for TrafficDataMigrationSystem to consume the empty buffer before real Traffic write.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic migration barrier queued empty Traffic sentinel splitNode={FormatEntity(request.SplitNode)} centerNode={FormatEntity(request.IntersectionNode)} sentinelNode={FormatEntity(sentinelNode)} sentinelFrame={frame} earliestWriteFrame={request.EarliestTrafficWriteFrame} previousSentinelLength={previousSentinelLength} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}. Waiting for TrafficDataMigrationSystem to consume the empty buffer before real Traffic write.");
             return false;
         }
 
@@ -76,15 +72,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return true;
             }
 
-            if (!trafficApi.HasModifiedLaneConnectionsBuffer(EntityManager, sentinelNode))
+            if (!trafficApi.TryGetModifiedLaneConnectionsLength(EntityManager, sentinelNode, out int length))
             {
                 request.TrafficMigrationBarrierState = TrafficMigrationBarrierState.Passed;
                 Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic migration barrier passed after Traffic removed empty sentinel splitNode={FormatEntity(request.SplitNode)} centerNode={FormatEntity(request.IntersectionNode)} sentinelNode={FormatEntity(sentinelNode)} frame={frame} sentinelFrame={request.TrafficMigrationSentinelFrame} waitedFrames={frame - request.TrafficMigrationSentinelFrame}.");
                 return true;
             }
 
-            object sentinelBuffer = trafficApi.GetModifiedLaneConnectionsBuffer(EntityManager, sentinelNode, true);
-            int length = trafficApi.GetBufferLength(sentinelBuffer);
             if (length > 0)
             {
                 request.TrafficMigrationBarrierState = TrafficMigrationBarrierState.Passed;
@@ -95,10 +89,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             int waitedFrames = frame - request.TrafficMigrationSentinelFrame;
             if (waitedFrames >= MaxTrafficMigrationSentinelWaitFrames)
             {
-                trafficApi.RemoveModifiedLaneConnectionsBuffer(EntityManager, sentinelNode);
-                trafficApi.RemoveModifiedConnectionsTag(EntityManager, sentinelNode);
+                bool removed = trafficApi.RemoveEmptyModifiedLaneConnectionsSentinel(EntityManager, sentinelNode);
                 request.TrafficMigrationBarrierState = TrafficMigrationBarrierState.Passed;
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic migration barrier passed after local empty-sentinel cleanup splitNode={FormatEntity(request.SplitNode)} centerNode={FormatEntity(request.IntersectionNode)} sentinelNode={FormatEntity(sentinelNode)} frame={frame} sentinelFrame={request.TrafficMigrationSentinelFrame} waitedFrames={waitedFrames} maxWaitFrames={MaxTrafficMigrationSentinelWaitFrames}. TrafficDataMigrationSystem did not consume the empty buffer, so it is assumed to be inactive for this session.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Traffic migration barrier passed after local empty-sentinel cleanup splitNode={FormatEntity(request.SplitNode)} centerNode={FormatEntity(request.IntersectionNode)} sentinelNode={FormatEntity(sentinelNode)} frame={frame} sentinelFrame={request.TrafficMigrationSentinelFrame} waitedFrames={waitedFrames} maxWaitFrames={MaxTrafficMigrationSentinelWaitFrames} removed={removed}. TrafficDataMigrationSystem did not consume the empty buffer, so it is assumed to be inactive for this session.");
                 return true;
             }
 

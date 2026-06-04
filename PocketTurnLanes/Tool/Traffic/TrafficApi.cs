@@ -137,7 +137,41 @@ namespace PocketTurnLanes.Tool.Traffic
             return (bool)m_HasModifiedLaneConnectionsBuffer.Invoke(entityManager, new object[] { node });
         }
 
-        public void RemoveModifiedLaneConnectionsBuffer(EntityManager entityManager, Entity node)
+        public bool TryGetModifiedLaneConnectionsLength(EntityManager entityManager, Entity node, out int length)
+        {
+            length = 0;
+            if (!HasModifiedLaneConnectionsBuffer(entityManager, node))
+            {
+                return false;
+            }
+
+            object buffer = GetModifiedLaneConnectionsBuffer(entityManager, node, true);
+            length = GetBufferLength(buffer);
+            return true;
+        }
+
+        public int EnsureEmptyModifiedLaneConnectionsSentinel(EntityManager entityManager, Entity node)
+        {
+            object buffer = GetOrAddModifiedLaneConnectionsBuffer(entityManager, node);
+            int previousLength = GetBufferLength(buffer);
+            ClearBuffer(buffer);
+            EnsureModifiedConnectionsTag(entityManager, node);
+            return previousLength;
+        }
+
+        public bool RemoveEmptyModifiedLaneConnectionsSentinel(EntityManager entityManager, Entity node)
+        {
+            if (TryGetModifiedLaneConnectionsLength(entityManager, node, out int length) && length > 0)
+            {
+                return false;
+            }
+
+            RemoveModifiedLaneConnectionsBuffer(entityManager, node);
+            RemoveModifiedConnectionsTag(entityManager, node);
+            return true;
+        }
+
+        private void RemoveModifiedLaneConnectionsBuffer(EntityManager entityManager, Entity node)
         {
             ComponentType componentType = ComponentType.ReadWrite(m_ModifiedLaneConnectionsType);
             if (entityManager.HasComponent(node, componentType))
@@ -327,7 +361,7 @@ namespace PocketTurnLanes.Tool.Traffic
             }
         }
 
-        public void RemoveModifiedConnectionsTag(EntityManager entityManager, Entity node)
+        private void RemoveModifiedConnectionsTag(EntityManager entityManager, Entity node)
         {
             ComponentType componentType = ComponentType.ReadWrite(m_ModifiedConnectionsType);
             if (entityManager.HasComponent(node, componentType))
