@@ -5,6 +5,7 @@ using Game.Common;
 using Game.Net;
 using Game.Pathfind;
 using Game.Prefabs;
+using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -106,10 +107,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 bool laneFlagsTrack = (laneData.m_Flags & LaneFlags.Track) != 0;
                 bool hasTrackPathMethod = (subLane.m_PathMethods & PathMethod.Track) != 0;
                 bool hasTrackEvidence = hasTrackPathMethod || hasTrackLaneData || hasNetTrackLane;
-                bool isCarRoadLane = (subLane.m_PathMethods & PathMethod.Road) != 0 &&
-                                     (laneData.m_Flags & LaneFlags.Road) != 0 &&
+                bool isCarRoadLane = (laneData.m_Flags & LaneFlags.Road) != 0 &&
                                      hasCarLaneData &&
-                                     (carLaneData.m_RoadTypes & RoadTypes.Car) != 0;
+                                     NetTopologyHelpers.HasMotorRoadLaneSemantics(subLane.m_PathMethods, carLaneData.m_RoadTypes);
                 bool isTrackLane = includeTrackOnly &&
                                    laneFlagsTrack &&
                                    hasTrackEvidence;

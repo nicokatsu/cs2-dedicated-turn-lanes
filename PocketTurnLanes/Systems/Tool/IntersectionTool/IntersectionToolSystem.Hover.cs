@@ -460,7 +460,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if ((carLaneData.m_RoadTypes & RoadTypes.Car) != 0)
+                if (NetTopologyHelpers.HasMotorRoadLaneSemantics(pathMethods, carLaneData.m_RoadTypes))
                 {
                     motorRoadLaneCount++;
                 }
@@ -711,7 +711,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            bool isMotorRoadLane = (carLaneData.m_RoadTypes & RoadTypes.Car) != 0;
+            bool isMotorRoadLane = NetTopologyHelpers.HasMotorRoadLaneSemantics(pathMethods, carLaneData.m_RoadTypes);
             detail = $"lanePrefab={FormatEntity(prefabRef.m_Prefab)} roadTypes={carLaneData.m_RoadTypes} pathMethods={pathMethods} isMotorRoadLane={isMotorRoadLane}";
             return isMotorRoadLane;
         }

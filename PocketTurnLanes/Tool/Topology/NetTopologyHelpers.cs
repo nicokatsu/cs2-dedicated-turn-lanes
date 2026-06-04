@@ -1,6 +1,7 @@
 using Colossal.Entities;
 using Colossal.Mathematics;
 using Game.Net;
+using Game.Pathfind;
 using Game.Prefabs;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -62,6 +63,12 @@ namespace PocketTurnLanes.Tool
             }
 
             return Entity.Null;
+        }
+
+        public static bool HasMotorRoadLaneSemantics(PathMethod pathMethods, RoadTypes roadTypes)
+        {
+            return (pathMethods & PathMethod.Road) != 0 &&
+                   (roadTypes & RoadTypes.Car) != 0;
         }
 
         public static bool TryGetEdgeDirectionFromNode(
