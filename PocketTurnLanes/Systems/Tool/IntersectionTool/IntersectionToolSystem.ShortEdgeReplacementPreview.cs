@@ -186,11 +186,12 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
                     tempEdgeCount++;
                     bool originalMatch = temp.m_Original == candidate.ShortEdge;
-                    bool endpointMatch =
-                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, shortEdge.m_Start) &&
-                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, shortEdge.m_End)) ||
-                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, shortEdge.m_End) &&
-                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, shortEdge.m_Start));
+                    bool endpointMatch = TempEntityHelpers.HasSameOrTempOriginalUndirectedEndpoints(
+                        EntityManager,
+                        edge.m_Start,
+                        edge.m_End,
+                        shortEdge.m_Start,
+                        shortEdge.m_End);
                     if (!originalMatch && !endpointMatch)
                     {
                         continue;
@@ -403,11 +404,12 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
                     tempEdgeCount++;
                     bool originalMatch = temp.m_Original == sourceEdge;
-                    bool endpointMatch =
-                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, sourceEdgeData.m_Start) &&
-                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, sourceEdgeData.m_End)) ||
-                        (TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_Start, sourceEdgeData.m_End) &&
-                         TempEntityHelpers.IsSameOrTempOriginal(EntityManager, edge.m_End, sourceEdgeData.m_Start));
+                    bool endpointMatch = TempEntityHelpers.HasSameOrTempOriginalUndirectedEndpoints(
+                        EntityManager,
+                        edge.m_Start,
+                        edge.m_End,
+                        sourceEdgeData.m_Start,
+                        sourceEdgeData.m_End);
                     if (!originalMatch && !endpointMatch)
                     {
                         continue;

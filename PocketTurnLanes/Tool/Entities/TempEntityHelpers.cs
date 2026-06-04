@@ -27,6 +27,20 @@ namespace PocketTurnLanes.Tool
                    IsUsableTemp(temp);
         }
 
+        internal static bool HasSameOrTempOriginalUndirectedEndpoints(
+            EntityManager entityManager,
+            Entity firstStart,
+            Entity firstEnd,
+            Entity secondStart,
+            Entity secondEnd)
+        {
+            return
+                (IsSameOrTempOriginal(entityManager, firstStart, secondStart) &&
+                 IsSameOrTempOriginal(entityManager, firstEnd, secondEnd)) ||
+                (IsSameOrTempOriginal(entityManager, firstStart, secondEnd) &&
+                 IsSameOrTempOriginal(entityManager, firstEnd, secondStart));
+        }
+
         internal static Entity ResolveTempOriginal(
             EntityManager entityManager,
             Entity entity,
