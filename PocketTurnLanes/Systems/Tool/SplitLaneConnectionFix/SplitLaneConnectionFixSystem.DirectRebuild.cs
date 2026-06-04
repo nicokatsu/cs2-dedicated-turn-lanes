@@ -183,11 +183,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
-            for (int i = 0; i < mappings.Length; i++)
-            {
-                expected.Add(new ConnectionKey(mappings[i].SourceLaneIndex, mappings[i].TargetLaneIndex));
-            }
+            HashSet<ConnectionKey> expected = TrafficConnectionKeySets.FromMappings(mappings);
 
             CollectConnectorLanes(request.SplitNode, sourceEdge, targetEdge, subLanes, m_ConnectorLanes);
             if (m_ConnectorLanes.Count == 0)
@@ -196,12 +192,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            HashSet<ConnectionKey> existingKeys = new HashSet<ConnectionKey>();
-            for (int i = 0; i < m_ConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_ConnectorLanes[i];
-                existingKeys.Add(new ConnectionKey(connector.SourceLaneIndex, connector.TargetLaneIndex));
-            }
+            HashSet<ConnectionKey> existingKeys = TrafficConnectionKeySets.FromConnectors(m_ConnectorLanes);
 
             for (int i = 0; i < mappings.Length; i++)
             {
@@ -280,11 +271,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
-            for (int i = 0; i < mappings.Length; i++)
-            {
-                expected.Add(new ConnectionKey(mappings[i].SourceLaneIndex, mappings[i].TargetLaneIndex));
-            }
+            HashSet<ConnectionKey> expected = TrafficConnectionKeySets.FromMappings(mappings);
 
             CollectConnectorLanes(request.SplitNode, sourceEdge, targetEdge, subLanes, m_ConnectorLanes);
             if (m_ConnectorLanes.Count == 0)
@@ -293,12 +280,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            HashSet<ConnectionKey> existingKeys = new HashSet<ConnectionKey>();
-            for (int i = 0; i < m_ConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_ConnectorLanes[i];
-                existingKeys.Add(new ConnectionKey(connector.SourceLaneIndex, connector.TargetLaneIndex));
-            }
+            HashSet<ConnectionKey> existingKeys = TrafficConnectionKeySets.FromConnectors(m_ConnectorLanes);
 
             int missingCloneCount = 0;
             for (int i = 0; i < mappings.Length; i++)

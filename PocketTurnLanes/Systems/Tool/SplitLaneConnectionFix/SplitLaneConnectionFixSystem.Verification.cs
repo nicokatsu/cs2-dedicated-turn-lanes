@@ -50,19 +50,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             string direction,
             out string detail)
         {
-            HashSet<ConnectionKey> expected = new HashSet<ConnectionKey>();
-            for (int i = 0; i < mappings.Length; i++)
-            {
-                expected.Add(new ConnectionKey(mappings[i].SourceLaneIndex, mappings[i].TargetLaneIndex));
-            }
+            HashSet<ConnectionKey> expected = TrafficConnectionKeySets.FromMappings(mappings);
 
-            HashSet<ConnectionKey> actual = new HashSet<ConnectionKey>();
             CollectConnectorLanes(request.SplitNode, sourceEdge, targetEdge, m_ExistingConnectorLanes);
-            for (int i = 0; i < m_ExistingConnectorLanes.Count; i++)
-            {
-                ConnectorLane connector = m_ExistingConnectorLanes[i];
-                actual.Add(new ConnectionKey(connector.SourceLaneIndex, connector.TargetLaneIndex));
-            }
+            HashSet<ConnectionKey> actual = TrafficConnectionKeySets.FromConnectors(m_ExistingConnectorLanes);
 
             bool matches = expected.SetEquals(actual);
             detail = $"{direction} source={FormatEntity(sourceEdge)} target={FormatEntity(targetEdge)} expected={FormatConnectionSet(expected)} actual={FormatConnectionSet(actual)} connectors={m_ExistingConnectorLanes.Count}";
