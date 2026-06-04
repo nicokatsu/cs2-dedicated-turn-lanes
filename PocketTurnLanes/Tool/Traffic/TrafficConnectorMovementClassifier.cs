@@ -86,6 +86,24 @@ namespace PocketTurnLanes.Tool.Traffic
                 : TrafficConnectorMovement.Ambiguous;
         }
 
+        public static CenterMovement ClassifyCenterMovement(
+            EntityManager entityManager,
+            Entity centerNode,
+            Entity sourceEdge,
+            Entity targetEdge,
+            CarLaneFlags flags,
+            TurnDirection bigTurn,
+            TurnDirection smallTurn)
+        {
+            TrafficConnectorMovement movement = ClassifyCenter(
+                entityManager,
+                centerNode,
+                sourceEdge,
+                targetEdge,
+                flags);
+            return ToCenterMovement(movement, bigTurn, smallTurn);
+        }
+
         public static TurnDirection ClassifyCenterConnectorTurn(
             EntityManager entityManager,
             Entity intersectionNode,
@@ -111,6 +129,44 @@ namespace PocketTurnLanes.Tool.Traffic
                     out TurnDirection turn)
                 ? turn
                 : TurnDirection.Ambiguous;
+        }
+
+        private static CenterMovement ToCenterMovement(
+            TrafficConnectorMovement movement,
+            TurnDirection bigTurn,
+            TurnDirection smallTurn)
+        {
+            switch (movement)
+            {
+                case TrafficConnectorMovement.Straight:
+                    return CenterMovement.Straight;
+                case TrafficConnectorMovement.Uturn:
+                    return CenterMovement.Uturn;
+                case TrafficConnectorMovement.Left:
+                    return TurnToCenterMovement(TurnDirection.Left, bigTurn, smallTurn);
+                case TrafficConnectorMovement.Right:
+                    return TurnToCenterMovement(TurnDirection.Right, bigTurn, smallTurn);
+                default:
+                    return CenterMovement.Ambiguous;
+            }
+        }
+
+        private static CenterMovement TurnToCenterMovement(
+            TurnDirection turn,
+            TurnDirection bigTurn,
+            TurnDirection smallTurn)
+        {
+            if (turn == bigTurn)
+            {
+                return CenterMovement.BigTurn;
+            }
+
+            if (turn == smallTurn)
+            {
+                return CenterMovement.SmallTurn;
+            }
+
+            return CenterMovement.Ambiguous;
         }
 
         private static bool TryClassifyByGeometry(

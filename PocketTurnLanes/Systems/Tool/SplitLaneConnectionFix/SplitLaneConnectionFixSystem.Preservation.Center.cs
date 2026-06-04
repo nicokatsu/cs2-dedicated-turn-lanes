@@ -34,7 +34,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                CenterMovement movement = ClassifyCenterMovement(
+                CenterMovement movement = TrafficConnectorMovementClassifier.ClassifyCenterMovement(
+                    EntityManager,
                     centerNode,
                     connector.SourceEdge,
                     connector.TargetEdge,

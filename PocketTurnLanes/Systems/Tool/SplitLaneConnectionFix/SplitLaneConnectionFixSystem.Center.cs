@@ -159,7 +159,8 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             for (int i = 0; i < approachConnectors.Count; i++)
             {
                 ConnectorLane connector = approachConnectors[i];
-                CenterMovement movement = ClassifyCenterMovement(
+                CenterMovement movement = TrafficConnectorMovementClassifier.ClassifyCenterMovement(
+                    EntityManager,
                     centerNode,
                     connector.SourceEdge,
                     connector.TargetEdge,
@@ -418,61 +419,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 ? $" middleLane={middleLane.SourceEndpoint.LaneIndex} clearedMiddleSmallTurn={smallTurnsClearedFromStraightLane}"
                 : string.Empty;
             plan.Diagnostics.Add($"centerRewritePlanned sourceEdge={FormatEntity(sourceEdge)} mode={rewriteMode} smallLane={smallLane.SourceEndpoint.LaneIndex}{middleEvidence} bigLane={bigLane.SourceEndpoint.LaneIndex} {extraEvidence} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} shift=({shiftDetail}) sourceClass=({sourceClass}) connections={connectionCount} straightSafe={straightMappingsWritten} straightUnsafeCleared={straightUnsafeCleared} roadBicycle={roadBicycleConnections} runtimePreserved={preservationStats.Connections} preservedUturn={preservationStats.UturnConnections} preservedNonRoad={preservationStats.NonRoadConnections} preservedUnsafe={preservationStats.UnsafeConnections} preservationSkipped={preservationStats.Skipped}");
-        }
-
-        private CenterMovement ClassifyCenterMovement(
-            Entity centerNode,
-            Entity sourceEdge,
-            Entity targetEdge,
-            CarLaneFlags flags,
-            TurnDirection bigTurn,
-            TurnDirection smallTurn)
-        {
-            TrafficConnectorMovement movement = TrafficConnectorMovementClassifier.ClassifyCenter(
-                EntityManager,
-                centerNode,
-                sourceEdge,
-                targetEdge,
-                flags);
-            return ToCenterMovement(movement, bigTurn, smallTurn);
-        }
-
-        private static CenterMovement ToCenterMovement(
-            TrafficConnectorMovement movement,
-            TurnDirection bigTurn,
-            TurnDirection smallTurn)
-        {
-            switch (movement)
-            {
-                case TrafficConnectorMovement.Straight:
-                    return CenterMovement.Straight;
-                case TrafficConnectorMovement.Uturn:
-                    return CenterMovement.Uturn;
-                case TrafficConnectorMovement.Left:
-                    return TurnToCenterMovement(TurnDirection.Left, bigTurn, smallTurn);
-                case TrafficConnectorMovement.Right:
-                    return TurnToCenterMovement(TurnDirection.Right, bigTurn, smallTurn);
-                default:
-                    return CenterMovement.Ambiguous;
-            }
-        }
-
-        private static CenterMovement TurnToCenterMovement(
-            TurnDirection turn,
-            TurnDirection bigTurn,
-            TurnDirection smallTurn)
-        {
-            if (turn == bigTurn)
-            {
-                return CenterMovement.BigTurn;
-            }
-
-            if (turn == smallTurn)
-            {
-                return CenterMovement.SmallTurn;
-            }
-
-            return CenterMovement.Ambiguous;
         }
 
         private bool TryGetPocketExtraCenterLaneIndex(Request request, out int centerLaneIndex)
