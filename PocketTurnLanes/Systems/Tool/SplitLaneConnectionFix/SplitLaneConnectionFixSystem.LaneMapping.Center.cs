@@ -13,6 +13,16 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
+        private struct CenterTurnEvidenceStats
+        {
+            public int SourceEntries;
+            public int Connections;
+            public int MappedSelectedTargets;
+            public int ClassifiedConnections;
+            public int SkippedConnections;
+            public int SkippedSelfReferences;
+        }
+
         private bool TryRefineExtraTargetFromCenterConnectors(
             Entity intersectionNode,
             Entity centerSourceEdge,
@@ -166,12 +176,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             int[] leftCounts = new int[selectedTargets.Count];
             int[] rightCounts = new int[selectedTargets.Count];
             int[] straightCounts = new int[selectedTargets.Count];
-            int sourceEntries = 0;
-            int generatedConnections = 0;
-            int mappedSelectedTargets = 0;
-            int classifiedConnections = 0;
-            int skippedConnections = 0;
-            int skippedSelfReferences = 0;
+            CenterTurnEvidenceStats stats = default;
             List<string> evidenceSamples = new List<string>(8);
             List<string> skipSamples = new List<string>(8);
 
@@ -183,23 +188,24 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                sourceEntries++;
+                stats.SourceEntries++;
                 TrafficGeneratedSnapshot[] connections = source.Connections;
                 for (int connectionIndex = 0; connectionIndex < connections.Length; connectionIndex++)
                 {
                     TrafficGeneratedSnapshot connection = connections[connectionIndex];
-                    generatedConnections++;
-                    if (connection.SourceEdge != centerSourceEdge)
-                    {
-                        skippedConnections++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"generatedSourceMismatch {FormatEntity(connection.SourceEdge)}:{connection.SourceLaneIndex}");
-                        continue;
-                    }
+                    stats.Connections++;
 
-                    if ((connection.Method & PathMethod.Road) == 0)
+                    if (!TryValidateCenterTurnEvidenceSource(
+                            centerSourceEdge,
+                            connection.SourceEdge,
+                            connection.SourceLaneIndex,
+                            connection.TargetEdge,
+                            connection.TargetLaneIndex,
+                            connection.Method,
+                            ref stats,
+                            skipSamples,
+                            "generatedSourceMismatch"))
                     {
-                        skippedConnections++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"nonRoad {FormatEntity(connection.SourceEdge)}:{connection.SourceLaneIndex}->{FormatEntity(connection.TargetEdge)}:{connection.TargetLaneIndex} method={connection.Method}");
                         continue;
                     }
 
@@ -207,71 +213,48 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     if (!TrafficCenterTurnTargetSelector.TryFindTargetByCenterLaneIndex(selectedTargets, sourceLaneIndex, out int targetListIndex) &&
                         !TrafficCenterTurnTargetSelector.TryFindTargetByCenterLaneIndex(selectedTargets, source.SourceLaneIndex, out targetListIndex))
                     {
-                        skippedConnections++;
+                        stats.SkippedConnections++;
                         AddCenterTrafficSelectionSample(skipSamples, $"sourceTargetMap source={FormatEntity(connection.SourceEdge)}:{sourceLaneIndex} sourceKey={source.SourceLaneIndex} selectedTargets={FormatLaneOrder(selectedTargets)}");
                         continue;
                     }
 
-                    if (connection.TargetEdge == centerSourceEdge ||
-                        connection.TargetEdge == connection.SourceEdge)
-                    {
-                        skippedConnections++;
-                        skippedSelfReferences++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"selfReference source={FormatEntity(connection.SourceEdge)}:{sourceLaneIndex} target={FormatEntity(connection.TargetEdge)}:{connection.TargetLaneIndex}");
-                        continue;
-                    }
-
-                    if (connection.TargetEdge == Entity.Null ||
-                        !EntityManager.Exists(connection.TargetEdge) ||
-                        EntityManager.HasComponent<Deleted>(connection.TargetEdge) ||
-                        !IsEdgeConnectedToNode(connection.TargetEdge, intersectionNode))
-                    {
-                        skippedConnections++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"targetUnavailable source={FormatEntity(connection.SourceEdge)}:{sourceLaneIndex} target={FormatEntity(connection.TargetEdge)}:{connection.TargetLaneIndex}");
-                        continue;
-                    }
-
-                    mappedSelectedTargets++;
-                    TurnDirection connectorTurn = TrafficConnectorMovementClassifier.ClassifyCenterConnectorTurn(
-                        EntityManager,
+                    CollectCenterTurnEvidenceTarget(
                         intersectionNode,
                         centerSourceEdge,
-                        connection.TargetEdge,
-                        default);
-                    TrafficCenterTurnTargetSelector.AddTurnCount(
-                        connectorTurn,
+                        selectedTargets,
                         targetListIndex,
+                        sourceLaneIndex,
+                        sourceLaneIndex,
+                        connection.TargetEdge,
+                        connection.TargetLaneIndex,
+                        connection.SourceEdge,
+                        connection.IsUnsafe,
                         leftCounts,
                         rightCounts,
-                        straightCounts);
-                    classifiedConnections++;
-                    AddCenterTrafficSelectionSample(
+                        straightCounts,
+                        ref stats,
                         evidenceSamples,
-                        $"{sourceLaneIndex}->target{selectedTargets[targetListIndex].LaneIndex}/{connectorTurn}/{FormatEntity(connection.TargetEdge)}/{connection.Method}{(connection.IsUnsafe ? "!unsafe" : string.Empty)}");
+                        skipSamples,
+                        connection.Method);
                 }
             }
 
-            string countDiagnostics = FormatCenterTurnDiagnostics(
+            return TrySelectExtraTargetFromCenterTurnEvidence(
+                "centerTrafficSelection",
+                intersectionNode,
+                centerSourceEdge,
                 selectedTargets,
                 leftCounts,
                 rightCounts,
                 straightCounts,
-                null);
-            if (!TrafficCenterTurnTargetSelector.TrySelectExtraTarget(
-                    selectedTargets,
-                    leftCounts,
-                    rightCounts,
-                    straightCounts,
-                    out extraTargetIndex,
-                    out turn,
-                    out string selectionDiagnostic))
-            {
-                diagnostics = $"centerTrafficSelection=failed intersection={FormatEntity(intersectionNode)} sourceEdge={FormatEntity(centerSourceEdge)} readStats=({TrafficSnapshotHelpers.FormatReadStats(readStats)}) readDetail=({readDetail}) sourceEntries={sourceEntries} generatedConnections={generatedConnections} mappedSelectedTargets={mappedSelectedTargets} classifiedConnections={classifiedConnections} skippedConnections={skippedConnections} skippedSelfReferences={skippedSelfReferences} counts=({countDiagnostics}) {selectionDiagnostic} evidenceSamples={FormatStringList(evidenceSamples)} skipSamples={FormatStringList(skipSamples)}";
-                return false;
-            }
-
-            diagnostics = $"centerTrafficSelection=selected intersection={FormatEntity(intersectionNode)} sourceEdge={FormatEntity(centerSourceEdge)} readStats=({TrafficSnapshotHelpers.FormatReadStats(readStats)}) readDetail=({readDetail}) sourceEntries={sourceEntries} generatedConnections={generatedConnections} mappedSelectedTargets={mappedSelectedTargets} classifiedConnections={classifiedConnections} skippedConnections={skippedConnections} skippedSelfReferences={skippedSelfReferences} selectedExtra={selectedTargets[extraTargetIndex].LaneIndex}/{turn} counts=({countDiagnostics}) {selectionDiagnostic} evidenceSamples={FormatStringList(evidenceSamples)} skipSamples={FormatStringList(skipSamples)}";
-            return true;
+                stats,
+                "generatedConnections",
+                $"readStats=({TrafficSnapshotHelpers.FormatReadStats(readStats)}) readDetail=({readDetail})",
+                evidenceSamples,
+                skipSamples,
+                out extraTargetIndex,
+                out turn,
+                out diagnostics);
         }
 
         private bool TryRefineExtraTargetFromCenterPlan(
@@ -316,12 +299,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             int[] leftCounts = new int[selectedTargets.Count];
             int[] rightCounts = new int[selectedTargets.Count];
             int[] straightCounts = new int[selectedTargets.Count];
-            int sourceEntries = 0;
-            int planConnections = 0;
-            int mappedSelectedTargets = 0;
-            int classifiedConnections = 0;
-            int skippedConnections = 0;
-            int skippedSelfReferences = 0;
+            CenterTurnEvidenceStats stats = default;
             List<string> evidenceSamples = new List<string>(8);
             List<string> skipSamples = new List<string>(8);
 
@@ -333,85 +311,191 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     continue;
                 }
 
-                sourceEntries++;
+                stats.SourceEntries++;
                 if (!TrafficCenterTurnTargetSelector.TryFindTargetByCenterLaneIndex(
                         selectedTargets,
                         sourceKey.LaneIndex,
                         out int targetListIndex))
                 {
-                    skippedConnections += sourcePair.Value.Count;
+                    stats.SkippedConnections += sourcePair.Value.Count;
                     AddCenterTrafficSelectionSample(skipSamples, $"sourceTargetMap source={FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex} selectedTargets={FormatLaneOrder(selectedTargets)}");
                     continue;
                 }
 
                 foreach (LaneMapping mapping in sourcePair.Value.Values)
                 {
-                    planConnections++;
-                    if (mapping.SourceEdge != centerSourceEdge)
+                    stats.Connections++;
+                    if (!TryValidateCenterTurnEvidenceSource(
+                            centerSourceEdge,
+                            mapping.SourceEdge,
+                            mapping.SourceLaneIndex,
+                            mapping.TargetEdge,
+                            mapping.TargetLaneIndex,
+                            mapping.Method,
+                            ref stats,
+                            skipSamples,
+                            "mappingSourceMismatch"))
                     {
-                        skippedConnections++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"mappingSourceMismatch {FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}");
                         continue;
                     }
 
-                    if ((mapping.Method & PathMethod.Road) == 0)
-                    {
-                        skippedConnections++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"nonRoad {FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}->{FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex} method={mapping.Method}");
-                        continue;
-                    }
-
-                    if (mapping.TargetEdge == centerSourceEdge ||
-                        mapping.TargetEdge == mapping.SourceEdge)
-                    {
-                        skippedConnections++;
-                        skippedSelfReferences++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"selfReference source={FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex} target={FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}");
-                        continue;
-                    }
-
-                    if (mapping.TargetEdge == Entity.Null ||
-                        !EntityManager.Exists(mapping.TargetEdge) ||
-                        EntityManager.HasComponent<Deleted>(mapping.TargetEdge) ||
-                        !IsEdgeConnectedToNode(mapping.TargetEdge, intersectionNode))
-                    {
-                        skippedConnections++;
-                        AddCenterTrafficSelectionSample(skipSamples, $"targetUnavailable source={FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex} target={FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}");
-                        continue;
-                    }
-
-                    mappedSelectedTargets++;
-                    TurnDirection connectorTurn = TrafficConnectorMovementClassifier.ClassifyCenterConnectorTurn(
-                        EntityManager,
+                    CollectCenterTurnEvidenceTarget(
                         intersectionNode,
                         centerSourceEdge,
-                        mapping.TargetEdge,
-                        default);
-                    TrafficCenterTurnTargetSelector.AddTurnCount(
-                        connectorTurn,
+                        selectedTargets,
                         targetListIndex,
+                        mapping.SourceLaneIndex,
+                        sourceKey.LaneIndex,
+                        mapping.TargetEdge,
+                        mapping.TargetLaneIndex,
+                        mapping.SourceEdge,
+                        mapping.IsUnsafe,
                         leftCounts,
                         rightCounts,
-                        straightCounts);
-                    classifiedConnections++;
-                    AddCenterTrafficSelectionSample(
+                        straightCounts,
+                        ref stats,
                         evidenceSamples,
-                        $"{sourceKey.LaneIndex}->target{selectedTargets[targetListIndex].LaneIndex}/{connectorTurn}/{FormatEntity(mapping.TargetEdge)}/{mapping.Method}{(mapping.IsUnsafe ? "!unsafe" : string.Empty)}");
+                        skipSamples,
+                        mapping.Method);
                 }
             }
 
-            if (sourceEntries == 0)
+            if (stats.SourceEntries == 0)
             {
                 diagnostics = $"centerPlanSelection=skipped reason=no-matching-source intersection={FormatEntity(intersectionNode)} sourceEdge={FormatEntity(centerSourceEdge)} planSources={centerPlan.BySource.Count} planConnections={TrafficCenterMappingBuilder.CountTrafficPlanConnections(centerPlan.BySource)} planDiagnostics={FormatStringList(centerPlan.Diagnostics)}";
                 return false;
             }
 
+            return TrySelectExtraTargetFromCenterTurnEvidence(
+                "centerPlanSelection",
+                intersectionNode,
+                centerSourceEdge,
+                selectedTargets,
+                leftCounts,
+                rightCounts,
+                straightCounts,
+                stats,
+                "planConnections",
+                $"planSources={centerPlan.BySource.Count}",
+                evidenceSamples,
+                skipSamples,
+                out extraTargetIndex,
+                out turn,
+                out diagnostics,
+                $"planDiagnostics={FormatStringList(centerPlan.Diagnostics)}");
+        }
+
+        private bool TryValidateCenterTurnEvidenceSource(
+            Entity centerSourceEdge,
+            Entity sourceEdge,
+            int sourceLaneIndex,
+            Entity targetEdge,
+            int targetLaneIndex,
+            PathMethod method,
+            ref CenterTurnEvidenceStats stats,
+            List<string> skipSamples,
+            string sourceMismatchReason)
+        {
+            if (sourceEdge != centerSourceEdge)
+            {
+                stats.SkippedConnections++;
+                AddCenterTrafficSelectionSample(skipSamples, $"{sourceMismatchReason} {FormatEntity(sourceEdge)}:{sourceLaneIndex}");
+                return false;
+            }
+
+            if ((method & PathMethod.Road) == 0)
+            {
+                stats.SkippedConnections++;
+                AddCenterTrafficSelectionSample(skipSamples, $"nonRoad {FormatEntity(sourceEdge)}:{sourceLaneIndex}->{FormatEntity(targetEdge)}:{targetLaneIndex} method={method}");
+                return false;
+            }
+
+            return true;
+        }
+
+        private void CollectCenterTurnEvidenceTarget(
+            Entity intersectionNode,
+            Entity centerSourceEdge,
+            IReadOnlyList<LaneEndpoint> selectedTargets,
+            int targetListIndex,
+            int sourceLaneIndex,
+            int evidenceSourceLaneIndex,
+            Entity targetEdge,
+            int targetLaneIndex,
+            Entity sourceEdge,
+            bool isUnsafe,
+            int[] leftCounts,
+            int[] rightCounts,
+            int[] straightCounts,
+            ref CenterTurnEvidenceStats stats,
+            List<string> evidenceSamples,
+            List<string> skipSamples,
+            PathMethod method)
+        {
+            if (targetEdge == centerSourceEdge ||
+                targetEdge == sourceEdge)
+            {
+                stats.SkippedConnections++;
+                stats.SkippedSelfReferences++;
+                AddCenterTrafficSelectionSample(skipSamples, $"selfReference source={FormatEntity(sourceEdge)}:{sourceLaneIndex} target={FormatEntity(targetEdge)}:{targetLaneIndex}");
+                return;
+            }
+
+            if (targetEdge == Entity.Null ||
+                !EntityManager.Exists(targetEdge) ||
+                EntityManager.HasComponent<Deleted>(targetEdge) ||
+                !IsEdgeConnectedToNode(targetEdge, intersectionNode))
+            {
+                stats.SkippedConnections++;
+                AddCenterTrafficSelectionSample(skipSamples, $"targetUnavailable source={FormatEntity(sourceEdge)}:{sourceLaneIndex} target={FormatEntity(targetEdge)}:{targetLaneIndex}");
+                return;
+            }
+
+            stats.MappedSelectedTargets++;
+            TurnDirection connectorTurn = TrafficConnectorMovementClassifier.ClassifyCenterConnectorTurn(
+                EntityManager,
+                intersectionNode,
+                centerSourceEdge,
+                targetEdge,
+                default);
+            TrafficCenterTurnTargetSelector.AddTurnCount(
+                connectorTurn,
+                targetListIndex,
+                leftCounts,
+                rightCounts,
+                straightCounts);
+            stats.ClassifiedConnections++;
+            AddCenterTrafficSelectionSample(
+                evidenceSamples,
+                $"{evidenceSourceLaneIndex}->target{selectedTargets[targetListIndex].LaneIndex}/{connectorTurn}/{FormatEntity(targetEdge)}/{method}{(isUnsafe ? "!unsafe" : string.Empty)}");
+        }
+
+        private bool TrySelectExtraTargetFromCenterTurnEvidence(
+            string selectionPrefix,
+            Entity intersectionNode,
+            Entity centerSourceEdge,
+            IReadOnlyList<LaneEndpoint> selectedTargets,
+            IReadOnlyList<int> leftCounts,
+            IReadOnlyList<int> rightCounts,
+            IReadOnlyList<int> straightCounts,
+            CenterTurnEvidenceStats stats,
+            string connectionCountField,
+            string contextFields,
+            List<string> evidenceSamples,
+            List<string> skipSamples,
+            out int extraTargetIndex,
+            out TurnDirection turn,
+            out string diagnostics,
+            string trailingFields = null)
+        {
             string countDiagnostics = FormatCenterTurnDiagnostics(
                 selectedTargets,
                 leftCounts,
                 rightCounts,
                 straightCounts,
                 null);
+            string commonFields = $"intersection={FormatEntity(intersectionNode)} sourceEdge={FormatEntity(centerSourceEdge)} {contextFields} sourceEntries={stats.SourceEntries} {connectionCountField}={stats.Connections} mappedSelectedTargets={stats.MappedSelectedTargets} classifiedConnections={stats.ClassifiedConnections} skippedConnections={stats.SkippedConnections} skippedSelfReferences={stats.SkippedSelfReferences}";
+            string sampleFields = $"evidenceSamples={FormatStringList(evidenceSamples)} skipSamples={FormatStringList(skipSamples)}{(string.IsNullOrEmpty(trailingFields) ? string.Empty : $" {trailingFields}")}";
             if (!TrafficCenterTurnTargetSelector.TrySelectExtraTarget(
                     selectedTargets,
                     leftCounts,
@@ -421,11 +505,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     out turn,
                     out string selectionDiagnostic))
             {
-                diagnostics = $"centerPlanSelection=failed intersection={FormatEntity(intersectionNode)} sourceEdge={FormatEntity(centerSourceEdge)} planSources={centerPlan.BySource.Count} sourceEntries={sourceEntries} planConnections={planConnections} mappedSelectedTargets={mappedSelectedTargets} classifiedConnections={classifiedConnections} skippedConnections={skippedConnections} skippedSelfReferences={skippedSelfReferences} counts=({countDiagnostics}) {selectionDiagnostic} evidenceSamples={FormatStringList(evidenceSamples)} skipSamples={FormatStringList(skipSamples)} planDiagnostics={FormatStringList(centerPlan.Diagnostics)}";
+                diagnostics = $"{selectionPrefix}=failed {commonFields} counts=({countDiagnostics}) {selectionDiagnostic} {sampleFields}";
                 return false;
             }
 
-            diagnostics = $"centerPlanSelection=selected intersection={FormatEntity(intersectionNode)} sourceEdge={FormatEntity(centerSourceEdge)} planSources={centerPlan.BySource.Count} sourceEntries={sourceEntries} planConnections={planConnections} mappedSelectedTargets={mappedSelectedTargets} classifiedConnections={classifiedConnections} skippedConnections={skippedConnections} skippedSelfReferences={skippedSelfReferences} selectedExtra={selectedTargets[extraTargetIndex].LaneIndex}/{turn} counts=({countDiagnostics}) {selectionDiagnostic} evidenceSamples={FormatStringList(evidenceSamples)} skipSamples={FormatStringList(skipSamples)} planDiagnostics={FormatStringList(centerPlan.Diagnostics)}";
+            diagnostics = $"{selectionPrefix}=selected {commonFields} selectedExtra={selectedTargets[extraTargetIndex].LaneIndex}/{turn} counts=({countDiagnostics}) {selectionDiagnostic} {sampleFields}";
             return true;
         }
 
