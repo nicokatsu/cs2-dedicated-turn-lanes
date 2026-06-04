@@ -57,17 +57,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 plan.PreservationRuntimeConnections++;
                 plan.PreservationOverlayRuntimeConnections++;
                 runtimeSources.Add(sourceKey);
-                if ((method & ~PathMethod.Road) != 0)
-                {
-                    plan.PreservationNonRoadConnections++;
-                }
-
-                if (mapping.IsUnsafe)
-                {
-                    plan.PreservationUnsafeConnections++;
-                }
-
-                TrafficMappingPlanPreservation.CountTrackStats(plan, method, targetEndpoint);
+                TrafficMappingPlanPreservation.CountPreservedConnectionStats(
+                    plan,
+                    method,
+                    mapping.IsUnsafe,
+                    targetEndpoint);
             }
 
             int added = plan.PreservationRuntimeConnections - beforeRuntime;
@@ -158,17 +152,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     plan.PreservationSourceKeys.Add(sourceKey);
                     plan.PreservationOverlaySnapshotConnections++;
                     overlaySources.Add(sourceKey);
-                    if ((method & ~PathMethod.Road) != 0)
-                    {
-                        plan.PreservationNonRoadConnections++;
-                    }
-
-                    if (mapping.IsUnsafe)
-                    {
-                        plan.PreservationUnsafeConnections++;
-                    }
-
-                    TrafficMappingPlanPreservation.CountTrackStats(plan, method, targetEndpoint);
+                    TrafficMappingPlanPreservation.CountPreservedConnectionStats(
+                        plan,
+                        method,
+                        mapping.IsUnsafe,
+                        targetEndpoint);
                 }
             }
 

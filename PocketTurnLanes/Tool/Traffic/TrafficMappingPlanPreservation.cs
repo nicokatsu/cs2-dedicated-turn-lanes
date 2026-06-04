@@ -30,6 +30,33 @@ namespace PocketTurnLanes.Tool.Traffic
             PathMethod method,
             LaneEndpoint targetEndpoint)
         {
+            CountPreservedTrackStats(plan, method, targetEndpoint);
+        }
+
+        public static void CountPreservedConnectionStats(
+            TrafficMappingPlan plan,
+            PathMethod method,
+            bool isUnsafe,
+            LaneEndpoint targetEndpoint)
+        {
+            if ((method & ~PathMethod.Road) != 0)
+            {
+                plan.PreservationNonRoadConnections++;
+            }
+
+            if (isUnsafe)
+            {
+                plan.PreservationUnsafeConnections++;
+            }
+
+            CountPreservedTrackStats(plan, method, targetEndpoint);
+        }
+
+        private static void CountPreservedTrackStats(
+            TrafficMappingPlan plan,
+            PathMethod method,
+            LaneEndpoint targetEndpoint)
+        {
             if ((method & PathMethod.Track) == 0)
             {
                 return;
