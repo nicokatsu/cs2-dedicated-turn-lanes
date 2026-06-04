@@ -137,6 +137,15 @@ namespace PocketTurnLanes.Tool.Traffic
             return (bool)m_HasModifiedLaneConnectionsBuffer.Invoke(entityManager, new object[] { node });
         }
 
+        public void RemoveModifiedLaneConnectionsBuffer(EntityManager entityManager, Entity node)
+        {
+            ComponentType componentType = ComponentType.ReadWrite(m_ModifiedLaneConnectionsType);
+            if (entityManager.HasComponent(node, componentType))
+            {
+                entityManager.RemoveComponent(node, componentType);
+            }
+        }
+
         public object GetModifiedLaneConnectionsBuffer(EntityManager entityManager, Entity node, bool readOnly)
         {
             return m_GetModifiedLaneConnectionsBuffer.Invoke(entityManager, new object[] { node, readOnly });
@@ -315,6 +324,15 @@ namespace PocketTurnLanes.Tool.Traffic
             if (!entityManager.HasComponent(node, componentType))
             {
                 entityManager.AddComponent(node, componentType);
+            }
+        }
+
+        public void RemoveModifiedConnectionsTag(EntityManager entityManager, Entity node)
+        {
+            ComponentType componentType = ComponentType.ReadWrite(m_ModifiedConnectionsType);
+            if (entityManager.HasComponent(node, componentType))
+            {
+                entityManager.RemoveComponent(node, componentType);
             }
         }
 

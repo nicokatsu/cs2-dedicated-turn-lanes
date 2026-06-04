@@ -26,6 +26,13 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             Reverse
         }
 
+        private enum TrafficMigrationBarrierState
+        {
+            Pending,
+            SentinelQueued,
+            Passed
+        }
+
         private static void ResetRoadPreparation(ref Request request)
         {
             request.ForwardRoadState = RoadDirectionState.Skipped;
@@ -141,6 +148,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public Entity TargetPrefab;
             public RepairMode Mode;
             public int QueuedFrame;
+            public int EarliestTrafficWriteFrame;
+            public TrafficMigrationBarrierState TrafficMigrationBarrierState;
+            public Entity TrafficMigrationSentinelNode;
+            public int TrafficMigrationSentinelFrame;
             public int LaneDataRetries;
             public bool TrafficWritten;
             public bool PreservationSnapshotCapturedForOuter;
