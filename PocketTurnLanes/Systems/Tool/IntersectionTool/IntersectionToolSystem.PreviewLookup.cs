@@ -52,8 +52,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             float bestScore = float.MaxValue;
             float bestLengthError = float.MaxValue;
             Entity bestEdge = Entity.Null;
-            Entity bestRejectedEdge = Entity.Null;
-            float bestRejectedLengthError = float.MaxValue;
+            EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int connectedMatchCount = 0;
             int prefabMatchCount = 0;
@@ -95,12 +94,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     float candidateLengthError = math.abs(curve.m_Length - candidate.SplitDistance);
                     if (candidateLengthError > PocketEdgeLengthTolerance)
                     {
-                        if (candidateLengthError < bestRejectedLengthError)
-                        {
-                            bestRejectedLengthError = candidateLengthError;
-                            bestRejectedEdge = edgeEntity;
-                        }
-
+                        bestRejected.RecordLength(edgeEntity, candidateLengthError);
                         continue;
                     }
 
@@ -116,7 +110,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
             if (bestEdge == Entity.Null)
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Cannot find preview pocket edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedDistance={candidate.SplitDistance:0.##}m tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Cannot find preview pocket edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedDistance={candidate.SplitDistance:0.##}m tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 
@@ -144,8 +138,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             float bestScore = float.MaxValue;
             float bestLengthError = float.MaxValue;
             Entity bestEdge = Entity.Null;
-            Entity bestRejectedEdge = Entity.Null;
-            float bestRejectedLengthError = float.MaxValue;
+            EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int connectedMatchCount = 0;
             int prefabMatchCount = 0;
@@ -195,12 +188,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                         : 0f;
                     if (expectedLength >= 0f && candidateLengthError > PocketEdgeLengthTolerance)
                     {
-                        if (candidateLengthError < bestRejectedLengthError)
-                        {
-                            bestRejectedLengthError = candidateLengthError;
-                            bestRejectedEdge = edgeEntity;
-                        }
-
+                        bestRejected.RecordLength(edgeEntity, candidateLengthError);
                         continue;
                     }
 
@@ -217,7 +205,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
             if (bestEdge == Entity.Null)
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Cannot find preview outer edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedLength={FormatMeters(expectedLength)} tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Cannot find preview outer edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedLength={FormatMeters(expectedLength)} tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 

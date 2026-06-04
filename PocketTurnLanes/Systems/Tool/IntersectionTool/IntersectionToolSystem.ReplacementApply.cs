@@ -3,6 +3,7 @@ using Colossal.Mathematics;
 using Game.Common;
 using Game.Net;
 using Game.Prefabs;
+using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.PrefabMatching;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
@@ -258,10 +259,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             float bestLengthError = float.MaxValue;
             Entity bestEdge = Entity.Null;
             Entity bestSplitNode = Entity.Null;
-            float bestRejectedScore = float.MaxValue;
-            float bestRejectedNodeDistance = float.MaxValue;
-            float bestRejectedLengthError = float.MaxValue;
-            Entity bestRejectedEdge = Entity.Null;
+            EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateScored();
             int scannedCount = 0;
             int prefabMatchCount = 0;
 
@@ -298,14 +296,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 if (candidateNodeDistance > SplitNodePositionTolerance ||
                     candidateLengthError > PocketEdgeLengthTolerance)
                 {
-                    if (score < bestRejectedScore)
-                    {
-                        bestRejectedScore = score;
-                        bestRejectedNodeDistance = candidateNodeDistance;
-                        bestRejectedLengthError = candidateLengthError;
-                        bestRejectedEdge = edgeEntity;
-                    }
-
+                    bestRejected.RecordScore(edgeEntity, score, candidateNodeDistance, candidateLengthError);
                     continue;
                 }
 
@@ -323,7 +314,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 bestNodeDistance > SplitNodePositionTolerance ||
                 bestLengthError > PocketEdgeLengthTolerance)
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Cannot find generated pocket edge original={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} node={FormatEntity(candidate.Node)} expectedSplit=({candidate.HitPosition.x:0.##},{candidate.HitPosition.y:0.##},{candidate.HitPosition.z:0.##}) expectedDistance={candidate.SplitDistance:0.##}m scanned={scannedCount} sourceOrTargetPrefabMatches={prefabMatchCount} allowOriginal={allowOriginalEdgeAsPocket} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedNodeDistance={FormatMeters(bestRejectedNodeDistance)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Cannot find generated pocket edge original={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} node={FormatEntity(candidate.Node)} expectedSplit=({candidate.HitPosition.x:0.##},{candidate.HitPosition.y:0.##},{candidate.HitPosition.z:0.##}) expectedDistance={candidate.SplitDistance:0.##}m scanned={scannedCount} sourceOrTargetPrefabMatches={prefabMatchCount} allowOriginal={allowOriginalEdgeAsPocket} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedNodeDistance={FormatMeters(bestRejected.NodeDistance)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 

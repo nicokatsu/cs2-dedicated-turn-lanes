@@ -4,6 +4,7 @@ using Game.Common;
 using Game.Net;
 using Game.Prefabs;
 using Game.Tools;
+using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.PrefabMatching;
 using Unity.Collections;
 using Unity.Entities;
@@ -546,9 +547,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             float bestValidError = float.MaxValue;
-            float bestRejectedError = float.MaxValue;
+            EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             Entity bestEdge = Entity.Null;
-            Entity bestRejectedEdge = Entity.Null;
             float bestLength = 0f;
             int scannedCount = 0;
             int endpointMatchCount = 0;
@@ -592,12 +592,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 float candidateLengthError = math.abs(candidateLength - candidate.MergedLength);
                 if (candidateLengthError > MergedEdgeLengthTolerance)
                 {
-                    if (candidateLengthError < bestRejectedError)
-                    {
-                        bestRejectedError = candidateLengthError;
-                        bestRejectedEdge = edgeEntity;
-                    }
-
+                    bestRejected.RecordLength(edgeEntity, candidateLengthError);
                     continue;
                 }
 
@@ -611,7 +606,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
             if (bestEdge == Entity.Null)
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} mode={candidate.Mode} expectedPrefab={GetPrefabNameFromPrefab(expectedPrefab)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} expectedLength={candidate.MergedLength:0.##}m scanned={scannedCount} endpointMatches={endpointMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedError)}.");
+                Mod.LogDiagnostic($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} mode={candidate.Mode} expectedPrefab={GetPrefabNameFromPrefab(expectedPrefab)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} expectedLength={candidate.MergedLength:0.##}m scanned={scannedCount} endpointMatches={endpointMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 

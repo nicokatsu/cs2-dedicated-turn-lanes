@@ -164,8 +164,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 ? shortCurve.m_Length
                 : candidate.ShortEdgeLength;
             float bestScore = float.MaxValue;
-            float bestRejectedLengthError = float.MaxValue;
-            Entity bestRejectedEdge = Entity.Null;
+            EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int identityMatches = 0;
             int sourcePrefabMatches = 0;
@@ -209,12 +208,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     float score = lengthError + (prefabRef.m_Prefab == candidate.SourcePrefab ? 0f : 0.5f) + (originalMatch ? 0f : 0.25f);
                     if (lengthError > PocketEdgeLengthTolerance)
                     {
-                        if (lengthError < bestRejectedLengthError)
-                        {
-                            bestRejectedLengthError = lengthError;
-                            bestRejectedEdge = edgeEntity;
-                        }
-
+                        bestRejected.RecordLength(edgeEntity, lengthError);
                         continue;
                     }
 
@@ -232,7 +226,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return true;
             }
 
-            detail = $"expectedLength={expectedLength:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourceOrTargetPrefabMatches={sourcePrefabMatches} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}";
+            detail = $"expectedLength={expectedLength:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourceOrTargetPrefabMatches={sourcePrefabMatches} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}";
             return false;
         }
 
@@ -387,8 +381,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 ? sourceCurve.m_Length
                 : MathUtils.Length(sourceCurve.m_Bezier);
             float bestScore = float.MaxValue;
-            float bestRejectedLengthError = float.MaxValue;
-            Entity bestRejectedEdge = Entity.Null;
+            EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int identityMatches = 0;
             int sourcePrefabMatches = 0;
@@ -431,12 +424,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     float score = lengthError + (originalMatch ? 0f : 0.25f);
                     if (lengthError > PocketEdgeLengthTolerance)
                     {
-                        if (lengthError < bestRejectedLengthError)
-                        {
-                            bestRejectedLengthError = lengthError;
-                            bestRejectedEdge = edgeEntity;
-                        }
-
+                        bestRejected.RecordLength(edgeEntity, lengthError);
                         continue;
                     }
 
@@ -454,7 +442,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return true;
             }
 
-            detail = $"expectedLength={expectedLength:0.##}m lengthTolerance={PocketEdgeLengthTolerance:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourcePrefabMatches={sourcePrefabMatches} bestRejectedEdge={FormatEntity(bestRejectedEdge)} bestRejectedLengthError={FormatMeters(bestRejectedLengthError)}";
+            detail = $"expectedLength={expectedLength:0.##}m lengthTolerance={PocketEdgeLengthTolerance:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourcePrefabMatches={sourcePrefabMatches} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}";
             return false;
         }
 
