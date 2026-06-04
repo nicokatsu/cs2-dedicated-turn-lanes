@@ -14,10 +14,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             bool reverseMatches = VerifyRoadDirection(request, reverseDirection, out string reverseDetail);
 
             int staleUturnCount = CountStaleSplitNodeUturnConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, out string staleUturnSummary);
-            bool matches = forwardMatches && reverseMatches && staleUturnCount == 0;
+            bool tolerateRuntimeStaleUturn =
+                request.TrafficWritten &&
+                !s_EnableRuntimeStaleUturnDirectDeletion &&
+                staleUturnCount > 0;
+            bool matches = forwardMatches && reverseMatches && (staleUturnCount == 0 || tolerateRuntimeStaleUturn);
             if (!matches)
             {
                 Mod.LogDiagnostic($"[SplitLaneConnectionFix] Connector verification mismatch splitNode={FormatEntity(request.SplitNode)} mode={request.Mode} forward={forwardDetail} reverse={reverseDetail} staleUturnCount={staleUturnCount} staleUturns={staleUturnSummary}.");
+            }
+            else if (tolerateRuntimeStaleUturn)
+            {
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Connector verification road-stable with runtime stale U-turns left in place splitNode={FormatEntity(request.SplitNode)} mode={request.Mode} forward={forwardDetail} reverse={reverseDetail} staleUturnCount={staleUturnCount} staleUturns={staleUturnSummary} directDeletion={s_EnableRuntimeStaleUturnDirectDeletion} reason={RuntimeStaleUturnDirectDeletionDisabledReason}.");
             }
 
             return matches;

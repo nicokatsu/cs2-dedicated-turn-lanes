@@ -68,6 +68,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 persistentStats.Reason = $"trafficApiUnavailable:{trafficError}";
             }
 
+            if (!s_EnableRuntimeStaleUturnDirectDeletion)
+            {
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Skipped direct runtime stale split-node U-turn connector deletion after skip splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(outerEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount={m_StaleConnectorLanes.Count} preserveExistingTraffic=True roadTrafficWrite={request.TrafficWritten} outerPreservationSnapshotCaptured={request.PreservationSnapshotCapturedForOuter} unsafePreservedMode=unchanged persistentTrafficWrite={persistentTrafficWritten} persistentSources={persistentStats.WrittenSources} persistentStaleSources={persistentStats.StaleSourceLanes} persistentKept={persistentStats.PreservedConnections} persistentTrafficSnapshotKept={persistentStats.PreservedTrafficSnapshotConnections} persistentTrafficSnapshotSources={persistentStats.TrafficSnapshotSourceLanes} persistentMissingTrafficSnapshotSources={persistentStats.MissingTrafficSnapshotSources} persistentMissingGeneratedBufferSources={persistentStats.MissingGeneratedBufferSources} persistentRuntimeFallbackKept=0 persistentRuntimeFallbackSuppressed={persistentStats.RuntimeFallbackSuppressedConnections} persistentUnsafeKept={persistentStats.UnsafePreservedConnections} suppressedTrafficUturn={persistentStats.SuppressedTrafficUturnConnections} persistentPreservedTrackConnections={persistentStats.PreservedTrackConnections} persistentTrackWrittenConnections={persistentStats.TrackWrittenConnections} persistentTrackOnlyTargets={persistentStats.TrackOnlyTargetConnections} persistentSharedTrackConnections={persistentStats.SharedTrackConnections} persistentEmptySources={persistentStats.EmptySources} persistentNormalizedMethods={persistentStats.NormalizedMethods} persistentRemovedExisting={persistentStats.RemovedExisting} persistentReason={persistentStats.Reason} staleSourceLanes={persistentStats.SourceLanes} rewriteSourceLanes={persistentStats.RewriteSourceLanes} reason={reason} directDeletionReason={RuntimeStaleUturnDirectDeletionDisabledReason} connectors={staleSummary} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()}.");
+                return 0;
+            }
+
             m_RemoveSubLaneIndexes.Clear();
             for (int i = 0; i < m_StaleConnectorLanes.Count; i++)
             {

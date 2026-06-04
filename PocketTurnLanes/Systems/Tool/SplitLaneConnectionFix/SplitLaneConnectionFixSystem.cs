@@ -15,7 +15,9 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
         private const int MaxTrafficRuntimeWaitFrames = 120;
         private const int RequiredStableVerificationFrames = 3;
         private const string CleanupOnlyPersistentTrafficWriteDisabledReason = "disabledAfterTrafficUiCrashOnTramUpgrade";
+        private const string RuntimeStaleUturnDirectDeletionDisabledReason = "disabledAfterSecondApplyNativeCrash";
         private static readonly bool s_EnableCleanupOnlyPersistentTrafficWrite = true;
+        private static readonly bool s_EnableRuntimeStaleUturnDirectDeletion = false;
 
         private readonly List<Request> m_Requests = new List<Request>();
         private readonly List<LaneEndpoint> m_SourceLanes = new List<LaneEndpoint>(8);

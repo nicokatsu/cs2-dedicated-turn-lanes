@@ -102,13 +102,20 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             CollectStaleSplitNodeUturnConnectorLanes(request.SplitNode, request.OuterEdge, request.PocketEdge, subLanes, m_StaleConnectorLanes);
-            for (int i = 0; i < m_StaleConnectorLanes.Count; i++)
+            if (m_StaleConnectorLanes.Count > 0 && !s_EnableRuntimeStaleUturnDirectDeletion)
             {
-                ConnectorLane connector = m_StaleConnectorLanes[i];
-                QueueDeleteConnector(connector.Entity);
-                m_RemoveSubLaneIndexes.Add(connector.SubLaneIndex);
-                stats.Deleted++;
-                stats.DeletedUturn++;
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Skipped direct runtime stale U-turn connector deletion after road rebuild splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} staleUturnCount={m_StaleConnectorLanes.Count} reason={RuntimeStaleUturnDirectDeletionDisabledReason} connectors={FormatConnectorLanes(m_StaleConnectorLanes)}.");
+            }
+            else
+            {
+                for (int i = 0; i < m_StaleConnectorLanes.Count; i++)
+                {
+                    ConnectorLane connector = m_StaleConnectorLanes[i];
+                    QueueDeleteConnector(connector.Entity);
+                    m_RemoveSubLaneIndexes.Add(connector.SubLaneIndex);
+                    stats.Deleted++;
+                    stats.DeletedUturn++;
+                }
             }
 
             m_RemoveSubLaneIndexes.Sort();
