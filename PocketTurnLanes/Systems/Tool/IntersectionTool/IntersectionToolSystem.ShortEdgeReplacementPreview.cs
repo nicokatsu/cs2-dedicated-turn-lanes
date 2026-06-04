@@ -354,7 +354,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             previewEdge = Entity.Null;
             detail = string.Empty;
 
-            float bestScore = float.MaxValue;
+            EdgeLookupSelection selection = EdgeLookupSelection.Create();
             EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int identityMatches = 0;
@@ -405,19 +405,16 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                         continue;
                     }
 
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        previewEdge = edgeEntity;
-                    }
+                    selection.Record(edgeEntity, score, lengthError);
                 }
             }
 
             string lengthToleranceDetail = includeLengthToleranceInDetail
                 ? $" lengthTolerance={PocketEdgeLengthTolerance:0.##}m"
                 : string.Empty;
-            if (previewEdge != Entity.Null)
+            if (selection.Edge != Entity.Null)
             {
+                previewEdge = selection.Edge;
                 detail = $"tempPreviewEdge={FormatEntity(previewEdge)} expectedLength={expectedLength:0.##}m{lengthToleranceDetail} tempEdges={tempEdgeCount} identityMatches={identityMatches} {prefabMatchCountName}={prefabMatches}";
                 return true;
             }

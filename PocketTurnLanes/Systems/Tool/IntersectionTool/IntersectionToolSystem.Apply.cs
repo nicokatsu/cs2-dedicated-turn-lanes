@@ -543,10 +543,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            float bestValidError = float.MaxValue;
+            EdgeLookupSelection selection = EdgeLookupSelection.Create();
             EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
-            Entity bestEdge = Entity.Null;
-            float bestLength = 0f;
             int scannedCount = 0;
             int endpointMatchCount = 0;
             int prefabMatchCount = 0;
@@ -593,23 +591,24 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (candidateLengthError < bestValidError)
-                {
-                    bestValidError = candidateLengthError;
-                    bestLength = candidateLength;
-                    bestEdge = edgeEntity;
-                }
+                selection.Record(
+                    edgeEntity,
+                    Entity.Null,
+                    candidateLengthError,
+                    candidateLengthError,
+                    0f,
+                    candidateLength);
             }
 
-            if (bestEdge == Entity.Null)
+            if (selection.Edge == Entity.Null)
             {
                 Mod.LogDiagnostic($"[IntersectionTool] Cannot find applied merged edge shortEdge={FormatEntity(candidate.ShortEdge)} removableNode={FormatEntity(candidate.RemovableNode)} continuation={FormatEntity(candidate.ContinuationEdge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(candidate.FarNode)} mode={candidate.Mode} expectedPrefab={GetPrefabNameFromPrefab(expectedPrefab)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} expectedLength={candidate.MergedLength:0.##}m scanned={scannedCount} endpointMatches={endpointMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 
-            mergedEdge = bestEdge;
-            lengthError = bestValidError;
-            mergedLength = bestLength;
+            mergedEdge = selection.Edge;
+            lengthError = selection.LengthError;
+            mergedLength = selection.Length;
             return true;
         }
 

@@ -254,11 +254,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            float bestValidScore = float.MaxValue;
-            float bestNodeDistance = float.MaxValue;
-            float bestLengthError = float.MaxValue;
-            Entity bestEdge = Entity.Null;
-            Entity bestSplitNode = Entity.Null;
+            EdgeLookupSelection selection = EdgeLookupSelection.Create();
             EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateScored();
             int scannedCount = 0;
             int prefabMatchCount = 0;
@@ -300,28 +296,27 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     continue;
                 }
 
-                if (score < bestValidScore)
-                {
-                    bestValidScore = score;
-                    bestNodeDistance = candidateNodeDistance;
-                    bestLengthError = candidateLengthError;
-                    bestEdge = edgeEntity;
-                    bestSplitNode = otherNode;
-                }
+                selection.Record(
+                    edgeEntity,
+                    otherNode,
+                    score,
+                    candidateLengthError,
+                    candidateNodeDistance,
+                    0f);
             }
 
-            if (bestEdge == Entity.Null ||
-                bestNodeDistance > SplitNodePositionTolerance ||
-                bestLengthError > PocketEdgeLengthTolerance)
+            if (selection.Edge == Entity.Null ||
+                selection.NodeDistance > SplitNodePositionTolerance ||
+                selection.LengthError > PocketEdgeLengthTolerance)
             {
                 Mod.LogDiagnostic($"[IntersectionTool] Cannot find generated pocket edge original={FormatEntity(candidate.Edge)} sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} node={FormatEntity(candidate.Node)} expectedSplit=({candidate.HitPosition.x:0.##},{candidate.HitPosition.y:0.##},{candidate.HitPosition.z:0.##}) expectedDistance={candidate.SplitDistance:0.##}m scanned={scannedCount} sourceOrTargetPrefabMatches={prefabMatchCount} allowOriginal={allowOriginalEdgeAsPocket} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedNodeDistance={FormatMeters(bestRejected.NodeDistance)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 
-            pocketEdge = bestEdge;
-            splitNode = bestSplitNode;
-            splitNodeDistance = bestNodeDistance;
-            lengthError = bestLengthError;
+            pocketEdge = selection.Edge;
+            splitNode = selection.Node;
+            splitNodeDistance = selection.NodeDistance;
+            lengthError = selection.LengthError;
             return true;
         }
 

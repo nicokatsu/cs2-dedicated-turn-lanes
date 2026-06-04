@@ -67,6 +67,55 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public int ConnectedEdgeCount;
         }
 
+        private struct EdgeLookupSelection
+        {
+            public Entity Edge;
+            public Entity Node;
+            public float Score;
+            public float LengthError;
+            public float NodeDistance;
+            public float Length;
+
+            public static EdgeLookupSelection Create()
+            {
+                return new EdgeLookupSelection
+                {
+                    Edge = Entity.Null,
+                    Node = Entity.Null,
+                    Score = float.MaxValue,
+                    LengthError = float.MaxValue,
+                    NodeDistance = float.MaxValue,
+                    Length = 0f
+                };
+            }
+
+            public void Record(Entity edge, float score, float lengthError)
+            {
+                Record(edge, Entity.Null, score, lengthError, 0f, 0f);
+            }
+
+            public void Record(
+                Entity edge,
+                Entity node,
+                float score,
+                float lengthError,
+                float nodeDistance,
+                float length)
+            {
+                if (score >= Score)
+                {
+                    return;
+                }
+
+                Edge = edge;
+                Node = node;
+                Score = score;
+                LengthError = lengthError;
+                NodeDistance = nodeDistance;
+                Length = length;
+            }
+        }
+
         private enum SplitLaneConnectionRepairMode
         {
             Standard,

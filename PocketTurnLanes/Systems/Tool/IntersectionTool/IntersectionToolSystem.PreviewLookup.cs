@@ -49,9 +49,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             pocketEdge = Entity.Null;
             lengthError = 0f;
 
-            float bestScore = float.MaxValue;
-            float bestLengthError = float.MaxValue;
-            Entity bestEdge = Entity.Null;
+            EdgeLookupSelection selection = EdgeLookupSelection.Create();
             EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int connectedMatchCount = 0;
@@ -99,23 +97,18 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     }
 
                     float score = candidateLengthError;
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        bestLengthError = candidateLengthError;
-                        bestEdge = edgeEntity;
-                    }
+                    selection.Record(edgeEntity, score, candidateLengthError);
                 }
             }
 
-            if (bestEdge == Entity.Null)
+            if (selection.Edge == Entity.Null)
             {
                 Mod.LogDiagnostic($"[IntersectionTool] Cannot find preview pocket edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedDistance={candidate.SplitDistance:0.##}m tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 
-            pocketEdge = bestEdge;
-            lengthError = bestLengthError;
+            pocketEdge = selection.Edge;
+            lengthError = selection.LengthError;
             return true;
         }
 
@@ -135,9 +128,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 expectedLength = math.max(0f, originalCurve.m_Length - candidate.SplitDistance);
             }
 
-            float bestScore = float.MaxValue;
-            float bestLengthError = float.MaxValue;
-            Entity bestEdge = Entity.Null;
+            EdgeLookupSelection selection = EdgeLookupSelection.Create();
             EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int connectedMatchCount = 0;
@@ -194,23 +185,18 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
                     float sourcePrefabPenalty = prefabRef.m_Prefab == candidate.SourcePrefab ? 0f : PocketEdgeLengthTolerance;
                     float score = candidateLengthError + sourcePrefabPenalty;
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        bestLengthError = candidateLengthError;
-                        bestEdge = edgeEntity;
-                    }
+                    selection.Record(edgeEntity, score, candidateLengthError);
                 }
             }
 
-            if (bestEdge == Entity.Null)
+            if (selection.Edge == Entity.Null)
             {
                 Mod.LogDiagnostic($"[IntersectionTool] Cannot find preview outer edge original={FormatEntity(candidate.Edge)} splitNode={FormatEntity(splitNode)} expectedLength={FormatMeters(expectedLength)} tempEdges={tempEdgeCount} connectedMatches={connectedMatchCount} prefabMatches={prefabMatchCount} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}.");
                 return false;
             }
 
-            outerEdge = bestEdge;
-            lengthError = bestLengthError;
+            outerEdge = selection.Edge;
+            lengthError = selection.LengthError;
             return true;
         }
     }
