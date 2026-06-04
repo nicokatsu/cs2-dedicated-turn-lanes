@@ -163,72 +163,17 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             float expectedLength = shortCurve.m_Length > 0.01f
                 ? shortCurve.m_Length
                 : candidate.ShortEdgeLength;
-            float bestScore = float.MaxValue;
-            EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
-            int tempEdgeCount = 0;
-            int identityMatches = 0;
-            int sourcePrefabMatches = 0;
-
-            using (NativeArray<Entity> entities = m_TempPreviewEdgeQuery.ToEntityArray(Allocator.Temp))
-            using (NativeArray<Temp> temps = m_TempPreviewEdgeQuery.ToComponentDataArray<Temp>(Allocator.Temp))
-            {
-                for (int i = 0; i < entities.Length; i++)
-                {
-                    Entity edgeEntity = entities[i];
-                    Temp temp = temps[i];
-                    if (!TempEntityHelpers.IsUsableTemp(temp) ||
-                        !EntityManager.TryGetComponent(edgeEntity, out Edge edge) ||
-                        !EntityManager.TryGetComponent(edgeEntity, out Curve curve) ||
-                        !EntityManager.TryGetComponent(edgeEntity, out PrefabRef prefabRef))
-                    {
-                        continue;
-                    }
-
-                    tempEdgeCount++;
-                    bool originalMatch = temp.m_Original == candidate.ShortEdge;
-                    bool endpointMatch = TempEntityHelpers.HasSameOrTempOriginalUndirectedEndpoints(
-                        EntityManager,
-                        edge.m_Start,
-                        edge.m_End,
-                        shortEdge.m_Start,
-                        shortEdge.m_End);
-                    if (!originalMatch && !endpointMatch)
-                    {
-                        continue;
-                    }
-
-                    identityMatches++;
-                    if (prefabRef.m_Prefab != candidate.SourcePrefab &&
-                        prefabRef.m_Prefab != candidate.TargetPrefab)
-                    {
-                        continue;
-                    }
-
-                    sourcePrefabMatches++;
-                    float lengthError = math.abs(curve.m_Length - expectedLength);
-                    float score = lengthError + (prefabRef.m_Prefab == candidate.SourcePrefab ? 0f : 0.5f) + (originalMatch ? 0f : 0.25f);
-                    if (lengthError > PocketEdgeLengthTolerance)
-                    {
-                        bestRejected.RecordLength(edgeEntity, lengthError);
-                        continue;
-                    }
-
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        previewEdge = edgeEntity;
-                    }
-                }
-            }
-
-            if (previewEdge != Entity.Null)
-            {
-                detail = $"tempPreviewEdge={FormatEntity(previewEdge)} expectedLength={expectedLength:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourceOrTargetPrefabMatches={sourcePrefabMatches}";
-                return true;
-            }
-
-            detail = $"expectedLength={expectedLength:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourceOrTargetPrefabMatches={sourcePrefabMatches} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}";
-            return false;
+            return TryFindTempPreviewSourceEdge(
+                candidate.ShortEdge,
+                shortEdge,
+                candidate.SourcePrefab,
+                candidate.TargetPrefab,
+                expectedLength,
+                0.5f,
+                false,
+                "sourceOrTargetPrefabMatches",
+                out previewEdge,
+                out detail);
         }
 
         private bool TryFindPreviewContinuationSource(
@@ -381,11 +326,39 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             float expectedLength = sourceCurve.m_Length > 0.01f
                 ? sourceCurve.m_Length
                 : MathUtils.Length(sourceCurve.m_Bezier);
+            return TryFindTempPreviewSourceEdge(
+                sourceEdge,
+                sourceEdgeData,
+                sourcePrefab,
+                Entity.Null,
+                expectedLength,
+                0f,
+                true,
+                "sourcePrefabMatches",
+                out previewEdge,
+                out detail);
+        }
+
+        private bool TryFindTempPreviewSourceEdge(
+            Entity sourceEdge,
+            Edge sourceEdgeData,
+            Entity sourcePrefab,
+            Entity alternatePrefab,
+            float expectedLength,
+            float alternatePrefabPenalty,
+            bool includeLengthToleranceInDetail,
+            string prefabMatchCountName,
+            out Entity previewEdge,
+            out string detail)
+        {
+            previewEdge = Entity.Null;
+            detail = string.Empty;
+
             float bestScore = float.MaxValue;
             EdgeLookupRejectedCandidate bestRejected = EdgeLookupRejectedCandidate.CreateLength();
             int tempEdgeCount = 0;
             int identityMatches = 0;
-            int sourcePrefabMatches = 0;
+            int prefabMatches = 0;
 
             using (NativeArray<Entity> entities = m_TempPreviewEdgeQuery.ToEntityArray(Allocator.Temp))
             using (NativeArray<Temp> temps = m_TempPreviewEdgeQuery.ToComponentDataArray<Temp>(Allocator.Temp))
@@ -416,14 +389,16 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     }
 
                     identityMatches++;
-                    if (prefabRef.m_Prefab != sourcePrefab)
+                    if (prefabRef.m_Prefab != sourcePrefab &&
+                        (alternatePrefab == Entity.Null || prefabRef.m_Prefab != alternatePrefab))
                     {
                         continue;
                     }
 
-                    sourcePrefabMatches++;
+                    prefabMatches++;
                     float lengthError = math.abs(curve.m_Length - expectedLength);
-                    float score = lengthError + (originalMatch ? 0f : 0.25f);
+                    float prefabPenalty = prefabRef.m_Prefab == sourcePrefab ? 0f : alternatePrefabPenalty;
+                    float score = lengthError + prefabPenalty + (originalMatch ? 0f : 0.25f);
                     if (lengthError > PocketEdgeLengthTolerance)
                     {
                         bestRejected.RecordLength(edgeEntity, lengthError);
@@ -438,13 +413,16 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 }
             }
 
+            string lengthToleranceDetail = includeLengthToleranceInDetail
+                ? $" lengthTolerance={PocketEdgeLengthTolerance:0.##}m"
+                : string.Empty;
             if (previewEdge != Entity.Null)
             {
-                detail = $"tempPreviewEdge={FormatEntity(previewEdge)} expectedLength={expectedLength:0.##}m lengthTolerance={PocketEdgeLengthTolerance:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourcePrefabMatches={sourcePrefabMatches}";
+                detail = $"tempPreviewEdge={FormatEntity(previewEdge)} expectedLength={expectedLength:0.##}m{lengthToleranceDetail} tempEdges={tempEdgeCount} identityMatches={identityMatches} {prefabMatchCountName}={prefabMatches}";
                 return true;
             }
 
-            detail = $"expectedLength={expectedLength:0.##}m lengthTolerance={PocketEdgeLengthTolerance:0.##}m tempEdges={tempEdgeCount} identityMatches={identityMatches} sourcePrefabMatches={sourcePrefabMatches} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}";
+            detail = $"expectedLength={expectedLength:0.##}m{lengthToleranceDetail} tempEdges={tempEdgeCount} identityMatches={identityMatches} {prefabMatchCountName}={prefabMatches} bestRejectedEdge={FormatEntity(bestRejected.Edge)} bestRejectedLengthError={FormatMeters(bestRejected.LengthError)}";
             return false;
         }
 
