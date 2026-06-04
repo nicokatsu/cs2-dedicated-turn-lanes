@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using PocketTurnLanes.Tool;
 using PocketTurnLanes.Tool.Traffic;
 using Unity.Entities;
@@ -30,91 +29,47 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
         private static string FormatMappings(IReadOnlyList<LaneMapping> mappings)
         {
-            if (mappings == null || mappings.Count == 0)
-            {
-                return "<none>";
-            }
-
-            return string.Join(",", mappings.Select(FormatMapping));
+            return TrafficRepairDiagnosticFormat.FormatMappings(mappings);
         }
 
         private static string FormatSnapshot(TransitionConnectionSnapshot snapshot)
         {
-            if (snapshot == null)
-            {
-                return "<none>";
-            }
-
-            int count = snapshot.Mappings?.Length ?? 0;
-            return $"{snapshot.Source}/{count} node={FormatEntity(snapshot.Node)} source={FormatEntity(snapshot.SourceEdge)} target={FormatEntity(snapshot.TargetEdge)} detail=({snapshot.Detail})";
+            return TrafficRepairDiagnosticFormat.FormatSnapshot(snapshot);
         }
 
         private static string FormatFarSnapshot(FarIntersectionTrafficSnapshot snapshot)
         {
-            if (snapshot == null)
-            {
-                return "<none>";
-            }
-
-            int sourceCount = snapshot.Entries?.Length ?? 0;
-            int connectionCount = TrafficSnapshotHelpers.CountConnections(snapshot.Entries);
-
-            return $"{snapshot.Source}/{sourceCount} sources/{connectionCount} connections node={FormatEntity(snapshot.Node)} continuation={FormatEntity(snapshot.ContinuationEdge)} detail=({snapshot.Detail})";
+            return TrafficRepairDiagnosticFormat.FormatFarSnapshot(snapshot);
         }
 
         private static string FormatSnapshotMappings(IReadOnlyList<TransitionConnectionSnapshotMapping> mappings)
         {
-            if (mappings == null || mappings.Count == 0)
-            {
-                return "<none>";
-            }
-
-            return string.Join(",", mappings.Select(mapping => $"{mapping.SourceLaneIndex}->{mapping.TargetLaneIndex}[{mapping.Method}] unsafe={mapping.IsUnsafe} srcLat={mapping.SourceLateral:0.##} tgtLat={mapping.TargetLateral:0.##}"));
+            return TrafficRepairDiagnosticFormat.FormatSnapshotMappings(mappings);
         }
 
         private static string FormatMapping(LaneMapping mapping)
         {
-            return $"{FormatEntity(mapping.SourceEdge)}:{mapping.SourceLaneIndex}->{FormatEntity(mapping.TargetEdge)}:{mapping.TargetLaneIndex}[{mapping.Method}]{(mapping.IsBranch ? "*" : string.Empty)}{(mapping.HasPreservedPathMethods ? "#preserve" : string.Empty)}{(mapping.IsUnsafe ? "!unsafe" : string.Empty)}";
+            return TrafficRepairDiagnosticFormat.FormatMapping(mapping);
         }
 
         private static string FormatConnectorLanes(IReadOnlyList<ConnectorLane> connectors)
         {
-            if (connectors == null || connectors.Count == 0)
-            {
-                return "<none>";
-            }
-
-            return string.Join(",", connectors.Select(connector => $"{FormatEntity(connector.SourceEdge)}:{connector.SourceLaneIndex}->{FormatEntity(connector.TargetEdge)}:{connector.TargetLaneIndex}[{connector.PathMethods}] flags=[{connector.LaneFlags}] trackTypes=[{connector.TrackTypes}] trackData={connector.HasTrackLaneData} netTrack={connector.HasNetTrackLane}/{FormatEntity(connector.Entity)}"));
+            return TrafficRepairDiagnosticFormat.FormatConnectorLanes(connectors);
         }
 
         private static string FormatStringList(IReadOnlyList<string> values)
         {
-            if (values == null || values.Count == 0)
-            {
-                return "<none>";
-            }
-
-            return string.Join(" || ", values);
+            return TrafficRepairDiagnosticFormat.FormatStringList(values);
         }
 
         private static string FormatSourceLaneKeys(IEnumerable<SourceLaneKey> sourceLaneKeys)
         {
-            if (sourceLaneKeys == null)
-            {
-                return "<none>";
-            }
-
-            string[] formatted = sourceLaneKeys
-                .OrderBy(key => key.Edge.Index)
-                .ThenBy(key => key.LaneIndex)
-                .Select(key => $"{FormatEntity(key.Edge)}:{key.LaneIndex}")
-                .ToArray();
-            return formatted.Length == 0 ? "<none>" : string.Join(",", formatted);
+            return TrafficRepairDiagnosticFormat.FormatSourceLaneKeys(sourceLaneKeys);
         }
 
         private static string FormatConnectionSet(IEnumerable<ConnectionKey> set)
         {
-            return string.Join(",", set.OrderBy(item => item.SourceLaneIndex).ThenBy(item => item.TargetLaneIndex).Select(item => $"{item.SourceLaneIndex}->{item.TargetLaneIndex}"));
+            return TrafficRepairDiagnosticFormat.FormatConnectionSet(set);
         }
     }
 }

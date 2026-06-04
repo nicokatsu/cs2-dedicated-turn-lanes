@@ -14,5 +14,10 @@ namespace PocketTurnLanes.Tool
         {
             return $"({value.x:0.##},{value.y:0.##},{value.z:0.##})";
         }
+
+        public static string MetersOrMissing(float value)
+        {
+            return value > 0f ? $"{value:0.##}m" : "<missing>";
+        }
     }
 }

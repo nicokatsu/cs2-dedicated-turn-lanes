@@ -989,7 +989,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
         private static string FormatMeters(float value)
         {
-            return value > 0f ? $"{value:0.##}m" : "<missing>";
+            return DiagnosticFormat.MetersOrMissing(value);
         }
     }
 }
