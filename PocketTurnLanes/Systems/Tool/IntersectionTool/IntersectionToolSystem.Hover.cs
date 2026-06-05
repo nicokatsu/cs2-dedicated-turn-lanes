@@ -336,7 +336,22 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                             prefabMatch,
                             out NodeMergeCandidate mergeCandidate))
                     {
-                        skippedCount++;
+                        if (!TryBuildLateHalfPocketSplitDefinitionPlan(
+                                nodeEntity,
+                                edgeEntity,
+                                out SplitDefinitionPlan lateHalfSplitPlan))
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        JobHandle createDefinitionJobHandle = ScheduleSplitDefinition(lateHalfSplitPlan.Request, result);
+
+                        splitQueuedCount++;
+                        m_PreviewCandidates.Add(CreateSplitCandidate(nodeEntity, edgeEntity, lateHalfSplitPlan, prefabMatch));
+                        Mod.LogDiagnostic($"[IntersectionTool] Late half-pocket split fallback candidate found edge={FormatEntity(edgeEntity)} node={FormatEntity(nodeEntity)} farNode={FormatEntity(lateHalfSplitPlan.FarNode)} prefab={GetPrefabName(edgeEntity)} split={lateHalfSplitPlan.CurvePosition:0.###} requestedPocket={lateHalfSplitPlan.TargetPocketLength:0.##}m target={lateHalfSplitPlan.TargetDistance:0.##}m distance={lateHalfSplitPlan.SplitDistance:0.##}m intersection={lateHalfSplitPlan.IntersectionDistance:0.##}m pocket={lateHalfSplitPlan.PocketDistance:0.##}m replacement={GetPrefabNameFromPrefab(prefabMatch.Prefab)} orientation={(prefabMatch.Invert ? "reversed" : "direct")} lanes={prefabMatch.OriginalCounts}->{prefabMatch.TargetCounts} frame={UnityEngine.Time.frameCount} laneRepair=standard geometry=late-half-pocket.");
+                        result = createDefinitionJobHandle;
+                        lastQueuedEdge = edgeEntity;
                         continue;
                     }
 

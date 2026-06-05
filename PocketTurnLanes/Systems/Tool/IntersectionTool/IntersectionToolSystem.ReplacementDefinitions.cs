@@ -45,9 +45,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return new SplitCandidate
             {
                 Node = node,
+                FarNode = splitPlan.FarNode,
                 Edge = edge,
                 SourcePrefab = splitPlan.Request.Prefab,
                 TargetPrefab = prefabMatch.Prefab,
+                GeometryMode = splitPlan.GeometryMode,
+                LateHalfFallbackAttempted = splitPlan.GeometryMode == SplitGeometryMode.LateHalfPocket,
+                SourcePrefabMergeHalfFallbackEligible = false,
                 InvertTarget = prefabMatch.Invert,
                 HasTargetUpgrade = prefabMatch.HasTargetUpgrade,
                 TargetUpgrade = prefabMatch.TargetUpgrade,
@@ -78,6 +82,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             candidate.SplitDistance = splitPlan.SplitDistance;
             candidate.IntersectionDistance = splitPlan.IntersectionDistance;
             candidate.PocketDistance = splitPlan.PocketDistance;
+            candidate.GeometryMode = splitPlan.GeometryMode;
+            candidate.LateHalfFallbackAttempted |= splitPlan.GeometryMode == SplitGeometryMode.LateHalfPocket;
+            if (splitPlan.GeometryMode == SplitGeometryMode.LateHalfPocket)
+            {
+                candidate.SourcePrefabMergeHalfFallbackEligible = false;
+            }
+
             candidate.Attempt = attempt;
             return candidate;
         }
@@ -101,6 +112,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 SourcePrefab = candidate.MergeRequest.Prefab,
                 TargetPrefab = candidate.TargetPrefab,
                 LaneRepairMode = candidate.LaneRepairMode,
+                GeometryMode = candidate.Mode == NodeMergeMode.SourcePrefabContinuationHalfPocket
+                    ? SplitGeometryMode.LateHalfPocket
+                    : SplitGeometryMode.Standard,
+                LateHalfFallbackAttempted = candidate.Mode == NodeMergeMode.SourcePrefabContinuationHalfPocket,
+                SourcePrefabMergeHalfFallbackEligible = candidate.Mode == NodeMergeMode.SourcePrefabContinuation,
                 InvertTarget = candidate.PostMergeInvertTarget,
                 HasTargetUpgrade = candidate.HasTargetUpgrade,
                 TargetUpgrade = candidate.TargetUpgrade,

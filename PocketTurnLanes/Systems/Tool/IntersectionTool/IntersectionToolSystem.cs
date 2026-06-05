@@ -29,6 +29,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private const float SplitNodePositionTolerance = 2.5f;
         private const float PocketEdgeLengthTolerance = 4f;
         private const float MergedEdgeLengthTolerance = 12f;
+        private const int MaxNodeMergePostApplyWaitFrames = 6;
         private const float NodeMergePreviewEdgeExitDistance = 6f;
         private const float NodeMergePreviewIntersectionBoundsMargin = 0.75f;
 
@@ -67,6 +68,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private bool m_ShortEdgeReplacementPreviewAttempted;
         private bool m_NodeMergeDefinitionsReadyForApply;
         private int m_PreviewCreatedFrame = -1;
+        private int m_NodeMergeVerificationStartedFrame = -1;
         private int m_PreviewEdgeCount;
         private int m_ShortEdgeReplacementPreviewQueuedCount;
         private readonly List<SplitCandidate> m_PreviewCandidates = new List<SplitCandidate>();

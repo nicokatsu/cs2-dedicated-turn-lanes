@@ -24,6 +24,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private struct SplitDefinitionPlan
         {
             public SplitDefinitionRequest Request;
+            public Entity FarNode;
+            public SplitGeometryMode GeometryMode;
             public float CurvePosition;
             public float SplitDistance;
             public float IntersectionDistance;
@@ -123,9 +125,16 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             ShortEdgeTransition
         }
 
+        private enum SplitGeometryMode
+        {
+            Standard,
+            LateHalfPocket
+        }
+
         private enum NodeMergeMode
         {
             SourcePrefabContinuation,
+            SourcePrefabContinuationHalfPocket,
             BalancedOppositeTarget,
             ShortEdgeReplacementOnly
         }
@@ -138,6 +147,9 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public Entity SourcePrefab;
             public Entity TargetPrefab;
             public SplitLaneConnectionRepairMode LaneRepairMode;
+            public SplitGeometryMode GeometryMode;
+            public bool LateHalfFallbackAttempted;
+            public bool SourcePrefabMergeHalfFallbackEligible;
             public bool InvertTarget;
             public bool HasTargetUpgrade;
             public Upgraded TargetUpgrade;

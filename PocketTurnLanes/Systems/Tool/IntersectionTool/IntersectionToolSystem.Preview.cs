@@ -58,6 +58,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_RebuildSplitPreviewForApply = false;
             m_PreviewValidationPending = false;
             m_PreviewCreatedFrame = -1;
+            m_NodeMergeVerificationStartedFrame = -1;
             m_PreviewEdgeCount = 0;
             m_HasReplacementPreviewDefinitions = false;
             m_HasShortEdgeReplacementPreviewDefinitions = false;
@@ -140,9 +141,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 {
                     exhaustedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Preview split still has no generated node edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={candidate.Attempt} distance={candidate.SplitDistance:0.##}m; no more retry room.");
-                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, "max retry attempts reached without a generated temp split node"))
+                    if (TryPromoteExhaustedSplitToShortEdgeFallback(candidate, "max retry attempts reached without a generated temp split node", out bool queuedSplitFallback))
                     {
                         exhaustedFallbackCount++;
+                        needsRetry |= queuedSplitFallback;
                     }
 
                     continue;
@@ -156,9 +158,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 {
                     exhaustedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot be prepared edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryRequest.Detail} requestedPocket={splitPlan.TargetPocketLength:0.##}m requestedBeforeCap={retryRequest.RequestedPocketLength:0.##}m.");
-                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not be prepared; {retryRequest.Detail}"))
+                    if (TryPromoteExhaustedSplitToShortEdgeFallback(candidate, $"retry split could not be prepared; {retryRequest.Detail}", out bool queuedSplitFallback))
                     {
                         exhaustedFallbackCount++;
+                        needsRetry |= queuedSplitFallback;
                     }
 
                     continue;
@@ -169,9 +172,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 {
                     exhaustedCount++;
                     Mod.LogDiagnostic($"[IntersectionTool] Preview retry cannot move far enough edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} {retryRequest.Detail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m.");
-                    if (TryPromoteExhaustedSplitToNodeMergeFallback(candidate, $"retry split could not move far enough; {retryRequest.Detail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m"))
+                    if (TryPromoteExhaustedSplitToShortEdgeFallback(candidate, $"retry split could not move far enough; {retryRequest.Detail} previous={candidate.SplitDistance:0.##}m next={splitPlan.SplitDistance:0.##}m", out bool queuedSplitFallback))
                     {
                         exhaustedFallbackCount++;
+                        needsRetry |= queuedSplitFallback;
                     }
 
                     continue;
@@ -307,8 +311,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return result;
         }
 
-        private bool TryPromoteExhaustedSplitToNodeMergeFallback(SplitCandidate candidate, string reason)
+        private bool TryPromoteExhaustedSplitToShortEdgeFallback(
+            SplitCandidate candidate,
+            string reason,
+            out bool queuedSplitFallback)
         {
+            queuedSplitFallback = false;
+
             if (candidate.Edge == Entity.Null ||
                 candidate.Node == Entity.Null ||
                 !EntityManager.Exists(candidate.Edge))
@@ -343,7 +352,24 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     prefabMatch,
                     out NodeMergeCandidate mergeCandidate))
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Exhausted split is not eligible for road-node merge fallback edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} node={FormatEntity(candidate.Node)} reason={reason}.");
+                if (!candidate.LateHalfFallbackAttempted &&
+                    TryBuildLateHalfPocketSplitDefinitionPlan(
+                        candidate.Node,
+                        candidate.Edge,
+                        out SplitDefinitionPlan lateHalfSplitPlan))
+                {
+                    SplitCandidate lateHalfCandidate = CreateSplitCandidate(
+                        candidate.Node,
+                        candidate.Edge,
+                        lateHalfSplitPlan,
+                        prefabMatch);
+                    m_NextPreviewCandidates.Add(lateHalfCandidate);
+                    queuedSplitFallback = true;
+                    Mod.LogDiagnostic($"[IntersectionTool] Promoted exhausted split preview to late half-pocket fallback edge={FormatEntity(candidate.Edge)} node={FormatEntity(candidate.Node)} farNode={FormatEntity(lateHalfSplitPlan.FarNode)} reason={reason} splitDistance={candidate.SplitDistance:0.##}m targetPocket={candidate.TargetPocketLength:0.##}m lateHalfSplit={lateHalfSplitPlan.CurvePosition:0.###} lateHalfDistance={lateHalfSplitPlan.SplitDistance:0.##}m lateHalfPocket={lateHalfSplitPlan.TargetPocketLength:0.##}m.");
+                    return true;
+                }
+
+                Mod.LogDiagnostic($"[IntersectionTool] Exhausted split is not eligible for short-edge fallback edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} node={FormatEntity(candidate.Node)} reason={reason} lateHalfAlreadyAttempted={candidate.LateHalfFallbackAttempted}.");
                 return false;
             }
 
@@ -375,11 +401,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             for (int i = 0; i < candidates.Count; i++)
             {
                 SplitCandidate candidate = candidates[i];
-                if (!TryBuildSplitDefinitionPlan(
-                        candidate.Node,
-                        candidate.Edge,
-                        out SplitDefinitionPlan splitPlan,
-                        candidate.TargetPocketLength))
+                if (!TryRebuildSplitDefinitionPlan(candidate, out SplitDefinitionPlan splitPlan))
                 {
                     Mod.LogDiagnostic($"[IntersectionTool] Cannot rebuild preview split edge={FormatEntity(candidate.Edge)} prefab={GetPrefabName(candidate.Edge)} attempt={candidate.Attempt}.");
                     continue;
@@ -431,6 +453,24 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_NodeMergeDefinitionsReadyForApply = false;
             Mod.LogDiagnostic($"[IntersectionTool] Rebuilt preview definitions for retry pass node={FormatEntity(previewNode)} splitDefinitions={queuedCount}, shortEdgePreviewDisabledOrDegraded={m_PreviewNodeMergeCandidates.Count}, visible={visibleCount}, retrying={retryCount}, exhausted={exhaustedCount}.");
             return result;
+        }
+
+        private bool TryRebuildSplitDefinitionPlan(SplitCandidate candidate, out SplitDefinitionPlan splitPlan)
+        {
+            if (candidate.GeometryMode == SplitGeometryMode.LateHalfPocket &&
+                candidate.Attempt == 0)
+            {
+                return TryBuildLateHalfPocketSplitDefinitionPlan(
+                    candidate.Node,
+                    candidate.Edge,
+                    out splitPlan);
+            }
+
+            return TryBuildSplitDefinitionPlan(
+                candidate.Node,
+                candidate.Edge,
+                out splitPlan,
+                candidate.TargetPocketLength);
         }
 
         private JobHandle RebuildSplitDefinitionsForApply(JobHandle inputDeps)
