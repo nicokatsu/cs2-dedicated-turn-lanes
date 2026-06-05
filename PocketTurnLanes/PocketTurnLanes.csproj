@@ -2,10 +2,19 @@
 
     <PropertyGroup>
         <Configurations>Debug;Release</Configurations>
-        <AssemblyName>DedicatedTurnLanes</AssemblyName>
+        <ModChannel Condition="'$(ModChannel)' == ''">Stable</ModChannel>
+        <ModId Condition="'$(ModChannel)' == 'Stable'">DedicatedTurnLanes</ModId>
+        <ModId Condition="'$(ModChannel)' == 'Alpha'">DedicatedTurnLanesAlpha</ModId>
+        <ModId Condition="'$(ModChannel)' == 'Dev'">DedicatedTurnLanesDev</ModId>
+        <ModDisplayName Condition="'$(ModChannel)' == 'Stable'">Dedicated Turn Lanes</ModDisplayName>
+        <ModDisplayName Condition="'$(ModChannel)' == 'Alpha'">Dedicated Turn Lanes Alpha</ModDisplayName>
+        <ModDisplayName Condition="'$(ModChannel)' == 'Dev'">Dedicated Turn Lanes Dev</ModDisplayName>
+        <AssemblyName Condition="'$(ModId)' != ''">$(ModId)</AssemblyName>
 
         <!--The file where mod information which is required for publishing mod on PDX mods are stored-->
-        <PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
+        <PublishConfigurationPath Condition="'$(PublishConfigurationPath)' == ''">Properties\PublishConfiguration.$(ModChannel).xml</PublishConfigurationPath>
+        <DefineConstants Condition="'$(ModChannel)' == 'Alpha'">$(DefineConstants);DEDICATED_TURN_LANES_ALPHA</DefineConstants>
+        <DefineConstants Condition="'$(ModChannel)' == 'Dev'">$(DefineConstants);DEDICATED_TURN_LANES_DEV</DefineConstants>
     </PropertyGroup>
 
     <!--Imports must be after PropertyGroup block-->
@@ -75,10 +84,24 @@
         <EmbeddedResource Include="L10N\lang\*.json" />
     </ItemGroup>
 
+    <Target Name="ValidateModChannel" BeforeTargets="BeforeBuild;Publish">
+        <Error Condition="'$(ModChannel)' != 'Stable' and '$(ModChannel)' != 'Alpha' and '$(ModChannel)' != 'Dev'" Text="Unsupported ModChannel '$(ModChannel)'. Use 'Stable', 'Alpha', or 'Dev'." />
+    </Target>
+
+    <Target Name="CleanOtherLocalModChannels" BeforeTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true' and '$(CleanOtherModChannels)' != 'false'">
+        <ItemGroup>
+            <OtherLocalModChannelDirs Include="$(LocalModsPath)\DedicatedTurnLanes" Condition="'$(LocalModsPath)' != '' and '$(ModId)' != 'DedicatedTurnLanes' and Exists('$(LocalModsPath)\DedicatedTurnLanes')" />
+            <OtherLocalModChannelDirs Include="$(LocalModsPath)\DedicatedTurnLanesAlpha" Condition="'$(LocalModsPath)' != '' and '$(ModId)' != 'DedicatedTurnLanesAlpha' and Exists('$(LocalModsPath)\DedicatedTurnLanesAlpha')" />
+            <OtherLocalModChannelDirs Include="$(LocalModsPath)\DedicatedTurnLanesDev" Condition="'$(LocalModsPath)' != '' and '$(ModId)' != 'DedicatedTurnLanesDev' and Exists('$(LocalModsPath)\DedicatedTurnLanesDev')" />
+        </ItemGroup>
+        <Message Text="[$(ModId)] Removing other local mod channel outputs: @(OtherLocalModChannelDirs)" Importance="high" Condition="'@(OtherLocalModChannelDirs)' != ''" />
+        <RemoveDir Directories="@(OtherLocalModChannelDirs)" Condition="'@(OtherLocalModChannelDirs)' != ''" />
+    </Target>
+
     <Target Name="BuildFrontend" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true'">
-        <Message Text="[DedicatedTurnLanes] Building UI module" Importance="high" />
-        <Exec Command="npm install --prefer-offline --no-audit" WorkingDirectory="UI" Condition="!Exists('UI\node_modules')" />
-        <Exec Command="npm run build" WorkingDirectory="UI" />
+        <Message Text="[$(ModId)] Building UI module channel=$(ModChannel)" Importance="high" />
+        <Exec Command="npm.cmd install --prefer-offline --no-audit" WorkingDirectory="UI" Condition="!Exists('UI\node_modules')" EnvironmentVariables="MOD_CHANNEL=$(ModChannel);MOD_ID=$(ModId);MOD_DISPLAY_NAME=$(ModDisplayName)" />
+        <Exec Command="npm.cmd run build" WorkingDirectory="UI" EnvironmentVariables="MOD_CHANNEL=$(ModChannel);MOD_ID=$(ModId);MOD_DISPLAY_NAME=$(ModDisplayName)" />
     </Target>
 
 </Project>

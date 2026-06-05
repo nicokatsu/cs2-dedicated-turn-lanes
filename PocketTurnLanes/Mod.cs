@@ -15,8 +15,19 @@ namespace PocketTurnLanes
 {
     public class Mod : IMod
     {
+#if DEDICATED_TURN_LANES_DEV
+        public const string ModChannel = "Dev";
+        public const string ModId = "DedicatedTurnLanesDev";
+        public const string DisplayName = "Dedicated Turn Lanes Dev";
+#elif DEDICATED_TURN_LANES_ALPHA
+        public const string ModChannel = "Alpha";
+        public const string ModId = "DedicatedTurnLanesAlpha";
+        public const string DisplayName = "Dedicated Turn Lanes Alpha";
+#else
+        public const string ModChannel = "Stable";
         public const string ModId = "DedicatedTurnLanes";
         public const string DisplayName = "Dedicated Turn Lanes";
+#endif
         public const string BindingGroup = ModId;
 
         public static readonly ILog log = LogManager.GetLogger(ModId).SetShowsErrorsInUI(false);
@@ -28,7 +39,7 @@ namespace PocketTurnLanes
 
         public void OnLoad(UpdateSystem updateSystem)
         {
-            LogEssential($"{DisplayName} {nameof(OnLoad)} bindingGroup={BindingGroup}");
+            LogEssential($"{DisplayName} {nameof(OnLoad)} channel={ModChannel} modId={ModId} bindingGroup={BindingGroup}");
 
             InitializeSettings();
             LogCurrentModAsset();

@@ -13,7 +13,7 @@ namespace PocketTurnLanes.Options
     [SettingsUIShowGroupName(TrafficGroup, DiagnosticsGroup)]
     public class DedicatedTurnLaneSettings : ModSetting
     {
-        public const string SettingsAssetName = "Dedicated Turn Lanes Settings";
+        public const string SettingsAssetName = Mod.DisplayName + " Settings";
         public const string GeneralTab = "General";
         public const string TrafficGroup = "Traffic";
         public const string DiagnosticsGroup = "Diagnostics";

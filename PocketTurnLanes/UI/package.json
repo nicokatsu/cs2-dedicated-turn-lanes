@@ -6,7 +6,11 @@
   },
   "scripts": {
     "build": "webpack",
+    "build:alpha": "webpack --env modChannel=Alpha",
+    "build:dev": "webpack --env modChannel=Dev",
     "dev": "webpack --watch",
+    "dev:alpha": "webpack --watch --env modChannel=Alpha",
+    "dev:dev": "webpack --watch --env modChannel=Dev",
     "update": "npx create-csii-ui-mod update",
     "clean": "npx create-csii-ui-mod clean"
   },
