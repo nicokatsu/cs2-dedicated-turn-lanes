@@ -59,6 +59,33 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 null);
             plan.PlannedConnections = TrafficCenterMappingBuilder.CountTrafficPlanConnections(plan.BySource);
 
+            string centerLoadValidationDetail = "loadValidation=notNeeded";
+            if (plan.BySource.Count > 0)
+            {
+                if (!TrySanitizeTrafficMappingDictionaryForLoad(
+                        request.IntersectionNode,
+                        plan.BySource,
+                        null,
+                        null,
+                        "center-rewrite",
+                        failOnRoadRepairInvalid: true,
+                        out TrafficLoadValidationStats centerLoadValidationStats,
+                        out centerLoadValidationDetail))
+                {
+                    Mod.LogEssential($"[SplitLaneConnectionFix] centerRewriteWriteFailed before mutation because core center rewrite would not survive Traffic load validation centerNode={FormatEntity(request.IntersectionNode)} pocketEdge={FormatEntity(request.PocketEdge)} {centerLoadValidationDetail} diagnostics={FormatStringList(plan.Diagnostics)}.");
+                    return false;
+                }
+
+                if (centerLoadValidationStats.InvalidConnections > 0 ||
+                    centerLoadValidationStats.InvalidSources > 0 ||
+                    centerLoadValidationStats.SanitizedConnections > 0)
+                {
+                    Mod.LogEssential($"[SplitLaneConnectionFix] Center Traffic rewrite load validation adjusted write data before mutation centerNode={FormatEntity(request.IntersectionNode)} pocketEdge={FormatEntity(request.PocketEdge)} {centerLoadValidationDetail}.");
+                }
+
+                plan.PlannedConnections = TrafficCenterMappingBuilder.CountTrafficPlanConnections(plan.BySource);
+            }
+
             foreach (KeyValuePair<SourceLaneKey, Dictionary<TargetLaneKey, LaneMapping>> pair in plan.BySource)
             {
                 if (!plan.SourceEndpoints.TryGetValue(pair.Key, out LaneEndpoint sourceEndpoint))
@@ -190,7 +217,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             trafficApi.EnsureModifiedConnectionsTag(EntityManager, request.IntersectionNode);
             wrote = writtenSources > 0 || removedExisting > 0;
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center Traffic rewrite write counts centerNode={FormatEntity(request.IntersectionNode)} pocketEdge={FormatEntity(request.PocketEdge)} leftHandTraffic={plan.LeftHandTraffic} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} trafficWriteOrder={GetTrafficWriteOrder(request.Mode)} removedExisting={removedExisting} removedLegacyOffScope={removedLegacyOffScope} preservedExisting={kept.Count} writtenSources={writtenSources} expectedSources={plan.BySource.Count} writtenConnections={writtenConnections} plannedConnections={plan.PlannedConnections} writtenUnsafeConnections={writtenUnsafeConnections} straightConnectionsSafe={plan.StraightConnectionsWrittenSafe} straightUnsafeCleared={plan.StraightUnsafeCleared} smallTurnClearedFromStraightLane={plan.SmallTurnConnectionsClearedFromStraightLane} roadBicycle={plan.BicycleConnectionsWrittenWithRoad} runtimePreserved={plan.PreservedRuntimeConnections} snapshotPreserved={plan.PreservedSnapshotConnections} preservedUturn={plan.PreservedUturnConnections} preservedNonRoad={plan.PreservedNonRoadConnections} preservedUnsafe={plan.PreservedUnsafeConnections} preservationSkipped={plan.PreservationSkipped} trafficPlanAudit=({TrafficMappingPlanAudit.FormatStats(plan.AuditStats)}) legacyOffScopeSourceKeys={FormatSourceLaneKeys(plan.LegacyOffScopeSourceKeys)} diagnostics={FormatStringList(plan.Diagnostics)}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center Traffic rewrite write counts centerNode={FormatEntity(request.IntersectionNode)} pocketEdge={FormatEntity(request.PocketEdge)} leftHandTraffic={plan.LeftHandTraffic} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} trafficWriteOrder={GetTrafficWriteOrder(request.Mode)} removedExisting={removedExisting} removedLegacyOffScope={removedLegacyOffScope} preservedExisting={kept.Count} writtenSources={writtenSources} expectedSources={plan.BySource.Count} writtenConnections={writtenConnections} plannedConnections={plan.PlannedConnections} writtenUnsafeConnections={writtenUnsafeConnections} straightConnectionsSafe={plan.StraightConnectionsWrittenSafe} straightUnsafeCleared={plan.StraightUnsafeCleared} smallTurnClearedFromStraightLane={plan.SmallTurnConnectionsClearedFromStraightLane} roadBicycle={plan.BicycleConnectionsWrittenWithRoad} runtimePreserved={plan.PreservedRuntimeConnections} snapshotPreserved={plan.PreservedSnapshotConnections} preservedUturn={plan.PreservedUturnConnections} preservedNonRoad={plan.PreservedNonRoadConnections} preservedUnsafe={plan.PreservedUnsafeConnections} preservationSkipped={plan.PreservationSkipped} trafficPlanAudit=({TrafficMappingPlanAudit.FormatStats(plan.AuditStats)}) trafficLoadValidation=({centerLoadValidationDetail}) legacyOffScopeSourceKeys={FormatSourceLaneKeys(plan.LegacyOffScopeSourceKeys)} diagnostics={FormatStringList(plan.Diagnostics)}.");
             return writtenSources == plan.BySource.Count &&
                    writtenConnections == plan.PlannedConnections;
         }

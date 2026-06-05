@@ -301,8 +301,11 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public int MissingGeneratedBufferSources;
             public int UnsafePreservedConnections;
             public int SuppressedTrafficUturnConnections;
+            public int InvalidLoadValidationConnections;
+            public int SanitizedLoadValidationConnections;
             public string SourceLanes;
             public string RewriteSourceLanes;
+            public string LoadValidationDetail;
             public string Reason;
         }
 

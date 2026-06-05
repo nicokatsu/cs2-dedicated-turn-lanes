@@ -112,6 +112,43 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
+            if (!TrySanitizeTrafficMappingDictionaryForLoad(
+                    request.SplitNode,
+                    plan.BySource,
+                    plan.RoadRepairSourceKeys,
+                    plan.StaleUturnSourceKeys,
+                    "outer-unified",
+                    failOnRoadRepairInvalid: true,
+                    out TrafficLoadValidationStats outerLoadValidationStats,
+                    out string outerLoadValidationDetail))
+            {
+                if (centerRewriteWritten)
+                {
+                    MarkCenterForLaneRebuild(request.IntersectionNode);
+                }
+
+                Mod.LogEssential($"[SplitLaneConnectionFix] Unified Traffic mapping write blocked before mutation because core road repair would not survive Traffic load validation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} {outerLoadValidationDetail} forwardMappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}].");
+                return false;
+            }
+
+            if (outerLoadValidationStats.InvalidConnections > 0 ||
+                outerLoadValidationStats.InvalidSources > 0 ||
+                outerLoadValidationStats.SanitizedConnections > 0)
+            {
+                Mod.LogEssential($"[SplitLaneConnectionFix] Unified Traffic mapping load validation adjusted write data before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} {outerLoadValidationDetail}.");
+            }
+
+            if (plan.BySource.Count == 0)
+            {
+                if (centerRewriteWritten)
+                {
+                    MarkCenterForLaneRebuild(request.IntersectionNode);
+                }
+
+                Mod.LogEssential($"[SplitLaneConnectionFix] Unified Traffic mapping write skipped after load validation removed all sources splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} {outerLoadValidationDetail}.");
+                return false;
+            }
+
             m_KeptTrafficConnections.Clear();
 
             int removedExisting = 0;
@@ -245,7 +282,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             MarkForLaneRebuild(request);
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping write counts splitNode={FormatEntity(request.SplitNode)} trafficWriteOrder={trafficWriteOrder} farRestoreSucceeded={farRestoreSucceeded} farRestoreDetail=({farRestoreDetail}) centerRewriteWritten={centerRewriteWritten} centerRewriteWriteSucceeded={centerRewriteWriteSucceeded} centerRewriteSources={centerPlan.BySource.Count} centerRewriteConnections={centerPlan.PlannedConnections} centerStraightUnsafeCleared={centerPlan.StraightUnsafeCleared} centerSmallTurnClearedFromStraightLane={centerPlan.SmallTurnConnectionsClearedFromStraightLane} centerRoadBicycle={centerPlan.BicycleConnectionsWrittenWithRoad} centerRuntimePreserved={centerPlan.PreservedRuntimeConnections} centerSnapshotPreserved={centerPlan.PreservedSnapshotConnections} centerPreservedUturn={centerPlan.PreservedUturnConnections} centerPreservedNonRoad={centerPlan.PreservedNonRoadConnections} centerPreservedUnsafe={centerPlan.PreservedUnsafeConnections} centerPreservationSkipped={centerPlan.PreservationSkipped} centerTrafficPlanAudit=({TrafficMappingPlanAudit.FormatStats(centerPlan.AuditStats)}) removedExisting={removedExisting} preservedExisting={m_KeptTrafficConnections.Count} preservedExistingForOverlay={preservedExistingForOverlay} preservedUnsafeForOverlay={preservedUnsafeForOverlay} writtenSources={writtenSources} writtenConnections={writtenConnections} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} roadRepairConnections={plan.RoadRepairConnections} writtenRoadRepairConnections={writtenRoadRepairConnections} preservationTrafficSnapshotConnections={plan.PreservationTrafficSnapshotConnections} preservationRuntimeConnections={plan.PreservationRuntimeConnections} preservationOverlaySnapshotConnections={plan.PreservationOverlaySnapshotConnections} preservationOverlayRuntimeConnections={plan.PreservationOverlayRuntimeConnections} preservationNonRoadConnections={plan.PreservationNonRoadConnections} preservationUnsafeConnections={plan.PreservationUnsafeConnections} preservationSuppressedUturnConnections={plan.AuditStats.SuppressedUturnConnections} preservationTrackConnections={plan.PreservationTrackConnections} preservationTrackOnlyTargets={plan.PreservationTrackOnlyTargets} preservationSharedTrackConnections={plan.PreservationSharedTrackConnections} preservationSkipped={plan.PreservationSkipped} forwardPreservationConnections={plan.ForwardPreservationConnections} reversePreservationConnections={plan.ReversePreservationConnections} writtenTrackConnections={writtenTrackConnections} staleUturnConnections={plan.StaleUturnConnections} staleUturnSources={plan.StaleUturnSourceKeys.Count} uturnSourcesCoveredByPlan={plan.AuditStats.UturnSourcesCoveredByPlan} uturnSourcesCoveredByEmptyOverride={plan.AuditStats.UturnSourcesCoveredByEmptyOverride} uturnSourcesLeftForDirectCleanup={plan.AuditStats.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={plan.AuditStats.RuntimeNonUturnSuppressionSkipped} writtenUnsafeConnections={writtenUnsafeConnections} trafficPlanAudit=({TrafficMappingPlanAudit.FormatStats(plan.AuditStats)}) forwardMappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] mergedMappings={FormatMappings(mergedMappings)} preservationSkippedReason={request.PreservationSkippedReason}.");
+            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping write counts splitNode={FormatEntity(request.SplitNode)} trafficWriteOrder={trafficWriteOrder} farRestoreSucceeded={farRestoreSucceeded} farRestoreDetail=({farRestoreDetail}) centerRewriteWritten={centerRewriteWritten} centerRewriteWriteSucceeded={centerRewriteWriteSucceeded} centerRewriteSources={centerPlan.BySource.Count} centerRewriteConnections={centerPlan.PlannedConnections} centerStraightUnsafeCleared={centerPlan.StraightUnsafeCleared} centerSmallTurnClearedFromStraightLane={centerPlan.SmallTurnConnectionsClearedFromStraightLane} centerRoadBicycle={centerPlan.BicycleConnectionsWrittenWithRoad} centerRuntimePreserved={centerPlan.PreservedRuntimeConnections} centerSnapshotPreserved={centerPlan.PreservedSnapshotConnections} centerPreservedUturn={centerPlan.PreservedUturnConnections} centerPreservedNonRoad={centerPlan.PreservedNonRoadConnections} centerPreservedUnsafe={centerPlan.PreservedUnsafeConnections} centerPreservationSkipped={centerPlan.PreservationSkipped} centerTrafficPlanAudit=({TrafficMappingPlanAudit.FormatStats(centerPlan.AuditStats)}) removedExisting={removedExisting} preservedExisting={m_KeptTrafficConnections.Count} preservedExistingForOverlay={preservedExistingForOverlay} preservedUnsafeForOverlay={preservedUnsafeForOverlay} writtenSources={writtenSources} writtenConnections={writtenConnections} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} roadRepairConnections={plan.RoadRepairConnections} writtenRoadRepairConnections={writtenRoadRepairConnections} preservationTrafficSnapshotConnections={plan.PreservationTrafficSnapshotConnections} preservationRuntimeConnections={plan.PreservationRuntimeConnections} preservationOverlaySnapshotConnections={plan.PreservationOverlaySnapshotConnections} preservationOverlayRuntimeConnections={plan.PreservationOverlayRuntimeConnections} preservationNonRoadConnections={plan.PreservationNonRoadConnections} preservationUnsafeConnections={plan.PreservationUnsafeConnections} preservationSuppressedUturnConnections={plan.AuditStats.SuppressedUturnConnections} preservationTrackConnections={plan.PreservationTrackConnections} preservationTrackOnlyTargets={plan.PreservationTrackOnlyTargets} preservationSharedTrackConnections={plan.PreservationSharedTrackConnections} preservationSkipped={plan.PreservationSkipped} forwardPreservationConnections={plan.ForwardPreservationConnections} reversePreservationConnections={plan.ReversePreservationConnections} writtenTrackConnections={writtenTrackConnections} staleUturnConnections={plan.StaleUturnConnections} staleUturnSources={plan.StaleUturnSourceKeys.Count} uturnSourcesCoveredByPlan={plan.AuditStats.UturnSourcesCoveredByPlan} uturnSourcesCoveredByEmptyOverride={plan.AuditStats.UturnSourcesCoveredByEmptyOverride} uturnSourcesLeftForDirectCleanup={plan.AuditStats.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSuppressionSkipped={plan.AuditStats.RuntimeNonUturnSuppressionSkipped} writtenUnsafeConnections={writtenUnsafeConnections} trafficPlanAudit=({TrafficMappingPlanAudit.FormatStats(plan.AuditStats)}) trafficLoadValidation=({outerLoadValidationDetail}) forwardMappings={FormatMappings(request.Mappings)} reverseMappings={FormatMappings(request.ReverseMappings)} preservationMappings=forward[{FormatMappings(request.PreservationForwardMappings)}] reverse[{FormatMappings(request.PreservationReverseMappings)}] mergedMappings={FormatMappings(mergedMappings)} preservationSkippedReason={request.PreservationSkippedReason}.");
             return writtenSources > 0;
         }
 

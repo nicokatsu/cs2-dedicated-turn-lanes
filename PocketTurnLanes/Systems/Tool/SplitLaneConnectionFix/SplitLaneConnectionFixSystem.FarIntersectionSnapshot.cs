@@ -324,24 +324,28 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            object modifiedBuffer = GetOrReplaceTrafficModifiedConnectionsBuffer(
-                trafficApi,
-                snapshot.Node,
-                out int removedExisting);
-            if (modifiedBuffer == null)
+            if (!TryCreateTrafficLoadValidationContext(
+                    snapshot.Node,
+                    "far-restore",
+                    out TrafficLoadValidationContext loadValidationContext,
+                    out string loadValidationContextReason))
             {
-                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Far intersection Traffic restore failed before mutation splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(snapshot.Node)} outerEdge={FormatEntity(request.OuterEdge)} reason=modifiedBufferUnavailable snapshot={detail}.");
+                Mod.LogEssential($"[SplitLaneConnectionFix] Far intersection Traffic restore skipped before mutation because owner node cannot pass Traffic load validation splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(snapshot.Node)} outerEdge={FormatEntity(request.OuterEdge)} reason={loadValidationContextReason} snapshot={detail}.");
                 return false;
             }
 
             int writtenSources = 0;
             int writtenConnections = 0;
+            int removedExisting = 0;
             int skippedSources = 0;
             int skippedConnections = 0;
             int remappedSourceEntries = 0;
             int remappedGeneratedEdges = 0;
             int remappedLaneIndexes = 0;
             List<string> skipSamples = new List<string>(8);
+            List<TrafficSourceSnapshot> sourcesToWrite = new List<TrafficSourceSnapshot>(snapshot.Entries.Length);
+            HashSet<SourceLaneKey> rewriteSourceKeys = new HashSet<SourceLaneKey>();
+            TrafficLoadValidationStats loadValidationStats = CreateTrafficLoadValidationStats();
 
             for (int i = 0; i < snapshot.Entries.Length; i++)
             {
@@ -524,6 +528,78 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 sourceToWrite.SourceCarriagewayAndGroup = sourceCarriagewayAndGroup;
                 sourceToWrite.SourceLanePosition = sourceLanePosition;
                 sourceToWrite.Connections = remappedConnections.ToArray();
+
+                bool allowEmptySource = connections.Length == 0;
+                if (remappedConnections.Count == 0 && connections.Length > 0)
+                {
+                    skippedSources++;
+                    AddFarSnapshotSkipSample(skipSamples, $"sourceNoRemappedConnections {FormatEntity(sourceEdge)}:{sourceLaneIndex} originalConnections={connections.Length}");
+                    continue;
+                }
+
+                if (!TrySanitizeTrafficSourceSnapshotForLoad(
+                        loadValidationContext,
+                        sourceToWrite,
+                        allowEmptySource,
+                        "far-restore",
+                        out TrafficSourceSnapshot sanitizedSource,
+                        ref loadValidationStats))
+                {
+                    skippedSources++;
+                    continue;
+                }
+
+                sourcesToWrite.Add(sanitizedSource);
+                rewriteSourceKeys.Add(new SourceLaneKey(sanitizedSource.SourceEdge, sanitizedSource.SourceLaneIndex));
+            }
+
+            if (sourcesToWrite.Count == 0)
+            {
+                detail = $"snapshot={FormatFarSnapshot(snapshot)} removedExisting=0 writtenSources=0 expectedSources={snapshot.Entries.Length} writtenConnections=0 skippedSources={skippedSources} skippedConnections={skippedConnections} remappedSourceEntries={remappedSourceEntries} remappedGeneratedEdges={remappedGeneratedEdges} remappedLaneIndexes={remappedLaneIndexes} trafficLoadValidation=({FormatTrafficLoadValidationStats(loadValidationStats, rewriteSourceKeys)}) skipSamples={FormatStringList(skipSamples)}";
+                Mod.LogEssential($"[SplitLaneConnectionFix] Far intersection Traffic restore skipped before mutation because no remapped source survived load validation splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(snapshot.Node)} continuation={FormatEntity(snapshot.ContinuationEdge)} outerEdge={FormatEntity(request.OuterEdge)} trafficWriteOrder={GetTrafficWriteOrder(request.Mode)} {detail}.");
+                return false;
+            }
+
+            object modifiedBuffer = trafficApi.GetOrAddModifiedLaneConnectionsBuffer(EntityManager, snapshot.Node);
+            if (modifiedBuffer == null)
+            {
+                detail = $"snapshot={FormatFarSnapshot(snapshot)} reason=modifiedBufferUnavailable trafficLoadValidation=({FormatTrafficLoadValidationStats(loadValidationStats, rewriteSourceKeys)})";
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Far intersection Traffic restore failed before mutation splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(snapshot.Node)} outerEdge={FormatEntity(request.OuterEdge)} {detail}.");
+                return false;
+            }
+
+            m_KeptTrafficConnections.Clear();
+            int originalLength = trafficApi.GetBufferLength(modifiedBuffer);
+            for (int i = 0; i < originalLength; i++)
+            {
+                object existing = trafficApi.GetBufferItem(modifiedBuffer, i);
+                SourceLaneKey existingKey = new SourceLaneKey(
+                    trafficApi.GetModifiedConnectionEdge(existing),
+                    trafficApi.GetModifiedConnectionLaneIndex(existing));
+                Entity modifiedEntity = trafficApi.GetModifiedConnectionEntity(existing);
+                if (rewriteSourceKeys.Contains(existingKey))
+                {
+                    removedExisting++;
+                    if (modifiedEntity != Entity.Null && EntityManager.Exists(modifiedEntity))
+                    {
+                        AddMarkerIfMissing<Deleted>(modifiedEntity);
+                    }
+
+                    continue;
+                }
+
+                m_KeptTrafficConnections.Add(existing);
+            }
+
+            trafficApi.ClearBuffer(modifiedBuffer);
+            for (int i = 0; i < m_KeptTrafficConnections.Count; i++)
+            {
+                trafficApi.AddBufferElement(modifiedBuffer, m_KeptTrafficConnections[i]);
+            }
+
+            for (int i = 0; i < sourcesToWrite.Count; i++)
+            {
+                TrafficSourceSnapshot sourceToWrite = sourcesToWrite[i];
                 if (!TryWriteTrafficSourceSnapshot(
                         trafficApi,
                         snapshot.Node,
@@ -532,7 +608,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         out int sourceWrittenConnections))
                 {
                     skippedSources++;
-                    AddFarSnapshotSkipSample(skipSamples, $"writeSource {FormatEntity(sourceEdge)}:{sourceLaneIndex} failed");
+                    AddFarSnapshotSkipSample(skipSamples, $"writeSource {FormatEntity(sourceToWrite.SourceEdge)}:{sourceToWrite.SourceLaneIndex} failed");
                     continue;
                 }
 
@@ -542,7 +618,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             trafficApi.EnsureModifiedConnectionsTag(EntityManager, snapshot.Node);
             MarkCenterForLaneRebuild(snapshot.Node);
-            detail = $"snapshot={FormatFarSnapshot(snapshot)} removedExisting={removedExisting} writtenSources={writtenSources} expectedSources={snapshot.Entries.Length} writtenConnections={writtenConnections} skippedSources={skippedSources} skippedConnections={skippedConnections} remappedSourceEntries={remappedSourceEntries} remappedGeneratedEdges={remappedGeneratedEdges} remappedLaneIndexes={remappedLaneIndexes} skipSamples={FormatStringList(skipSamples)}";
+            detail = $"snapshot={FormatFarSnapshot(snapshot)} removedExisting={removedExisting} preservedExisting={m_KeptTrafficConnections.Count} writtenSources={writtenSources} expectedSources={snapshot.Entries.Length} writtenConnections={writtenConnections} skippedSources={skippedSources} skippedConnections={skippedConnections} remappedSourceEntries={remappedSourceEntries} remappedGeneratedEdges={remappedGeneratedEdges} remappedLaneIndexes={remappedLaneIndexes} trafficLoadValidation=({FormatTrafficLoadValidationStats(loadValidationStats, rewriteSourceKeys)}) skipSamples={FormatStringList(skipSamples)}";
             Mod.LogDiagnostic($"[SplitLaneConnectionFix] Restored far intersection Traffic snapshot splitNode={FormatEntity(request.SplitNode)} farNode={FormatEntity(snapshot.Node)} continuation={FormatEntity(snapshot.ContinuationEdge)} outerEdge={FormatEntity(request.OuterEdge)} trafficWriteOrder={GetTrafficWriteOrder(request.Mode)} {detail}.");
             return skippedSources == 0 && skippedConnections == 0;
         }
