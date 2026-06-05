@@ -29,6 +29,7 @@ namespace PocketTurnLanes.Tool.Traffic
                     sourceEndpoints,
                     smallExclusive[0],
                     bigStraight[0],
+                    bigExclusive,
                     smallStraight,
                     activePocketScope,
                     pocketExtraCenterLane,
@@ -61,6 +62,7 @@ namespace PocketTurnLanes.Tool.Traffic
             IReadOnlyList<LaneEndpoint> sourceEndpoints,
             CenterLaneMovementSummary smallLane,
             CenterLaneMovementSummary bigLane,
+            IReadOnlyList<CenterLaneMovementSummary> bigExclusive,
             IReadOnlyList<CenterLaneMovementSummary> smallStraight,
             bool activePocketScope,
             int pocketExtraCenterLane,
@@ -81,6 +83,12 @@ namespace PocketTurnLanes.Tool.Traffic
             if (bigLane.Straight.Count != 1)
             {
                 skipReason = $"ambiguousBigStraightConnections count={bigLane.Straight.Count}";
+                return false;
+            }
+
+            if (bigExclusive.Count > 0)
+            {
+                skipReason = $"alreadyHasBigTurnExclusive count={bigExclusive.Count}";
                 return false;
             }
 
