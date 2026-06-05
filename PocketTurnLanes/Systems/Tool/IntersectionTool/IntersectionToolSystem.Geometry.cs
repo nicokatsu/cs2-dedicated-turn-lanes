@@ -485,9 +485,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return false;
             }
 
-            if (!IsValidIntersection(farNode))
+            if (!TryIsMultiRoadIntersectionEndpoint(
+                    farNode,
+                    out int farConnectedEdges,
+                    out int farRoadEdges,
+                    out string farIntersectionDetail))
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)}: far node is not a valid intersection for opposite-side lane repair.");
+                Mod.LogDiagnostic($"[IntersectionTool] Balanced road-node merge rejected shortEdge={FormatEntity(edgeEntity)} continuation={FormatEntity(continuationEdge)} farNode={FormatEntity(farNode)}: far node is not a multi-road intersection for opposite-side lane repair farConnectedEdges={farConnectedEdges} farRoadEdges={farRoadEdges}. {farIntersectionDetail}");
                 return false;
             }
 
@@ -983,6 +987,18 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return true;
         }
 
+        private bool IsMultiRoadIntersectionEndpoint(Entity nodeEntity)
+        {
+            int connectedEdgeCount;
+            int roadEdgeCount;
+            string detail;
+            return TryIsMultiRoadIntersectionEndpoint(
+                nodeEntity,
+                out connectedEdgeCount,
+                out roadEdgeCount,
+                out detail);
+        }
+
         private bool TryIsMultiRoadIntersectionEndpoint(
             Entity nodeEntity,
             out int connectedEdgeCount,
@@ -1019,7 +1035,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             connectedEdgeCount = connectedEdges.Length;
             roadEdgeCount = CountRoadConnectedEdges(connectedEdges);
             detail = $"connectedEdges={connectedEdgeCount} roadEdges={roadEdgeCount}";
-            return connectedEdgeCount > 2 && roadEdgeCount > 2;
+            return roadEdgeCount > 2;
         }
 
         private bool TryCalculateMergedSplitGeometry(

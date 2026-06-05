@@ -27,7 +27,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return Entity.Null;
             }
 
-            if (IsValidIntersection(entity))
+            if (IsMultiRoadIntersectionEndpoint(entity))
             {
                 return entity;
             }
@@ -63,7 +63,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 }
             }
 
-            return IsValidIntersection(closestNode) ? closestNode : Entity.Null;
+            return IsMultiRoadIntersectionEndpoint(closestNode) ? closestNode : Entity.Null;
         }
 
         private bool ShouldIgnorePreviewNodeMergeEdgeHit(Entity edgeEntity, RaycastHit hit)
@@ -131,7 +131,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return false;
         }
 
-        private bool IsValidIntersection(Entity entity)
+        private bool IsValidNode(Entity entity)
         {
             if (entity == Entity.Null || !EntityManager.Exists(entity))
             {
