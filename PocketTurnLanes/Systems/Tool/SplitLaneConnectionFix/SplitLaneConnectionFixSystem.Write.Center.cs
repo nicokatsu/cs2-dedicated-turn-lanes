@@ -76,9 +76,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     return false;
                 }
 
-                if (centerLoadValidationStats.InvalidConnections > 0 ||
-                    centerLoadValidationStats.InvalidSources > 0 ||
-                    centerLoadValidationStats.SanitizedConnections > 0)
+                if (centerLoadValidationStats.ShouldLogAdjustment)
                 {
                     Mod.LogEssential($"[SplitLaneConnectionFix] Center Traffic rewrite load validation adjusted write data before mutation centerNode={FormatEntity(request.IntersectionNode)} pocketEdge={FormatEntity(request.PocketEdge)} {centerLoadValidationDetail}.");
                 }

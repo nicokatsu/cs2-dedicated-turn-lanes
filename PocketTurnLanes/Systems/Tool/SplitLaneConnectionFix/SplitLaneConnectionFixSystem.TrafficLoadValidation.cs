@@ -12,8 +12,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 {
     public partial class SplitLaneConnectionFixSystem
     {
-        private const int MaxTrafficLoadValidationSamples = 8;
-
         private sealed class TrafficLoadValidationContext
         {
             public readonly Dictionary<Entity, TrafficLoadValidationEdge> Edges =
@@ -30,20 +28,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             public bool IsRoad;
             public bool IsBike;
             public TrackTypes TrackTypes;
-        }
-
-        private struct TrafficLoadValidationStats
-        {
-            public int ValidSources;
-            public int InvalidSources;
-            public int RemovedSources;
-            public int ValidConnections;
-            public int InvalidConnections;
-            public int InvalidRoadRepairConnections;
-            public int InvalidPreservationConnections;
-            public int SanitizedConnections;
-            public int EmptySourcesKept;
-            public List<string> Samples;
         }
 
         private bool TryCreateTrafficLoadValidationContext(
@@ -341,7 +325,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             out TrafficLoadValidationStats stats,
             out string detail)
         {
-            stats = CreateTrafficLoadValidationStats();
+            stats = TrafficLoadValidationStats.Create();
             detail = string.Empty;
             if (bySource == null || bySource.Count == 0)
             {
@@ -354,7 +338,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 detail = contextReason;
                 stats.InvalidSources = bySource.Count;
                 stats.InvalidRoadRepairConnections = CountNonPreservationMappings(bySource);
-                AddTrafficLoadValidationSample(ref stats, contextReason);
+                stats.AddSample(contextReason);
                 return false;
             }
 
@@ -383,7 +367,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         stats.InvalidPreservationConnections += mappings.Count;
                     }
 
-                    AddTrafficLoadValidationSample(ref stats, $"{stage}:source {sourceReason}");
+                    stats.AddSample($"{stage}:source {sourceReason}");
                     bySource.Remove(sourceKey);
                     continue;
                 }
@@ -411,7 +395,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                             stats.InvalidPreservationConnections++;
                         }
 
-                        AddTrafficLoadValidationSample(ref stats, $"{stage}:mapping {mappingReason} mapping={FormatMapping(mapping)}");
+                        stats.AddSample($"{stage}:mapping {mappingReason} mapping={FormatMapping(mapping)}");
                         continue;
                     }
 
@@ -437,7 +421,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                         stats.InvalidRoadRepairConnections++;
                     }
 
-                    AddTrafficLoadValidationSample(ref stats, $"{stage}:sourceRemovedBecauseNoValidConnections ownerNode={FormatEntity(ownerNode)} source={FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex} roadRepair={sourceHasRoadRepair}");
+                    stats.AddSample($"{stage}:sourceRemovedBecauseNoValidConnections ownerNode={FormatEntity(ownerNode)} source={FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex} roadRepair={sourceHasRoadRepair}");
                     bySource.Remove(sourceKey);
                     continue;
                 }
@@ -455,7 +439,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             bool failed = failOnRoadRepairInvalid && stats.InvalidRoadRepairConnections > 0;
-            detail = FormatTrafficLoadValidationStats(stats, bySource.Keys);
+            detail = stats.Format(bySource.Keys);
             return !failed;
         }
 
@@ -477,7 +461,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     out string sourceReason))
             {
                 stats.InvalidSources++;
-                AddTrafficLoadValidationSample(ref stats, $"{stage}:source {sourceReason}");
+                stats.AddSample($"{stage}:source {sourceReason}");
                 return false;
             }
 
@@ -498,7 +482,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 {
                     stats.InvalidConnections++;
                     stats.InvalidPreservationConnections++;
-                    AddTrafficLoadValidationSample(ref stats, $"{stage}:snapshotConnection {connectionReason}");
+                    stats.AddSample($"{stage}:snapshotConnection {connectionReason}");
                     continue;
                 }
 
@@ -516,7 +500,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             if (validConnections.Count == 0 && connections.Length > 0 && !allowEmptySource)
             {
                 stats.RemovedSources++;
-                AddTrafficLoadValidationSample(ref stats, $"{stage}:snapshotSourceRemovedBecauseNoValidConnections ownerNode={FormatEntity(context.OwnerNode)} source={FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex}");
+                stats.AddSample($"{stage}:snapshotSourceRemovedBecauseNoValidConnections ownerNode={FormatEntity(context.OwnerNode)} source={FormatEntity(sourceKey.Edge)}:{sourceKey.LaneIndex}");
                 return false;
             }
 
@@ -529,27 +513,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             return true;
-        }
-
-        private static TrafficLoadValidationStats CreateTrafficLoadValidationStats()
-        {
-            return new TrafficLoadValidationStats
-            {
-                Samples = new List<string>(MaxTrafficLoadValidationSamples)
-            };
-        }
-
-        private static void AddTrafficLoadValidationSample(ref TrafficLoadValidationStats stats, string sample)
-        {
-            if (stats.Samples == null)
-            {
-                stats.Samples = new List<string>(MaxTrafficLoadValidationSamples);
-            }
-
-            if (stats.Samples.Count < MaxTrafficLoadValidationSamples)
-            {
-                stats.Samples.Add(sample);
-            }
         }
 
         private static bool SourceHasRoadRepairMapping(Dictionary<TargetLaneKey, LaneMapping> mappings)
@@ -586,18 +549,6 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             return count;
-        }
-
-        private static string FormatTrafficLoadValidationStats(
-            TrafficLoadValidationStats stats,
-            IEnumerable<SourceLaneKey> ownedSourceKeys)
-        {
-            string state = stats.InvalidRoadRepairConnections > 0 || stats.InvalidSources > 0 && stats.ValidSources == 0
-                ? "failed"
-                : stats.InvalidConnections > 0 || stats.InvalidSources > 0 || stats.SanitizedConnections > 0
-                    ? "partial"
-                    : "passed";
-            return $"loadValidation={state} validSources={stats.ValidSources} invalidSources={stats.InvalidSources} removedSources={stats.RemovedSources} validConnections={stats.ValidConnections} invalidConnections={stats.InvalidConnections} invalidRoadRepair={stats.InvalidRoadRepairConnections} invalidPreservationDropped={stats.InvalidPreservationConnections} sanitizedConnections={stats.SanitizedConnections} emptySourcesKept={stats.EmptySourcesKept} ownedSourceKeys={FormatSourceLaneKeys(ownedSourceKeys)} samples={FormatStringList(stats.Samples)}";
         }
 
         private static string FormatTrafficLoadValidationLaneIndexes(TrafficLoadValidationEdge edge)

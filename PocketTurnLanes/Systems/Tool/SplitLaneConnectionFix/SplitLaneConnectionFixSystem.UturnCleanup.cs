@@ -167,7 +167,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             m_UturnCleanupSourcePlans.Clear();
             m_UturnCleanupConnectionPlans.Clear();
             HashSet<SourceLaneKey> rewriteSourceKeys = new HashSet<SourceLaneKey>();
-            TrafficLoadValidationStats loadValidationStats = CreateTrafficLoadValidationStats();
+            TrafficLoadValidationStats loadValidationStats = TrafficLoadValidationStats.Create();
             foreach (SourceLaneKey sourceKey in staleSourceKeys.OrderBy(key => key.Edge.Index).ThenBy(key => key.LaneIndex))
             {
                 bool copiedTrafficSnapshot = TryAppendExistingTrafficCleanupMappings(
@@ -195,7 +195,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             stats.RewriteSourceLanes = FormatSourceLaneKeys(rewriteSourceKeys);
             stats.InvalidLoadValidationConnections = loadValidationStats.InvalidConnections + loadValidationStats.InvalidSources;
             stats.SanitizedLoadValidationConnections = loadValidationStats.SanitizedConnections;
-            stats.LoadValidationDetail = FormatTrafficLoadValidationStats(loadValidationStats, rewriteSourceKeys);
+            stats.LoadValidationDetail = loadValidationStats.Format(rewriteSourceKeys);
             if (rewriteSourceKeys.Count == 0)
             {
                 stats.Reason = stats.MissingTrafficSnapshotSources > 0
@@ -346,7 +346,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     out string sourceValidationReason))
             {
                 loadValidationStats.InvalidSources++;
-                AddTrafficLoadValidationSample(ref loadValidationStats, $"cleanup-only:source {sourceValidationReason}");
+                loadValidationStats.AddSample($"cleanup-only:source {sourceValidationReason}");
                 return false;
             }
 
@@ -410,7 +410,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     {
                         loadValidationStats.InvalidConnections++;
                         loadValidationStats.InvalidPreservationConnections++;
-                        AddTrafficLoadValidationSample(ref loadValidationStats, $"cleanup-only:connection {connectionValidationReason}");
+                        loadValidationStats.AddSample($"cleanup-only:connection {connectionValidationReason}");
                         continue;
                     }
 

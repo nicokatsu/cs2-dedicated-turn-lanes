@@ -131,9 +131,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 return false;
             }
 
-            if (outerLoadValidationStats.InvalidConnections > 0 ||
-                outerLoadValidationStats.InvalidSources > 0 ||
-                outerLoadValidationStats.SanitizedConnections > 0)
+            if (outerLoadValidationStats.ShouldLogAdjustment)
             {
                 Mod.LogEssential($"[SplitLaneConnectionFix] Unified Traffic mapping load validation adjusted write data before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} {outerLoadValidationDetail}.");
             }
