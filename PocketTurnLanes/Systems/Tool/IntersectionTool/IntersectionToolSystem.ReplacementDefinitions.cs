@@ -96,13 +96,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private static SplitCandidate CreateSplitCandidate(
             NodeMergeCandidate candidate,
             Entity edge,
-            SplitDefinitionRequest request,
-            float curvePosition,
-            float splitDistance,
-            float intersectionDistance,
-            float pocketDistance,
-            float targetDistance,
-            float targetPocketLength)
+            SplitDefinitionPlan splitPlan)
         {
             return new SplitCandidate
             {
@@ -112,21 +106,19 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 SourcePrefab = candidate.MergeRequest.Prefab,
                 TargetPrefab = candidate.TargetPrefab,
                 LaneRepairMode = candidate.LaneRepairMode,
-                GeometryMode = candidate.Mode == NodeMergeMode.SourcePrefabContinuationHalfPocket
-                    ? SplitGeometryMode.LateHalfPocket
-                    : SplitGeometryMode.Standard,
-                LateHalfFallbackAttempted = candidate.Mode == NodeMergeMode.SourcePrefabContinuationHalfPocket,
+                GeometryMode = splitPlan.GeometryMode,
+                LateHalfFallbackAttempted = splitPlan.GeometryMode == SplitGeometryMode.LateHalfPocket,
                 SourcePrefabMergeHalfFallbackEligible = candidate.Mode == NodeMergeMode.SourcePrefabContinuation,
                 InvertTarget = candidate.PostMergeInvertTarget,
                 HasTargetUpgrade = candidate.HasTargetUpgrade,
                 TargetUpgrade = candidate.TargetUpgrade,
-                CurvePosition = curvePosition,
-                HitPosition = request.HitPosition,
-                TargetDistance = targetDistance,
-                TargetPocketLength = targetPocketLength,
-                SplitDistance = splitDistance,
-                IntersectionDistance = intersectionDistance,
-                PocketDistance = pocketDistance,
+                CurvePosition = splitPlan.CurvePosition,
+                HitPosition = splitPlan.Request.HitPosition,
+                TargetDistance = splitPlan.TargetDistance,
+                TargetPocketLength = splitPlan.TargetPocketLength,
+                SplitDistance = splitPlan.SplitDistance,
+                IntersectionDistance = splitPlan.IntersectionDistance,
+                PocketDistance = splitPlan.PocketDistance,
                 OriginalForwardLanes = candidate.OriginalForwardLanes,
                 OriginalBackwardLanes = candidate.OriginalBackwardLanes,
                 TargetForwardLanes = candidate.TargetForwardLanes,

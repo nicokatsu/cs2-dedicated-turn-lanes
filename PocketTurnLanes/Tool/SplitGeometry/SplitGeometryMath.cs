@@ -15,6 +15,24 @@ namespace PocketTurnLanes.Tool.SplitGeometry
         public float3 HitPosition;
     }
 
+    internal enum HalfSplitTargetPlanFailure
+    {
+        None,
+        PocketTooShort,
+        OutsideSafeRange
+    }
+
+    internal struct HalfSplitTargetPlan
+    {
+        public float UsableLength;
+        public float HalfPocketLength;
+        public float TargetDistance;
+        public float CurvePosition;
+        public float SplitDistance;
+        public float PocketDistance;
+        public float3 HitPosition;
+    }
+
     internal struct SplitRetryRequest
     {
         public int NextAttempt;
@@ -262,6 +280,43 @@ namespace PocketTurnLanes.Tool.SplitGeometry
             plan.CurvePosition = math.clamp(desiredPosition, minSplit, maxSplit);
             plan.SplitDistance = GetCurveDistanceFromNode(bezier, fromStart, plan.CurvePosition);
             plan.PocketDistance = math.max(0f, plan.SplitDistance - intersectionDistance);
+            plan.HitPosition = MathUtils.Position(bezier, plan.CurvePosition);
+            return true;
+        }
+
+        internal static bool TryCalculateHalfSplitTargetPlan(
+            Bezier4x3 bezier,
+            bool fromStart,
+            float minSplit,
+            float maxSplit,
+            float splitLength,
+            float nearIntersectionDistance,
+            float farIntersectionDistance,
+            out HalfSplitTargetPlan plan,
+            out HalfSplitTargetPlanFailure failure)
+        {
+            plan = default;
+            failure = HalfSplitTargetPlanFailure.None;
+
+            plan.UsableLength = splitLength - nearIntersectionDistance - farIntersectionDistance;
+            plan.HalfPocketLength = plan.UsableLength * 0.5f;
+            plan.TargetDistance = nearIntersectionDistance + plan.HalfPocketLength;
+
+            if (!HasMinimumPocketLength(plan.HalfPocketLength))
+            {
+                failure = HalfSplitTargetPlanFailure.PocketTooShort;
+                return false;
+            }
+
+            plan.CurvePosition = GetCurvePositionAtDistance(bezier, fromStart, plan.TargetDistance);
+            if (plan.CurvePosition < minSplit || plan.CurvePosition > maxSplit)
+            {
+                failure = HalfSplitTargetPlanFailure.OutsideSafeRange;
+                return false;
+            }
+
+            plan.SplitDistance = GetCurveDistanceFromNode(bezier, fromStart, plan.CurvePosition);
+            plan.PocketDistance = math.max(0f, plan.SplitDistance - nearIntersectionDistance);
             plan.HitPosition = MathUtils.Position(bezier, plan.CurvePosition);
             return true;
         }

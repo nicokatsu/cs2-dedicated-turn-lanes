@@ -951,28 +951,34 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 out float maximumRequestedPocketLength,
                 out bool retryOverride);
 
-            usableLength = splitLength - nearIntersectionDistance - farIntersectionDistance;
-            halfPocketLength = usableLength * 0.5f;
-            if (!HasMinimumPocketLength(halfPocketLength))
+            if (!TryCalculateHalfSplitTargetPlan(
+                    splitBezier,
+                    nodeIsStartOnSplitEdge,
+                    minSplit,
+                    maxSplit,
+                    splitLength,
+                    nearIntersectionDistance,
+                    farIntersectionDistance,
+                    out HalfSplitTargetPlan halfPlan,
+                    out HalfSplitTargetPlanFailure halfPlanFailure))
             {
-                Mod.LogDiagnostic($"[IntersectionTool] Late half-pocket geometry rejected context={context} sourceEdge={FormatEntity(sourceEdgeEntity)} farNode={FormatEntity(farNode)}: half usable length is too small length={splitLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m half={halfPocketLength:0.##}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.##}m.");
+                if (halfPlanFailure == HalfSplitTargetPlanFailure.PocketTooShort)
+                {
+                    Mod.LogDiagnostic($"[IntersectionTool] Late half-pocket geometry rejected context={context} sourceEdge={FormatEntity(sourceEdgeEntity)} farNode={FormatEntity(farNode)}: half usable length is too small length={splitLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={halfPlan.UsableLength:0.##}m half={halfPlan.HalfPocketLength:0.##}m minPocket={MinimumPocketLaneLength:0.##}m effectiveMinPocket={GetEffectiveMinimumPocketLength():0.##}m.");
+                    return false;
+                }
+
+                Mod.LogDiagnostic($"[IntersectionTool] Late half-pocket geometry rejected context={context} sourceEdge={FormatEntity(sourceEdgeEntity)} farNode={FormatEntity(farNode)}: half split is outside safe split range split={halfPlan.CurvePosition:0.###} minSplit={minSplit:0.###} maxSplit={maxSplit:0.###} targetDistance={halfPlan.TargetDistance:0.##}m length={splitLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={halfPlan.UsableLength:0.##}m half={halfPlan.HalfPocketLength:0.##}m.");
                 return false;
             }
 
-            targetDistance = nearIntersectionDistance + halfPocketLength;
-            splitPosition = GetCurvePositionAtDistance(
-                splitBezier,
-                nodeIsStartOnSplitEdge,
-                targetDistance);
-            if (splitPosition < minSplit || splitPosition > maxSplit)
-            {
-                Mod.LogDiagnostic($"[IntersectionTool] Late half-pocket geometry rejected context={context} sourceEdge={FormatEntity(sourceEdgeEntity)} farNode={FormatEntity(farNode)}: half split is outside safe split range split={splitPosition:0.###} minSplit={minSplit:0.###} maxSplit={maxSplit:0.###} targetDistance={targetDistance:0.##}m length={splitLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m half={halfPocketLength:0.##}m.");
-                return false;
-            }
-
-            splitDistance = GetCurveDistanceFromNode(splitBezier, nodeIsStartOnSplitEdge, splitPosition);
-            pocketDistance = math.max(0f, splitDistance - nearIntersectionDistance);
-            hitPosition = MathUtils.Position(splitBezier, splitPosition);
+            usableLength = halfPlan.UsableLength;
+            halfPocketLength = halfPlan.HalfPocketLength;
+            targetDistance = halfPlan.TargetDistance;
+            splitPosition = halfPlan.CurvePosition;
+            splitDistance = halfPlan.SplitDistance;
+            pocketDistance = halfPlan.PocketDistance;
+            hitPosition = halfPlan.HitPosition;
             Mod.LogDiagnostic($"[IntersectionTool] Late half-pocket split target context={context} node={FormatEntity(nodeEntity)} sourceEdge={FormatEntity(sourceEdgeEntity)} farNode={FormatEntity(farNode)} prefab={GetPrefabNameFromPrefab(sourcePrefab)} widthSource={pocketWidthSource} width={FormatMeters(pocketWidth)} edgeGeometryWidth={FormatMeters(pocketEdgeGeometryWidth)} prefabWidth={FormatMeters(pocketPrefabWidth)} laneWidthDetail={pocketLaneWidthDetail} adaptivePocket={adaptiveTargetPocketLength:0.##}m referencePocket={referenceTargetPocketLength:0.##}m requestedBeforeCap={requestedTargetPocketLengthBeforeCap:0.##}m minPocket={MinimumWidthBasedPocketLaneLength:0.##}m maxPocket={maximumRequestedPocketLength:0.##}m retryOverride={retryOverride} length={splitLength:0.##}m nearMargin={nearIntersectionDistance:0.##}m farMargin={farIntersectionDistance:0.##}m usable={usableLength:0.##}m half={halfPocketLength:0.##}m split={splitPosition:0.###} splitDistance={splitDistance:0.##}m minSplit={minSplit:0.###} maxSplit={maxSplit:0.###}.");
             return true;
         }
