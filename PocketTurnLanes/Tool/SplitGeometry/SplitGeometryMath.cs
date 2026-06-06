@@ -50,7 +50,6 @@ namespace PocketTurnLanes.Tool.SplitGeometry
         internal const float MaximumWidthBasedPocketLaneLength = 40f;
         internal const float MaximumRetryPocketLaneLength = 64f;
         internal const float DrivableLaneEnvelopeBuffer = 16f;
-        internal const float CompactRetryPocketLaneLength = 24f;
         internal const float SplitGridAlignmentTolerance = 0.05f;
         internal const float MinimumPocketLaneLength = 8f;
         internal const float MinimumPocketLaneLengthTolerance = 0.05f;
@@ -185,15 +184,6 @@ namespace PocketTurnLanes.Tool.SplitGeometry
             }
 
             request.NextAttempt = currentAttempt + 1;
-            if (currentAttempt == 0 &&
-                currentTargetPocketLength > CompactRetryPocketLaneLength + SplitGridAlignmentTolerance)
-            {
-                request.RequestedPocketLength = CompactRetryPocketLaneLength;
-                request.RequiresMinimumProgress = false;
-                request.Detail = $"mode=compact-compat compactPocket={CompactRetryPocketLaneLength:0.##}m previousPocket={currentTargetPocketLength:0.##}m";
-                return true;
-            }
-
             request.RequestedPocketLength = currentTargetPocketLength + SplitRetryStep;
             request.RequiresMinimumProgress = true;
             request.Detail = $"mode=fixed-step step={SplitRetryStep:0.##}m previousPocket={currentTargetPocketLength:0.##}m";
