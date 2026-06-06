@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Dedicated Turn Lanes abstract icon concept</title>
+  <desc id="desc">A more abstract padded icon concept without arrows, using wider lanes and thicker road markings.</desc>
+
+  <rect x="104" y="76" width="816" height="872" fill="#5a5d53"/>
+
+  <g fill="none" stroke="#f1f1e6" stroke-linecap="round" opacity="0.94">
+    <path d="M144 122V910" stroke-width="16"/>
+    <path d="M880 122V910" stroke-width="16"/>
+
+    <path d="M291 154V430C291 560 328 620 328 760V910" stroke-width="16" stroke-dasharray="52 70"/>
+    <path d="M438 154V430" stroke-width="16" stroke-dasharray="52 70"/>
+    <path d="M740 154V430C740 560 704 620 704 760V910" stroke-width="16" stroke-dasharray="52 70"/>
+  </g>
+
+  <path d="M593 122V430C593 560 519 620 519 760V910" fill="none" stroke="#f3bf20" stroke-width="22" stroke-linecap="butt" stroke-linejoin="round"/>
+
+  <path d="M144 130H586" fill="none" stroke="#f5f5eb" stroke-width="30" stroke-linecap="butt" opacity="0.98"/>
+</svg>

@@ -80,6 +80,7 @@ namespace PocketTurnLanes
         {
             updateSystem.World.GetOrCreateSystemManaged<Game.Tools.NetToolSystem>();
             updateSystem.World.GetOrCreateSystemManaged<IntersectionOverlaySystem>();
+            updateSystem.World.GetOrCreateSystemManaged<DedicatedTurnLanesToolEntryPrefabSystem>();
             updateSystem.World.GetOrCreateSystemManaged<IntersectionToolSystem>();
             updateSystem.World.GetOrCreateSystemManaged<PocketTurnLaneUISystem>();
 
@@ -92,6 +93,7 @@ namespace PocketTurnLanes
 
         private static void RegisterSystemUpdates(UpdateSystem updateSystem)
         {
+            updateSystem.UpdateAt<DedicatedTurnLanesToolEntryPrefabSystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<IntersectionToolSystem>(SystemUpdatePhase.ToolUpdate);
             SplitLaneConnectionRepairSystemRegistration.Register(updateSystem, TrafficLaneConnectionFixEnabled, TrafficModDetected);
             updateSystem.UpdateAt<PocketTurnLaneUISystem>(SystemUpdatePhase.UIUpdate);

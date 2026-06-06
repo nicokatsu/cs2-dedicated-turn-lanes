@@ -1,9 +1,7 @@
 import { ModRegistrar } from "cs2/modding";
-import { DedicatedTurnLanesButton } from "mods/dedicated-turn-lanes-button";
+import "images/dedicated-turn-lanes-icon-default.svg";
 
-const register: ModRegistrar = (moduleRegistry) => {
-
-    moduleRegistry.append("GameTopLeft", DedicatedTurnLanesButton);
+const register: ModRegistrar = () => {
 }
 
 export default register;

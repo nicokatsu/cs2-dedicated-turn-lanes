@@ -95,6 +95,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_ToolOutputBarrier = World.GetOrCreateSystemManaged<ToolOutputBarrier>();
             m_ValidationSystem = World.GetOrCreateSystemManaged<ValidationSystem>();
             m_NodeReductionSystem = World.GetOrCreateSystemManaged<NodeReductionSystem>();
+            InitializeToolEntryPrefabSystem();
             m_SplitLaneConnectionFixSystem = Mod.TrafficLaneConnectionFixEnabled
                 ? World.GetOrCreateSystemManaged<SplitLaneConnectionFixSystem>()
                 : null;
@@ -506,16 +507,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             int definitionCount = CalculateEntityCountSafe(m_DefinitionQuery);
             int replacementDefinitionCount = CalculateEntityCountSafe(m_ReplacementPreviewDefinitionQuery);
             return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} queuedReplacements={m_QueuedReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} definitions={definitionCount} replacementPreviewDefinitions={replacementDefinitionCount} frame={UnityEngine.Time.frameCount}";
-        }
-
-        public override bool TrySetPrefab(PrefabBase prefab)
-        {
-            return false;
-        }
-
-        public override PrefabBase GetPrefab()
-        {
-            return null;
         }
 
         public override void SetUnderground(bool isUnderground)
