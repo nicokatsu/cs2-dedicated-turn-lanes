@@ -78,7 +78,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
                 if (centerLoadValidationStats.ShouldLogAdjustment)
                 {
-                    Mod.LogEssential($"[SplitLaneConnectionFix] Center Traffic rewrite load validation adjusted write data before mutation centerNode={FormatEntity(request.IntersectionNode)} pocketEdge={FormatEntity(request.PocketEdge)} {centerLoadValidationDetail}.");
+                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Center Traffic rewrite load validation adjusted write data before mutation centerNode={FormatEntity(request.IntersectionNode)} pocketEdge={FormatEntity(request.PocketEdge)} {centerLoadValidationDetail}.");
                 }
 
                 plan.PlannedConnections = TrafficCenterMappingBuilder.CountTrafficPlanConnections(plan.BySource);

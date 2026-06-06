@@ -133,7 +133,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             if (outerLoadValidationStats.ShouldLogAdjustment)
             {
-                Mod.LogEssential($"[SplitLaneConnectionFix] Unified Traffic mapping load validation adjusted write data before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} {outerLoadValidationDetail}.");
+                Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping load validation adjusted write data before mutation splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} trafficWriteOrder={trafficWriteOrder} {outerLoadValidationDetail}.");
             }
 
             if (plan.BySource.Count == 0)

@@ -80,6 +80,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private readonly List<ReplacementCandidate> m_AppliedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_PendingLaneRepairCandidates = new List<ReplacementCandidate>();
         private JobHandle m_LastToolUpdateJobHandle;
+        private PendingToolCommand m_PendingToolCommand;
 
         public event Action<bool> ToolEnabledChanged;
 
@@ -224,6 +225,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             else
             {
                 applyMode = ApplyMode.None;
+            }
+
+            if (ProcessPendingToolCommand(ref result))
+            {
+                return result;
             }
 
             applyAction.shouldBeEnabled = IsToolEnabled;
@@ -537,34 +543,6 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         {
             SetUnderground(!Underground);
         }
-
-        public void EnableTool()
-        {
-            m_ToolSystem.activeTool = this;
-            if (SetToolEnabled(true))
-            {
-                SetVanillaMutationSystemsEnabled(false);
-                Mod.LogEssential("[IntersectionTool] Enabled. Hover an intersection to log connected road prefab information.");
-            }
-        }
-
-        public void DisableTool()
-        {
-            DisableTool(m_LastToolUpdateJobHandle, "tool disabled");
-        }
-
-        private JobHandle DisableTool(JobHandle inputDeps, string reason)
-        {
-            bool wasEnabled = IsToolEnabled;
-            JobHandle result = ClearDefinitionsAndResetForToolExit(inputDeps, reason, true, out string cleanupDetail);
-            if (wasEnabled)
-            {
-                Mod.LogEssential($"[IntersectionTool] Disabled. {cleanupDetail}");
-            }
-
-            return result;
-        }
-
 
         private string GetPrefabName(Entity entity)
         {

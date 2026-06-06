@@ -39,14 +39,7 @@ namespace PocketTurnLanes.Systems.UI
 
         private void ToggleTool()
         {
-            if (m_IntersectionToolSystem.IsToolEnabled)
-            {
-                m_IntersectionToolSystem.DisableTool();
-            }
-            else
-            {
-                m_IntersectionToolSystem.EnableTool();
-            }
+            m_IntersectionToolSystem.RequestToggleTool();
         }
 
         private void SyncToolEnabledBinding()
