@@ -1,37 +1,60 @@
 <Publish>
 	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
-	<ModId Value="" />
+	<ModId Value="146778" />
 	<!--Name of the mod to display to players-->
 	<DisplayName Value="Dedicated Turn Lanes Alpha" />
 	<!--Short description of the mod-->
 	<ShortDescription Value="Unlisted alpha build for testing generated dedicated turn lanes." />
 	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
 	<!--LongDescription Value="This is a long description" /-->
-	<LongDescription>
-Dedicated Turn Lanes Alpha is a separate testing build of Dedicated Turn Lanes. It uses its own mod id, settings, UI binding group, and log file so testers can install it next to the public release while validating upcoming changes.
-	</LongDescription>
+	<LongDescription># Dedicated Turn Lanes Alpha
+
+Dedicated Turn Lanes Alpha is an unlisted tester build for generating dedicated turn lane segments at selected intersections. Hover an intersection to preview eligible incoming roads, then apply the road split and replacement in one workflow.
+
+**This is still an early alpha.** Recent work has focused mostly on stability fixes, so please back up important saves before testing.
+
+## Current Road Matching Rules
+
+The current version only uses the default automatic matching rules:
+
+* The tool looks for a compatible road variant with the **same road width** and a compatible lane layout.
+* The replacement road must provide **one extra incoming car lane** for the generated dedicated turn lane segment.
+* Matching supports vanilla roads and roads created with Road Builder, including both two-way and one-way roads.
+* The tool supports both right-hand and left-hand traffic.
+
+## Credits
+
+* Thanks to Network Tools by Luca for the network editing ideas and reference behavior that helped guide this mod.
+* Thanks to Traffic by krzychu124 for the lane connection systems and source references that helped shape Traffic integration.
+</LongDescription>
 	<!--Thumbnail-->
-	<Thumbnail Value="Properties/Thumbnail.png" />
+	<Thumbnail Value="Properties/Thumbnail.Alpha.png" />
 	<!--Screenshot, can be set multiple times-->
-	<Screenshot Value="" />
+	<Screenshot Value="Properties/Screenshot.01.ToolPreview.jpg" />
+	<Screenshot Value="Properties/Screenshot.02.PreviewConnections.jpg" />
+	<Screenshot Value="Properties/Screenshot.03.RightHandTraffic.jpg" />
 	<!--Tag, can be set multiple times-->
-	<Tag Value="" />
+	<Tag Value="Code Mod" />
+	<Tag Value="UITransportation" />
+	<Tag Value="UITransportationRoad" />
+	<Tag Value="UIRoads" />
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="1.0" />
+	<ModVersion Value="0.1" />
 	<!--Recommended version of the base game to use the mod-->
-	<GameVersion Value="1.0.*" />
+	<GameVersion Value="1.5.*" />
 	<!--Dependency for the mod, can be set multiple times-->
 	<Dependency Id="80095" />
 	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="" />
+	<ChangeLog Value="Initial alpha release." />
 	<!--<ChangeLog>
 	</ChangeLog>-->
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
-	<ExternalLink Type="" Url="" />
+	<ExternalLink Type="discord" Url="https://discord.com/channels/1024242828114673724/1509986355868995715" />
+	<ExternalLink Type="github" Url="https://github.com/nicokatsu/cs2-dedicated-turn-lanes" />
 	<!--Supported values Public, Private, Unlisted-->
 	<AccessLevel Value="Unlisted" />
 </Publish>

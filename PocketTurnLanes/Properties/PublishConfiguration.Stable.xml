@@ -13,15 +13,20 @@ Dedicated Turn Lanes adds an intersection tool for building generated dedicated 
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
 	<!--Screenshot, can be set multiple times-->
-	<Screenshot Value="" />
+	<Screenshot Value="Properties/Screenshot.01.ToolPreview.jpg" />
+	<Screenshot Value="Properties/Screenshot.02.PreviewConnections.jpg" />
+	<Screenshot Value="Properties/Screenshot.03.RightHandTraffic.jpg" />
 	<!--Tag, can be set multiple times-->
-	<Tag Value="" />
+	<Tag Value="Code Mod" />
+	<Tag Value="UITransportation" />
+	<Tag Value="UITransportationRoad" />
+	<Tag Value="UIRoads" />
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
 	<ModVersion Value="1.0" />
 	<!--Recommended version of the base game to use the mod-->
-	<GameVersion Value="1.0.*" />
+	<GameVersion Value="1.5.*" />
 	<!--Dependency for the mod, can be set multiple times-->
 	<Dependency Id="80095" />
 	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->

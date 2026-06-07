@@ -2,6 +2,12 @@
 
     <PropertyGroup>
         <Configurations>Debug;Release</Configurations>
+        <RequestedPublishProfile Condition="'$(RequestedPublishProfile)' == '' and '$(PublishProfile)' != ''">$([System.IO.Path]::GetFileNameWithoutExtension('$(PublishProfile)'))</RequestedPublishProfile>
+        <RequestedPublishProfile Condition="'$(RequestedPublishProfile)' == '' and '$(PublishProfileName)' != ''">$(PublishProfileName)</RequestedPublishProfile>
+        <RequestedPublishProfile Condition="'$(RequestedPublishProfile)' == '' and '$(PublishProfileFullPath)' != ''">$([System.IO.Path]::GetFileNameWithoutExtension('$(PublishProfileFullPath)'))</RequestedPublishProfile>
+        <RequestedPublishProfile Condition="'$(RequestedPublishProfile)' == '' and '$(WebPublishProfileFile)' != ''">$([System.IO.Path]::GetFileNameWithoutExtension('$(WebPublishProfileFile)'))</RequestedPublishProfile>
+        <ModChannel Condition="'$(ModChannel)' == '' and $([System.String]::Copy('$(RequestedPublishProfile)').EndsWith('Alpha'))">Alpha</ModChannel>
+        <ModChannel Condition="'$(ModChannel)' == '' and ('$(RequestedPublishProfile)' == 'PublishNewMod' or '$(RequestedPublishProfile)' == 'PublishNewVersion' or '$(RequestedPublishProfile)' == 'UpdatePublishedConfiguration')">Stable</ModChannel>
         <ModChannel Condition="'$(ModChannel)' == ''">Stable</ModChannel>
         <ModId Condition="'$(ModChannel)' == 'Stable'">DedicatedTurnLanes</ModId>
         <ModId Condition="'$(ModChannel)' == 'Alpha'">DedicatedTurnLanesAlpha</ModId>
@@ -86,6 +92,28 @@
 
     <Target Name="ValidateModChannel" BeforeTargets="BeforeBuild;Publish">
         <Error Condition="'$(ModChannel)' != 'Stable' and '$(ModChannel)' != 'Alpha' and '$(ModChannel)' != 'Dev'" Text="Unsupported ModChannel '$(ModChannel)'. Use 'Stable', 'Alpha', or 'Dev'." />
+    </Target>
+
+    <Target Name="ValidatePublishChannelConfiguration" BeforeTargets="Publish" Condition="'$(ModPublisherCommand)' != '' or '$(RequestedPublishProfile)' != ''">
+        <PropertyGroup>
+            <ExpectedModId Condition="'$(ModChannel)' == 'Stable'">DedicatedTurnLanes</ExpectedModId>
+            <ExpectedModId Condition="'$(ModChannel)' == 'Alpha'">DedicatedTurnLanesAlpha</ExpectedModId>
+            <ExpectedModId Condition="'$(ModChannel)' == 'Dev'">DedicatedTurnLanesDev</ExpectedModId>
+            <ExpectedDisplayName Condition="'$(ModChannel)' == 'Stable'">Dedicated Turn Lanes</ExpectedDisplayName>
+            <ExpectedDisplayName Condition="'$(ModChannel)' == 'Alpha'">Dedicated Turn Lanes Alpha</ExpectedDisplayName>
+            <ExpectedDisplayName Condition="'$(ModChannel)' == 'Dev'">Dedicated Turn Lanes Dev</ExpectedDisplayName>
+            <ExpectedPublishConfigurationPath>Properties\PublishConfiguration.$(ModChannel).xml</ExpectedPublishConfigurationPath>
+        </PropertyGroup>
+        <Message Text="Publish profile=$(RequestedPublishProfile) command=$(ModPublisherCommand) channel=$(ModChannel) modId=$(ModId) assembly=$(AssemblyName) target=$(TargetName) config=$(PublishConfigurationPath)" Importance="high" />
+        <Error Condition="'$(RequestedPublishProfile)' != '' and $([System.String]::Copy('$(RequestedPublishProfile)').EndsWith('Alpha')) and '$(ModChannel)' != 'Alpha'" Text="Publish profile '$(RequestedPublishProfile)' requires ModChannel=Alpha, but ModChannel is '$(ModChannel)'." />
+        <Error Condition="'$(RequestedPublishProfile)' == 'PublishNewMod' and '$(ModChannel)' != 'Stable'" Text="Publish profile '$(RequestedPublishProfile)' requires ModChannel=Stable, but ModChannel is '$(ModChannel)'." />
+        <Error Condition="'$(RequestedPublishProfile)' == 'PublishNewVersion' and '$(ModChannel)' != 'Stable'" Text="Publish profile '$(RequestedPublishProfile)' requires ModChannel=Stable, but ModChannel is '$(ModChannel)'." />
+        <Error Condition="'$(RequestedPublishProfile)' == 'UpdatePublishedConfiguration' and '$(ModChannel)' != 'Stable'" Text="Publish profile '$(RequestedPublishProfile)' requires ModChannel=Stable, but ModChannel is '$(ModChannel)'." />
+        <Error Condition="'$(ExpectedModId)' != '' and '$(ModId)' != '$(ExpectedModId)'" Text="Publish channel mismatch for ModChannel=$(ModChannel): expected ModId=$(ExpectedModId), got ModId=$(ModId)." />
+        <Error Condition="'$(ExpectedModId)' != '' and '$(AssemblyName)' != '$(ExpectedModId)'" Text="Publish channel mismatch for ModChannel=$(ModChannel): expected AssemblyName=$(ExpectedModId), got AssemblyName=$(AssemblyName)." />
+        <Error Condition="'$(ExpectedModId)' != '' and '$(TargetName)' != '$(ExpectedModId)'" Text="Publish channel mismatch for ModChannel=$(ModChannel): expected TargetName=$(ExpectedModId), got TargetName=$(TargetName)." />
+        <Error Condition="'$(ExpectedDisplayName)' != '' and '$(ModDisplayName)' != '$(ExpectedDisplayName)'" Text="Publish channel mismatch for ModChannel=$(ModChannel): expected ModDisplayName=$(ExpectedDisplayName), got ModDisplayName=$(ModDisplayName)." />
+        <Error Condition="'$(PublishConfigurationPath)' != '$(ExpectedPublishConfigurationPath)'" Text="Publish channel mismatch for ModChannel=$(ModChannel): expected PublishConfigurationPath=$(ExpectedPublishConfigurationPath), got PublishConfigurationPath=$(PublishConfigurationPath)." />
     </Target>
 
     <Target Name="CleanOtherLocalModChannels" BeforeTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true' and '$(CleanOtherModChannels)' != 'false'">
