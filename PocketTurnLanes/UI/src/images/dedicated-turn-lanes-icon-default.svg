@@ -1,19 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">Dedicated Turn Lanes abstract icon concept</title>
-  <desc id="desc">A more abstract padded icon concept without arrows, using wider lanes and thicker road markings.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Dedicated Turn Lanes 1+1 to 2+1 default icon, official road perspective</title>
+  <desc id="desc">A default icon concept built on the official Cities Skylines II Lighting icon road slab perspective, replacing the lamp posts with lane markings.</desc>
 
-  <rect x="104" y="76" width="816" height="872" fill="#5a5d53"/>
+  <defs>
+    <clipPath id="road-face-clip">
+      <path d="M1212.373-1122.247l29.686 25.1 23.11-13.863-30.016-25.114Z" transform="translate(-1206.995 1147.886)"/>
+    </clipPath>
+  </defs>
 
-  <g fill="none" stroke="#f1f1e6" stroke-linecap="round" opacity="0.94">
-    <path d="M144 122V910" stroke-width="16"/>
-    <path d="M880 122V910" stroke-width="16"/>
-
-    <path d="M291 154V430C291 560 328 620 328 760V910" stroke-width="16" stroke-dasharray="52 70"/>
-    <path d="M438 154V430" stroke-width="16" stroke-dasharray="52 70"/>
-    <path d="M740 154V430C740 560 704 620 704 760V910" stroke-width="16" stroke-dasharray="52 70"/>
+  <g id="road-slab">
+    <path d="M733.426-302.733l29.61 25.369 23.135-14.243v-1.623l-52.745-11.55Z" transform="translate(-728.04 330.13)" fill="#c4c4c4"/>
+    <path d="M1212.373-1122.247l29.686 25.1 23.11-13.863-30.016-25.114Z" transform="translate(-1206.995 1147.886)" fill="#949494"/>
   </g>
 
-  <path d="M593 122V430C593 560 519 620 519 760V910" fill="none" stroke="#f3bf20" stroke-width="22" stroke-linecap="butt" stroke-linejoin="round"/>
-
-  <path d="M144 130H586" fill="none" stroke="#f5f5eb" stroke-width="30" stroke-linecap="butt" opacity="0.98"/>
+  <g clip-path="url(#road-face-clip)">
+    <g transform="matrix(0.29686 0.251 0.2278 -0.13877 5.378 25.639)">
+      <path d="M0 33H46" fill="none" stroke="#f5f5eb" stroke-width="5.4" stroke-linecap="round" stroke-dasharray="13 16" opacity="0.96"/>
+      <path d="M0 66H46C58 66 62 55 74 52C84 50 92 48 100 48" fill="none" stroke="#ffc916" stroke-width="6.4" stroke-linecap="butt" stroke-linejoin="round"/>
+      <g fill="#f5f5eb" stroke="#f5f5eb" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.96">
+        <path d="M39 46H24C19 46 17 49 17 53" fill="none"/>
+        <path d="M17 58L11 50H23Z" stroke="none"/>
+      </g>
+    </g>
+  </g>
 </svg>
