@@ -81,6 +81,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private readonly List<ReplacementCandidate> m_PendingLaneRepairCandidates = new List<ReplacementCandidate>();
         private JobHandle m_LastToolUpdateJobHandle;
         private PendingToolCommand m_PendingToolCommand;
+        private string m_PendingToolCommandReason;
+        private bool m_PendingToolCommandSwitchToDefaultTool;
+        private bool m_PendingToolCommandDeferredFromToolChanged;
+        private string m_PendingToolCommandQueuedActiveTool;
 
         public event Action<bool> ToolEnabledChanged;
 
@@ -574,13 +578,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         {
             if (system != this && IsToolEnabled)
             {
-                JobHandle result = ClearDefinitionsAndResetForToolExit(
-                    m_LastToolUpdateJobHandle,
-                    $"active tool changed to {system?.toolID ?? "<null>"}",
-                    false,
-                    out string cleanupDetail);
-                TrackToolUpdateJobHandle(result);
-                Mod.LogEssential($"[IntersectionTool] Disabled because active tool changed to {system?.toolID ?? "<null>"}; restored vanilla mutation systems. {cleanupDetail}");
+                string activeToolId = system?.toolID ?? "<null>";
+                string reason = $"active tool changed to {activeToolId}";
+                QueuePendingToolCommand(PendingToolCommand.Disable, reason, false, true);
+                Mod.LogEssential($"[IntersectionTool] Deferred cleanup because active tool changed to {activeToolId}; cleanup will run during the next tool update. {GetToolExitSnapshot()}");
             }
         }
 
