@@ -11,6 +11,42 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             Disable
         }
 
+        private struct PendingToolCommandState
+        {
+            public PendingToolCommand Command;
+            public string Reason;
+            public bool SwitchToDefaultTool;
+            public bool DeferredFromToolChanged;
+            public string QueuedActiveTool;
+
+            public bool IsEmpty => Command == PendingToolCommand.None;
+
+            public string ProcessingReason => string.IsNullOrEmpty(Reason)
+                ? "tool disabled"
+                : Reason;
+
+            public string QueuedActiveToolOrDefault => string.IsNullOrEmpty(QueuedActiveTool)
+                ? "<null>"
+                : QueuedActiveTool;
+
+            public static PendingToolCommandState Create(
+                PendingToolCommand command,
+                string reason,
+                bool switchToDefaultTool,
+                bool deferredFromToolChanged,
+                string queuedActiveTool)
+            {
+                return new PendingToolCommandState
+                {
+                    Command = command,
+                    Reason = reason,
+                    SwitchToDefaultTool = switchToDefaultTool,
+                    DeferredFromToolChanged = deferredFromToolChanged,
+                    QueuedActiveTool = queuedActiveTool
+                };
+            }
+        }
+
         internal void RequestToggleTool()
         {
             PendingToolCommand command = IsToolEnabled
@@ -74,45 +110,37 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return;
             }
 
-            m_PendingToolCommand = command;
-            m_PendingToolCommandReason = reason;
-            m_PendingToolCommandSwitchToDefaultTool = switchToDefaultTool;
-            m_PendingToolCommandDeferredFromToolChanged = deferredFromToolChanged;
-            m_PendingToolCommandQueuedActiveTool = m_ToolSystem?.activeTool?.toolID ?? "<null>";
-            Mod.LogDiagnostic($"[IntersectionTool] Queued tool command command={command} reason={reason} switchToDefaultTool={switchToDefaultTool} deferredFromToolChanged={deferredFromToolChanged} isEnabled={IsToolEnabled} activeTool={m_PendingToolCommandQueuedActiveTool} {GetToolExitSnapshot()}.");
+            m_PendingToolCommandState = PendingToolCommandState.Create(
+                command,
+                reason,
+                switchToDefaultTool,
+                deferredFromToolChanged,
+                m_ToolSystem?.activeTool?.toolID ?? "<null>");
+            Mod.LogDiagnostic($"[IntersectionTool] Queued tool command command={command} reason={reason} switchToDefaultTool={switchToDefaultTool} deferredFromToolChanged={deferredFromToolChanged} isEnabled={IsToolEnabled} activeTool={m_PendingToolCommandState.QueuedActiveToolOrDefault} {GetToolExitSnapshot()}.");
         }
 
         private bool ProcessPendingToolCommand(ref JobHandle result)
         {
-            PendingToolCommand command = m_PendingToolCommand;
-            if (command == PendingToolCommand.None)
+            PendingToolCommandState pendingCommand = m_PendingToolCommandState;
+            if (pendingCommand.IsEmpty)
             {
                 return false;
             }
 
-            string reason = string.IsNullOrEmpty(m_PendingToolCommandReason)
-                ? "tool disabled"
-                : m_PendingToolCommandReason;
-            bool switchToDefaultTool = m_PendingToolCommandSwitchToDefaultTool;
-            bool deferredFromToolChanged = m_PendingToolCommandDeferredFromToolChanged;
-            string queuedActiveTool = string.IsNullOrEmpty(m_PendingToolCommandQueuedActiveTool)
-                ? "<null>"
-                : m_PendingToolCommandQueuedActiveTool;
+            m_PendingToolCommandState = default;
+            Mod.LogDiagnostic($"[IntersectionTool] Processing queued tool command command={pendingCommand.Command} reason={pendingCommand.ProcessingReason} switchToDefaultTool={pendingCommand.SwitchToDefaultTool} deferredFromToolChanged={pendingCommand.DeferredFromToolChanged} queuedActiveTool={pendingCommand.QueuedActiveToolOrDefault} currentActiveTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isEnabled={IsToolEnabled} {GetToolExitSnapshot()}.");
 
-            m_PendingToolCommand = PendingToolCommand.None;
-            m_PendingToolCommandReason = null;
-            m_PendingToolCommandSwitchToDefaultTool = false;
-            m_PendingToolCommandDeferredFromToolChanged = false;
-            m_PendingToolCommandQueuedActiveTool = null;
-            Mod.LogDiagnostic($"[IntersectionTool] Processing queued tool command command={command} reason={reason} switchToDefaultTool={switchToDefaultTool} deferredFromToolChanged={deferredFromToolChanged} queuedActiveTool={queuedActiveTool} currentActiveTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isEnabled={IsToolEnabled} {GetToolExitSnapshot()}.");
-
-            if (command == PendingToolCommand.Enable)
+            if (pendingCommand.Command == PendingToolCommand.Enable)
             {
                 EnableTool();
                 return false;
             }
 
-            result = DisableTool(result, reason, switchToDefaultTool, deferredFromToolChanged);
+            result = DisableTool(
+                result,
+                pendingCommand.ProcessingReason,
+                pendingCommand.SwitchToDefaultTool,
+                pendingCommand.DeferredFromToolChanged);
             return true;
         }
 

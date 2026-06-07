@@ -170,7 +170,10 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                     request.TrafficWritten = true;
                     request.TrafficWriteFrame = UnityEngine.Time.frameCount;
                     request.StableVerificationFrames = 0;
-                    Mod.LogDiagnostic($"[SplitLaneConnectionFix] Wrote unified Traffic lane mapping splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} forwardRoadState={request.ForwardRoadState} forwardSkipReason={request.ForwardRoadSkipReason} reverseRoadState={request.ReverseRoadState} reverseSkipReason={request.ReverseRoadSkipReason} forwardMappings={request.Mappings?.Length ?? 0} reverseMappings={request.ReverseMappings?.Length ?? 0} preservationForwardMappings={request.PreservationForwardMappings?.Length ?? 0} preservationReverseMappings={request.PreservationReverseMappings?.Length ?? 0} preservationSkipped={!string.IsNullOrEmpty(request.PreservationSkippedReason)} extraLane={request.ExtraTargetLaneIndex} turn={request.Turn} branchSource={request.BranchSourceLaneIndex} laneRefreshOwners={m_LaneRefreshOwnerQuery.CalculateEntityCount()} leftHandTraffic={m_CityConfigurationSystem.leftHandTraffic}.");
+                    Mod.LogDiagnostic(FormatUnifiedTrafficLaneMappingWritten(
+                        request,
+                        m_LaneRefreshOwnerQuery.CalculateEntityCount(),
+                        m_CityConfigurationSystem.leftHandTraffic));
                     m_Requests[i] = request;
                 }
                 catch (Exception ex)

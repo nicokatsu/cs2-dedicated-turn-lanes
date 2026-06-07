@@ -280,7 +280,25 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             MarkForLaneRebuild(request);
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Unified Traffic mapping write counts splitNode={FormatEntity(request.SplitNode)} trafficWriteOrder={trafficWriteOrder} farRestoreSucceeded={farRestoreSucceeded} centerRewrite=written:{centerRewriteWritten},ok:{centerRewriteWriteSucceeded},sources:{centerPlan.BySource.Count},connections:{centerPlan.PlannedConnections} existing=removed:{removedExisting},preserved:{m_KeptTrafficConnections.Count},overlay:{preservedExistingForOverlay},unsafeOverlay:{preservedUnsafeForOverlay} written=sources:{writtenSources},connections:{writtenConnections},road:{writtenRoadRepairConnections}/{plan.RoadRepairConnections},track:{writtenTrackConnections},unsafe:{writtenUnsafeConnections} preservation=trafficSnapshot:{plan.PreservationTrafficSnapshotConnections},runtime:{plan.PreservationRuntimeConnections},overlaySnapshot:{plan.PreservationOverlaySnapshotConnections},overlayRuntime:{plan.PreservationOverlayRuntimeConnections},nonRoad:{plan.PreservationNonRoadConnections},unsafe:{plan.PreservationUnsafeConnections},track:{plan.PreservationTrackConnections},skipped:{plan.PreservationSkipped},forward:{plan.ForwardPreservationConnections},reverse:{plan.ReversePreservationConnections} uturn=suppressed:{plan.AuditStats.SuppressedUturnConnections},stale:{plan.StaleUturnConnections},staleSources:{plan.StaleUturnSourceKeys.Count},covered:{plan.AuditStats.UturnSourcesCoveredByPlan},emptyOverride:{plan.AuditStats.UturnSourcesCoveredByEmptyOverride},directCleanup:{plan.AuditStats.UturnSourcesLeftForDirectCleanup} load={outerLoadValidationStats.State},invalidSources:{outerLoadValidationStats.InvalidSources},invalidConnections:{outerLoadValidationStats.InvalidConnections},sanitized:{outerLoadValidationStats.SanitizedConnections} mergedMappingCount={mergedMappings.Count} preservationSkippedReasonPresent={!string.IsNullOrEmpty(request.PreservationSkippedReason)}.");
+            Mod.LogDiagnostic(FormatUnifiedTrafficWriteCounts(
+                request,
+                trafficWriteOrder,
+                farRestoreSucceeded,
+                centerRewriteWritten,
+                centerRewriteWriteSucceeded,
+                centerPlan,
+                plan,
+                outerLoadValidationStats,
+                removedExisting,
+                m_KeptTrafficConnections.Count,
+                preservedExistingForOverlay,
+                preservedUnsafeForOverlay,
+                writtenSources,
+                writtenConnections,
+                writtenRoadRepairConnections,
+                writtenTrackConnections,
+                writtenUnsafeConnections,
+                mergedMappings.Count));
             return writtenSources > 0;
         }
 
@@ -345,7 +363,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 plan.StaleUturnSourceKeys,
                 plan.RuntimeNonUturnSourceKeys);
 
-            Mod.LogDiagnostic($"[SplitLaneConnectionFix] Built unified logical Traffic mapping plan splitNode={FormatEntity(request.SplitNode)} outerEdge={FormatEntity(request.OuterEdge)} pocketEdge={FormatEntity(request.PocketEdge)} sourcePlans={plan.BySource.Count} roadSources={plan.RoadRepairSourceKeys.Count} roadConnections={plan.RoadRepairConnections} roadState=forward:{request.ForwardRoadState},reverse:{request.ReverseRoadState} preservation=trafficSnapshot:{plan.PreservationTrafficSnapshotConnections},runtime:{plan.PreservationRuntimeConnections},overlaySnapshot:{plan.PreservationOverlaySnapshotConnections},overlayRuntime:{plan.PreservationOverlayRuntimeConnections},nonRoad:{plan.PreservationNonRoadConnections},unsafe:{plan.PreservationUnsafeConnections},track:{plan.PreservationTrackConnections},skipped:{plan.PreservationSkipped},forward:{plan.ForwardPreservationConnections},reverse:{plan.ReversePreservationConnections} uturn=suppressed:{plan.AuditStats.SuppressedUturnConnections},stale:{plan.StaleUturnConnections},staleSources:{plan.StaleUturnSourceKeys.Count},covered:{plan.AuditStats.UturnSourcesCoveredByPlan},emptyOverride:{plan.AuditStats.UturnSourcesCoveredByEmptyOverride},directCleanup:{plan.AuditStats.UturnSourcesLeftForDirectCleanup} runtimeNonUturnSources={plan.RuntimeNonUturnSourceKeys.Count} runtimeNonUturnSuppressionSkipped={plan.AuditStats.RuntimeNonUturnSuppressionSkipped} preservationForwardMappings={request.PreservationForwardMappings?.Length ?? 0} preservationReverseMappings={request.PreservationReverseMappings?.Length ?? 0} preservationSkippedReasonPresent={!string.IsNullOrEmpty(request.PreservationSkippedReason)}.");
+            Mod.LogDiagnostic(FormatBuiltUnifiedTrafficMappingPlan(request, plan));
             return plan;
         }
 

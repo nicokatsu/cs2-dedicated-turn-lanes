@@ -80,11 +80,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private readonly List<ReplacementCandidate> m_AppliedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_PendingLaneRepairCandidates = new List<ReplacementCandidate>();
         private JobHandle m_LastToolUpdateJobHandle;
-        private PendingToolCommand m_PendingToolCommand;
-        private string m_PendingToolCommandReason;
-        private bool m_PendingToolCommandSwitchToDefaultTool;
-        private bool m_PendingToolCommandDeferredFromToolChanged;
-        private string m_PendingToolCommandQueuedActiveTool;
+        private PendingToolCommandState m_PendingToolCommandState;
 
         public event Action<bool> ToolEnabledChanged;
 

@@ -38,7 +38,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private bool IsToolEntrySelectionActive()
         {
             return IsToolEnabled ||
-                   m_PendingToolCommand == PendingToolCommand.Enable;
+                   m_PendingToolCommandState.Command == PendingToolCommand.Enable;
         }
     }
 }

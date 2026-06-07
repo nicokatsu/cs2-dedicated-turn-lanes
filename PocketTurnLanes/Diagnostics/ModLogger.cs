@@ -28,13 +28,7 @@ namespace PocketTurnLanes.Diagnostics
 
         public static void LogDiagnostic(string message)
         {
-            if (!DiagnosticLoggingEnabled)
-            {
-                return;
-            }
-
-            string preparedMessage = PrepareDiagnosticMessage(message);
-            if (!TryEnterDiagnosticRateLimit(preparedMessage.Length, out string suppressedSummary))
+            if (!TryPrepareDiagnosticLog(message, out string preparedMessage, out string suppressedSummary))
             {
                 return;
             }
@@ -49,13 +43,7 @@ namespace PocketTurnLanes.Diagnostics
 
         public static void LogDiagnostic(Exception exception, string message)
         {
-            if (!DiagnosticLoggingEnabled)
-            {
-                return;
-            }
-
-            string preparedMessage = PrepareDiagnosticMessage(message);
-            if (!TryEnterDiagnosticRateLimit(preparedMessage.Length, out string suppressedSummary))
+            if (!TryPrepareDiagnosticLog(message, out string preparedMessage, out string suppressedSummary))
             {
                 return;
             }
@@ -71,6 +59,22 @@ namespace PocketTurnLanes.Diagnostics
         public static void LogException(Exception exception, string message)
         {
             Mod.log.Info(exception, $"[ERROR] {message}");
+        }
+
+        private static bool TryPrepareDiagnosticLog(
+            string message,
+            out string preparedMessage,
+            out string suppressedSummary)
+        {
+            preparedMessage = null;
+            suppressedSummary = null;
+            if (!DiagnosticLoggingEnabled)
+            {
+                return false;
+            }
+
+            preparedMessage = PrepareDiagnosticMessage(message);
+            return TryEnterDiagnosticRateLimit(preparedMessage.Length, out suppressedSummary);
         }
 
         private static string PrepareDiagnosticMessage(string message)
