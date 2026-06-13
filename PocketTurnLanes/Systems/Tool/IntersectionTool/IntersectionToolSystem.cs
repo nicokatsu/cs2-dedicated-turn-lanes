@@ -122,6 +122,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_ReplacementPrefabMatcher = new ReplacementPrefabMatcher(
                 EntityManager,
                 m_PrefabSystem,
+                World.GetOrCreateSystemManaged<UnlockSystem>(),
                 m_RoadPrefabQuery,
                 () => GetBufferLookup<NetSubSection>(true),
                 () => GetBufferLookup<NetSectionPiece>(true),

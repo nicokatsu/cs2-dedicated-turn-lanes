@@ -21,6 +21,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public int RoadBuilderNotInPlaysetExcluded;
         public int RoadBuilderVisibilityUnknown;
         public int HighwayExcluded;
+        public int LockedExcluded;
         public string TramUpgradeRejectSample;
         public string BusUpgradeRejectSample;
         public string WidthCandidateSample;
@@ -29,6 +30,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public string RoadBuilderDiscardedSample;
         public string RoadBuilderNotInPlaysetSample;
         public string RoadBuilderVisibilityUnknownSample;
+        public string LockedSample;
         public string BestBusLayoutCandidateDetail;
         private int m_BusUpgradeRejectSampleCount;
         private int m_WidthCandidateSampleCount;
@@ -37,6 +39,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         private int m_RoadBuilderDiscardedSampleCount;
         private int m_RoadBuilderNotInPlaysetSampleCount;
         private int m_RoadBuilderVisibilityUnknownSampleCount;
+        private int m_LockedSampleCount;
         private int m_BestBusLayoutCandidateScore;
 
         public static ReplacementSearchStats Create()
@@ -51,6 +54,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 RoadBuilderDiscardedSample = "<none>",
                 RoadBuilderNotInPlaysetSample = "<none>",
                 RoadBuilderVisibilityUnknownSample = "<none>",
+                LockedSample = "<none>",
                 BestBusLayoutCandidateDetail = "<none>",
                 m_BestBusLayoutCandidateScore = int.MaxValue
             };
@@ -99,6 +103,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public void AddRoadBuilderVisibilityUnknownSample(string sample, int maxSamples)
         {
             ReplacementPrefabDiagnostics.AppendLogSample(ref RoadBuilderVisibilityUnknownSample, ref m_RoadBuilderVisibilityUnknownSampleCount, sample, maxSamples);
+        }
+
+        public void AddLockedSample(string sample, int maxSamples)
+        {
+            ReplacementPrefabDiagnostics.AppendLogSample(ref LockedSample, ref m_LockedSampleCount, sample, maxSamples);
         }
 
         public void RecordBusLayoutCandidate(int score, string detail)
