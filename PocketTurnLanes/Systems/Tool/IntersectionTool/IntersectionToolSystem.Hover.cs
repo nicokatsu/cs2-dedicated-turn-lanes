@@ -240,7 +240,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_QueuedReplacementCandidates.Clear();
             m_HasReplacementPreviewDefinitions = false;
             m_HasShortEdgeReplacementPreviewDefinitions = false;
-            m_NormalReplacementPreviewDefinitionsQueued = false;
+            ResetNormalReplacementPreviewBatch();
             m_ShortEdgeReplacementPreviewAttempted = false;
             m_NodeMergeDefinitionsReadyForApply = false;
             m_ShortEdgeReplacementPreviewQueuedCount = 0;

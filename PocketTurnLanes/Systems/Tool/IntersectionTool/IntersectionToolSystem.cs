@@ -26,6 +26,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private const float BalancedRetryPreviewSplitNodePositionTolerance = 1f;
         private const int BalancedRetryMinimumApplyDelayFrames = 2;
         private const int MaxReplacementPreviewWaitFrames = 6;
+        private const int ReplacementPreviewStabilizeFrames = 2;
+        private const int ReplacementPreviewSettleFrames = 1;
         private const float SplitNodePositionTolerance = 2.5f;
         private const float PocketEdgeLengthTolerance = 4f;
         private const float MergedEdgeLengthTolerance = 12f;
@@ -71,11 +73,15 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         private int m_NodeMergeVerificationStartedFrame = -1;
         private int m_PreviewEdgeCount;
         private int m_ShortEdgeReplacementPreviewQueuedCount;
+        private int m_NormalReplacementPreviewQueuedCount;
+        private int m_NormalReplacementPreviewStartedFrame = -1;
+        private int m_NormalReplacementPreviewCompletedFrame = -1;
         private readonly List<SplitCandidate> m_PreviewCandidates = new List<SplitCandidate>();
         private readonly List<SplitCandidate> m_NextPreviewCandidates = new List<SplitCandidate>();
         private readonly List<SplitCandidate> m_AppliedCandidates = new List<SplitCandidate>();
         private readonly List<NodeMergeCandidate> m_PreviewNodeMergeCandidates = new List<NodeMergeCandidate>();
         private readonly List<NodeMergeCandidate> m_AppliedNodeMergeCandidates = new List<NodeMergeCandidate>();
+        private readonly List<ReplacementPreviewPlan> m_NormalReplacementPreviewPlanBuffer = new List<ReplacementPreviewPlan>();
         private readonly List<ReplacementCandidate> m_QueuedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_AppliedReplacementCandidates = new List<ReplacementCandidate>();
         private readonly List<ReplacementCandidate> m_PendingLaneRepairCandidates = new List<ReplacementCandidate>();
@@ -409,7 +415,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     result = DestroyToolDefinitions(result);
                     m_HasReplacementPreviewDefinitions = false;
                     m_HasShortEdgeReplacementPreviewDefinitions = false;
-                    m_NormalReplacementPreviewDefinitionsQueued = false;
+                    ResetNormalReplacementPreviewBatch();
                     m_ShortEdgeReplacementPreviewAttempted = false;
                     m_ShortEdgeReplacementPreviewQueuedCount = 0;
                     m_RebuildSplitPreviewForApply = true;
@@ -507,7 +513,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
         {
             int definitionCount = CalculateEntityCountSafe(m_DefinitionQuery);
             int replacementDefinitionCount = CalculateEntityCountSafe(m_ReplacementPreviewDefinitionQuery);
-            return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} queuedReplacements={m_QueuedReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} definitions={definitionCount} replacementPreviewDefinitions={replacementDefinitionCount} frame={UnityEngine.Time.frameCount}";
+            return $"state activeTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isToolEnabled={IsToolEnabled} underground={Underground} requireUnderground={requireUnderground} applyMode={applyMode} hovered={FormatEntity(m_HoveredIntersection)} previewNode={FormatEntity(m_PreviewIntersection)} previewEdge={FormatEntity(m_PreviewEdge)} previewEdges={m_PreviewEdgeCount} previewReady={m_PreviewReady} previewDirty={m_PreviewDirty} validationPending={m_PreviewValidationPending} clearDefinitions={m_ClearSplitDefinitions} applyPreviewNext={m_ApplyPreviewNextFrame} applyRetryNext={m_ApplyRetryNextFrame} applyReplacementNext={m_ApplyReplacementNextFrame} rebuildForApply={m_RebuildSplitPreviewForApply} previewCandidates={m_PreviewCandidates.Count} normalReplacementPreviewPlanBuffer={m_NormalReplacementPreviewPlanBuffer.Count} normalReplacementPreviewQueued={m_NormalReplacementPreviewQueuedCount}/{m_PreviewCandidates.Count} normalReplacementPreviewStartedFrame={m_NormalReplacementPreviewStartedFrame} normalReplacementPreviewCompletedFrame={m_NormalReplacementPreviewCompletedFrame} queuedReplacements={m_QueuedReplacementCandidates.Count} pendingLaneRepairs={m_PendingLaneRepairCandidates.Count} nodeMergeCandidates={m_PreviewNodeMergeCandidates.Count} definitions={definitionCount} replacementPreviewDefinitions={replacementDefinitionCount} frame={UnityEngine.Time.frameCount}";
         }
 
         public override void SetUnderground(bool isUnderground)

@@ -62,7 +62,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_PreviewEdgeCount = 0;
             m_HasReplacementPreviewDefinitions = false;
             m_HasShortEdgeReplacementPreviewDefinitions = false;
-            m_NormalReplacementPreviewDefinitionsQueued = false;
+            ResetNormalReplacementPreviewBatch();
             m_ShortEdgeReplacementPreviewAttempted = false;
             m_NodeMergeDefinitionsReadyForApply = false;
             m_ShortEdgeReplacementPreviewQueuedCount = 0;
@@ -77,6 +77,15 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_AppliedReplacementCandidates.Clear();
             m_PendingLaneRepairCandidates.Clear();
             m_VerifyAppliedReplacements = false;
+        }
+
+        private void ResetNormalReplacementPreviewBatch()
+        {
+            m_NormalReplacementPreviewDefinitionsQueued = false;
+            m_NormalReplacementPreviewQueuedCount = 0;
+            m_NormalReplacementPreviewStartedFrame = -1;
+            m_NormalReplacementPreviewCompletedFrame = -1;
+            m_NormalReplacementPreviewPlanBuffer.Clear();
         }
 
         private JobHandle ClearPreviewDefinitions(JobHandle inputDeps, string reason)
@@ -198,7 +207,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 applyMode = ApplyMode.Clear;
                 JobHandle clearResult = DestroyToolDefinitions(inputDeps);
                 m_HasReplacementPreviewDefinitions = false;
-                m_NormalReplacementPreviewDefinitionsQueued = false;
+                ResetNormalReplacementPreviewBatch();
                 if (m_PreviewNodeMergeCandidates.Count > 0)
                 {
                     if (m_HasShortEdgeReplacementPreviewDefinitions)
@@ -248,32 +257,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             int shortEdgeReplacementPreviewDefinitionCount = 0;
             bool queuedShortEdgeReplacementPreviewThisFrame = false;
 
-            int replacementPreviewCount = m_NormalReplacementPreviewDefinitionsQueued
-                ? m_PreviewCandidates.Count
-                : 0;
-            if (!m_NormalReplacementPreviewDefinitionsQueued)
+            if (!TryAdvanceNormalReplacementPreviewBatch(ref result, out int replacementPreviewCount))
             {
-                for (int i = 0; i < m_PreviewCandidates.Count; i++)
-                {
-                    if (TryApplyReplacementPreview(m_PreviewCandidates[i], ref result))
-                    {
-                        replacementPreviewCount++;
-                    }
-                }
-
-                if (replacementPreviewCount == m_PreviewCandidates.Count)
-                {
-                    m_NormalReplacementPreviewDefinitionsQueued = true;
-                }
-            }
-
-            if (!m_NormalReplacementPreviewDefinitionsQueued &&
-                replacementPreviewCount < m_PreviewCandidates.Count &&
-                UnityEngine.Time.frameCount - m_PreviewCreatedFrame < MaxReplacementPreviewWaitFrames)
-            {
-                m_PreviewValidationPending = true;
-                m_PreviewReady = false;
-                Mod.LogDiagnostic($"[IntersectionTool] Waiting for replacement preview edges node={FormatEntity(m_PreviewIntersection)} previewed={replacementPreviewCount}/{m_PreviewCandidates.Count} frameDelta={UnityEngine.Time.frameCount - m_PreviewCreatedFrame}.");
                 return result;
             }
 
@@ -282,7 +267,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             {
                 QueueShortEdgeReplacementPreviews(
                     ref result,
-                    "normal replacement preview definitions were queued; queueing short-edge preview in the same tool frame",
+                    "delayed normal replacement preview definitions settled; queueing short-edge preview on a later tool frame",
                     out int queuedShortEdgePreviewCount,
                     out _);
                 queuedShortEdgeReplacementPreviewThisFrame = queuedShortEdgePreviewCount > 0;
@@ -293,7 +278,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 m_PreviewValidationPending = true;
                 m_PreviewReady = false;
                 m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
-                Mod.LogDiagnostic($"[IntersectionTool] Queued synchronized replacement hover preview definitions node={FormatEntity(m_PreviewIntersection)} normalReplacementPreviewed={replacementPreviewCount}/{m_PreviewCandidates.Count} shortEdgeReplacementPreviewDefinitions={m_ShortEdgeReplacementPreviewQueuedCount}; waiting one frame to validate short-edge temp preview.");
+                Mod.LogDiagnostic($"[IntersectionTool] Queued short-edge replacement hover preview definitions after delayed normal preview node={FormatEntity(m_PreviewIntersection)} normalReplacementPreviewed={replacementPreviewCount}/{m_PreviewCandidates.Count} shortEdgeReplacementPreviewDefinitions={m_ShortEdgeReplacementPreviewQueuedCount}; waiting one frame to validate short-edge temp preview.");
                 return result;
             }
 
@@ -384,7 +369,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             applyMode = ApplyMode.Clear;
             JobHandle result = DestroyToolDefinitions(inputDeps);
             m_HasReplacementPreviewDefinitions = false;
-            m_NormalReplacementPreviewDefinitionsQueued = false;
+            ResetNormalReplacementPreviewBatch();
             if (m_HasShortEdgeReplacementPreviewDefinitions)
             {
                 m_HasShortEdgeReplacementPreviewDefinitions = false;
@@ -623,7 +608,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_NodeMergeDefinitionsReadyForApply = false;
             m_HasReplacementPreviewDefinitions = false;
             m_HasShortEdgeReplacementPreviewDefinitions = false;
-            m_NormalReplacementPreviewDefinitionsQueued = false;
+            ResetNormalReplacementPreviewBatch();
             m_ShortEdgeReplacementPreviewAttempted = false;
             m_ShortEdgeReplacementPreviewQueuedCount = 0;
             m_PreviewCreatedFrame = UnityEngine.Time.frameCount;
@@ -633,8 +618,100 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             m_QueuedReplacementCandidates.Clear();
         }
 
-        private bool TryApplyReplacementPreview(SplitCandidate candidate, ref JobHandle result)
+        private bool TryAdvanceNormalReplacementPreviewBatch(ref JobHandle result, out int replacementPreviewCount)
         {
+            replacementPreviewCount = m_NormalReplacementPreviewQueuedCount;
+            if (m_NormalReplacementPreviewDefinitionsQueued)
+            {
+                if (m_NormalReplacementPreviewCompletedFrame >= 0 &&
+                    UnityEngine.Time.frameCount - m_NormalReplacementPreviewCompletedFrame < ReplacementPreviewSettleFrames)
+                {
+                    m_PreviewValidationPending = true;
+                    m_PreviewReady = false;
+                    Mod.LogDiagnostic($"[IntersectionTool] Waiting for delayed replacement hover preview definitions to settle node={FormatEntity(m_PreviewIntersection)} queuedCandidates={replacementPreviewCount}/{m_PreviewCandidates.Count} frameDelta={UnityEngine.Time.frameCount - m_NormalReplacementPreviewCompletedFrame}/{ReplacementPreviewSettleFrames}.");
+                    return false;
+                }
+
+                return true;
+            }
+
+            if (m_NormalReplacementPreviewStartedFrame < 0)
+            {
+                m_NormalReplacementPreviewStartedFrame = UnityEngine.Time.frameCount;
+                m_NormalReplacementPreviewCompletedFrame = -1;
+                m_NormalReplacementPreviewQueuedCount = 0;
+                m_NormalReplacementPreviewPlanBuffer.Clear();
+                m_PreviewValidationPending = true;
+                m_PreviewReady = false;
+                Mod.LogDiagnostic($"[IntersectionTool] Starting delayed replacement hover preview node={FormatEntity(m_PreviewIntersection)} candidates={m_PreviewCandidates.Count} stabilizeFrames={ReplacementPreviewStabilizeFrames} maxWaitFrames={MaxReplacementPreviewWaitFrames} definitionsPerCandidate=2.");
+                return false;
+            }
+
+            int waitedFrames = UnityEngine.Time.frameCount - m_NormalReplacementPreviewStartedFrame;
+            if (waitedFrames < ReplacementPreviewStabilizeFrames)
+            {
+                m_PreviewValidationPending = true;
+                m_PreviewReady = false;
+                Mod.LogDiagnostic($"[IntersectionTool] Waiting for split preview to stabilize before replacement hover preview node={FormatEntity(m_PreviewIntersection)} frameDelta={waitedFrames}/{ReplacementPreviewStabilizeFrames} candidates={m_PreviewCandidates.Count}.");
+                return false;
+            }
+
+            int degradedPlanCount = CaptureReplacementPreviewPlans();
+            if (degradedPlanCount > 0 &&
+                waitedFrames < MaxReplacementPreviewWaitFrames)
+            {
+                m_PreviewValidationPending = true;
+                m_PreviewReady = false;
+                Mod.LogDiagnostic($"[IntersectionTool] Waiting to capture complete replacement hover preview plans node={FormatEntity(m_PreviewIntersection)} captured={m_NormalReplacementPreviewPlanBuffer.Count}/{m_PreviewCandidates.Count} degraded={degradedPlanCount} frameDelta={waitedFrames}/{MaxReplacementPreviewWaitFrames}.");
+                return false;
+            }
+
+            int queuedPlanCount = QueueReplacementPreviewPlans(ref result);
+            m_NormalReplacementPreviewQueuedCount = queuedPlanCount;
+            m_NormalReplacementPreviewDefinitionsQueued = true;
+            m_NormalReplacementPreviewCompletedFrame = UnityEngine.Time.frameCount;
+            replacementPreviewCount = queuedPlanCount;
+            m_PreviewValidationPending = true;
+            m_PreviewReady = false;
+            Mod.LogDiagnostic($"[IntersectionTool] Queued delayed replacement hover preview batch in one tool frame node={FormatEntity(m_PreviewIntersection)} queuedPlans={queuedPlanCount}/{m_PreviewCandidates.Count} degraded={degradedPlanCount} completedFrame={m_NormalReplacementPreviewCompletedFrame}; waiting settleFrames={ReplacementPreviewSettleFrames} before final ready/apply.");
+            return false;
+        }
+
+        private int CaptureReplacementPreviewPlans()
+        {
+            m_NormalReplacementPreviewPlanBuffer.Clear();
+            int degradedPlanCount = 0;
+            for (int i = 0; i < m_PreviewCandidates.Count; i++)
+            {
+                if (TryBuildReplacementPreviewPlan(m_PreviewCandidates[i], out ReplacementPreviewPlan plan))
+                {
+                    m_NormalReplacementPreviewPlanBuffer.Add(plan);
+                }
+                else
+                {
+                    degradedPlanCount++;
+                }
+            }
+
+            return degradedPlanCount;
+        }
+
+        private int QueueReplacementPreviewPlans(ref JobHandle result)
+        {
+            int queuedPlanCount = m_NormalReplacementPreviewPlanBuffer.Count;
+            for (int i = 0; i < m_NormalReplacementPreviewPlanBuffer.Count; i++)
+            {
+                QueueReplacementPreviewPlan(m_NormalReplacementPreviewPlanBuffer[i], ref result);
+            }
+
+            m_NormalReplacementPreviewPlanBuffer.Clear();
+            return queuedPlanCount;
+        }
+
+        private bool TryBuildReplacementPreviewPlan(SplitCandidate candidate, out ReplacementPreviewPlan plan)
+        {
+            plan = default;
+
             if (candidate.TargetPrefab == Entity.Null)
             {
                 return false;
@@ -673,16 +750,34 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             definitionRequest.PreviewOnly = true;
             outerDefinitionRequest.PreviewOnly = true;
 
-            JobHandle definitionJobHandle = ScheduleReplacementDefinition(definitionRequest, result);
+            plan = new ReplacementPreviewPlan
+            {
+                Candidate = candidate,
+                SplitNode = splitNode,
+                PocketEdge = pocketEdge,
+                OuterEdge = outerEdge,
+                PocketLengthError = lengthError,
+                OuterLengthError = outerLengthError,
+                PocketRequest = definitionRequest,
+                OuterRequest = outerDefinitionRequest
+            };
+
+            Mod.LogDiagnostic($"[IntersectionTool] Captured pocket lane replacement preview plan original={FormatEntity(candidate.Edge)} pocket={FormatEntity(pocketEdge)} outer={FormatEntity(outerEdge)} splitNode={FormatEntity(splitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} targetUpgrade={(candidate.HasTargetUpgrade ? candidate.TargetUpgrade.m_Flags.ToString() : "none")} pocketFlags={definitionRequest.Flags} outerFlags={outerDefinitionRequest.Flags} collisionValidation=vanilla-disabled pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={lengthError:0.##}m outerLengthError={outerLengthError:0.##}m.");
+            return true;
+        }
+
+        private void QueueReplacementPreviewPlan(ReplacementPreviewPlan plan, ref JobHandle result)
+        {
+            JobHandle definitionJobHandle = ScheduleReplacementDefinition(plan.PocketRequest, result);
             result = definitionJobHandle;
 
-            JobHandle outerDefinitionJobHandle = ScheduleReplacementDefinition(outerDefinitionRequest, definitionJobHandle);
+            JobHandle outerDefinitionJobHandle = ScheduleReplacementDefinition(plan.OuterRequest, definitionJobHandle);
             result = outerDefinitionJobHandle;
 
             m_HasReplacementPreviewDefinitions = true;
 
-            Mod.LogDiagnostic($"[IntersectionTool] Created pocket lane replacement definition preview original={FormatEntity(candidate.Edge)} pocket={FormatEntity(pocketEdge)} outer={FormatEntity(outerEdge)} splitNode={FormatEntity(splitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} targetUpgrade={(candidate.HasTargetUpgrade ? candidate.TargetUpgrade.m_Flags.ToString() : "none")} pocketFlags={definitionRequest.Flags} outerFlags={outerDefinitionRequest.Flags} collisionValidation=vanilla-disabled pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={lengthError:0.##}m outerLengthError={outerLengthError:0.##}m.");
-            return true;
+            SplitCandidate candidate = plan.Candidate;
+            Mod.LogDiagnostic($"[IntersectionTool] Queued pocket lane replacement definition preview from captured plan original={FormatEntity(candidate.Edge)} pocket={FormatEntity(plan.PocketEdge)} outer={FormatEntity(plan.OuterEdge)} splitNode={FormatEntity(plan.SplitNode)} splitNodePrefab=definition-driven sourcePrefab={GetPrefabNameFromPrefab(candidate.SourcePrefab)} targetPrefab={GetPrefabNameFromPrefab(candidate.TargetPrefab)} orientation={(candidate.InvertTarget ? "reversed" : "direct")} targetUpgrade={(candidate.HasTargetUpgrade ? candidate.TargetUpgrade.m_Flags.ToString() : "none")} pocketFlags={plan.PocketRequest.Flags} outerFlags={plan.OuterRequest.Flags} collisionValidation=vanilla-disabled pocketComposition=definition-driven outerComposition=source-definition lanes={candidate.OriginalForwardLanes}/{candidate.OriginalBackwardLanes}->{candidate.TargetForwardLanes}/{candidate.TargetBackwardLanes} pocketLengthError={plan.PocketLengthError:0.##}m outerLengthError={plan.OuterLengthError:0.##}m.");
         }
 
     }

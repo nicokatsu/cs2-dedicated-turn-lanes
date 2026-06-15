@@ -220,6 +220,18 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             public Upgraded Upgraded;
         }
 
+        private struct ReplacementPreviewPlan
+        {
+            public SplitCandidate Candidate;
+            public Entity SplitNode;
+            public Entity PocketEdge;
+            public Entity OuterEdge;
+            public float PocketLengthError;
+            public float OuterLengthError;
+            public ReplacementDefinitionRequest PocketRequest;
+            public ReplacementDefinitionRequest OuterRequest;
+        }
+
         private struct ReplacementPreviewDefinition : IComponentData
         {
         }
