@@ -41,7 +41,7 @@ The current version only uses the default automatic matching rules:
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.1.2" />
+	<ModVersion Value="0.1.3" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.5.*" />
 	<!--Dependency for the mod, can be set multiple times-->
@@ -49,9 +49,7 @@ The current version only uses the default automatic matching rules:
 	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="Add unlocked check." />
-	<!--<ChangeLog>
-	</ChangeLog>-->
+	<ChangeLog Value="Improves hover preview stability and reduces crash risk at fastest simulation speed." />
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
 	<ExternalLink Type="discord" Url="https://discord.com/channels/1024242828114673724/1509986355868995715" />
 	<ExternalLink Type="github" Url="https://github.com/nicokatsu/cs2-dedicated-turn-lanes" />
