@@ -32,9 +32,13 @@ namespace PocketTurnLanes.Options
         [SettingsUISetter(typeof(DedicatedTurnLaneSettings), nameof(OnDiagnosticLoggingChanged))]
         public bool EnableDiagnosticLogging { get; set; }
 
+        [SettingsUIHidden]
+        public string CustomRoadAssetMatchesJson { get; set; }
+
         public override void SetDefaults()
         {
             EnableDiagnosticLogging = false;
+            CustomRoadAssetMatchesJson = "{}";
         }
 
         private void OnDiagnosticLoggingChanged(bool enabled)

@@ -144,6 +144,27 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return true;
         }
 
+        internal void ProcessDeferredToolChangedCleanup()
+        {
+            PendingToolCommandState pendingCommand = m_PendingToolCommandState;
+            if (pendingCommand.IsEmpty ||
+                pendingCommand.Command != PendingToolCommand.Disable ||
+                !pendingCommand.DeferredFromToolChanged)
+            {
+                return;
+            }
+
+            m_PendingToolCommandState = default;
+            Mod.LogDiagnostic($"[IntersectionTool] Processing deferred active-tool cleanup from backend UI update reason={pendingCommand.ProcessingReason} queuedActiveTool={pendingCommand.QueuedActiveToolOrDefault} currentActiveTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isEnabled={IsToolEnabled} {GetToolExitSnapshot()}.");
+            JobHandle result = DisableTool(
+                m_LastToolUpdateJobHandle,
+                pendingCommand.ProcessingReason,
+                pendingCommand.SwitchToDefaultTool,
+                true);
+            result.Complete();
+            TrackToolUpdateJobHandle(result);
+        }
+
         private string GetToolExitSnapshot()
         {
             int definitionCount = CalculateEntityCountSafe(m_DefinitionQuery);

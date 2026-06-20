@@ -1,0 +1,215 @@
+.panelBounds {
+    max-height: 520rem;
+    overflow: hidden;
+}
+
+.ruleList {
+    max-height: 300rem;
+    padding: 6rem 12rem 10rem;
+    margin-top: 2rem;
+}
+
+.ruleListLabel {
+    padding: 0 0 2rem;
+}
+
+.editorList {
+    padding: 7rem 12rem 5rem;
+}
+
+.editorField {
+    width: 100%;
+    min-width: 0;
+    padding: 0 0 4rem;
+}
+
+.editorField:last-child {
+    padding-bottom: 0;
+}
+
+.editorFieldHeader {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 20rem;
+    margin-bottom: 1rem;
+}
+
+.editorLabel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.editorFieldControl {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+}
+
+.editorAction {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    flex: 0 0 28rem;
+    min-width: 28rem;
+    margin-left: 6rem;
+}
+
+.editorCollapseButton {
+    flex: 0 0 auto;
+}
+
+.ruleCardShell {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    margin: 0 0 4rem;
+}
+
+.ruleCardShell:last-child {
+    margin-bottom: 0;
+}
+
+.ruleCard {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: left;
+}
+
+.ruleCardHeader {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.ruleCardTitle {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ruleCardActionSlot {
+    flex: 0 0 46rem;
+    min-width: 46rem;
+}
+
+.ruleDeleteButton {
+    position: absolute;
+    top: 50%;
+    right: 6rem;
+    transform: translateY(-50%);
+}
+
+.ruleMatch {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    margin-right: 0;
+}
+
+.ruleSourceLine,
+.ruleTargetLine {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.ruleTargetLine {
+    margin-top: 2rem;
+    padding-right: 10rem;
+}
+
+.ruleEndpoint {
+    display: flex;
+    align-items: center;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.ruleSourceEndpoint,
+.ruleTargetEndpoint {
+    max-width: 100%;
+}
+
+.ruleTargetEndpoint {
+    flex: 1 1 auto;
+}
+
+.ruleEndpointIcon {
+    width: 18rem;
+    height: 18rem;
+    flex: 0 0 auto;
+    object-fit: contain;
+    margin-right: 8rem;
+}
+
+.ruleEndpointName {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ruleArrow {
+    width: 16rem;
+    height: 16rem;
+    flex: 0 0 auto;
+    object-fit: contain;
+    margin: 0 8rem 0 0;
+    opacity: 0.65;
+}
+
+.dropdownEmpty {
+    padding: 8rem 12rem;
+}
+
+.dropdownList {
+    width: 376rem;
+    max-height: 320rem;
+}
+
+.dropdownToggle {
+    width: 376rem;
+    max-width: 100%;
+}
+
+.dropdownToggleLine {
+    width: 100%;
+    min-width: 0;
+}
+
+.roadAssetOption {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.roadAssetIcon {
+    width: 16rem;
+    height: 16rem;
+    flex: 0 0 auto;
+    object-fit: contain;
+    margin-right: 8rem;
+}
+
+.roadAssetName {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

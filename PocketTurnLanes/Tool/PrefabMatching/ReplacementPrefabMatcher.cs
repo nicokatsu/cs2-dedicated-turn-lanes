@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Colossal.Entities;
+using Game.SceneFlow;
 using Game.Common;
 using Game.Net;
 using Game.Prefabs;
@@ -22,6 +24,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         private readonly RoadBuilderPrefabSemantics m_RoadBuilderPrefabSemantics;
         private readonly RoadLaneProfileBuilder m_RoadLaneProfileBuilder;
         private readonly ReplacementRoadUpgradeMatcher m_RoadUpgradeMatcher;
+        private readonly Func<string, string> m_GetCustomRoadAssetMatchTarget;
 
         internal ReplacementPrefabMatcher(
             EntityManager entityManager,
@@ -31,7 +34,8 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             Func<BufferLookup<NetSubSection>> getNetSubSectionLookup,
             Func<BufferLookup<NetSectionPiece>> getNetSectionPieceLookup,
             Func<ComponentLookup<NetLaneData>> getNetLaneDataLookup,
-            Func<BufferLookup<NetPieceLane>> getNetPieceLaneLookup)
+            Func<BufferLookup<NetPieceLane>> getNetPieceLaneLookup,
+            Func<string, string> getCustomRoadAssetMatchTarget = null)
         {
             m_EntityManager = entityManager;
             m_PrefabSystem = prefabSystem;
@@ -51,6 +55,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 entityManager,
                 prefabSystem,
                 m_RoadLaneProfileBuilder);
+            m_GetCustomRoadAssetMatchTarget = getCustomRoadAssetMatchTarget;
         }
 
         private EntityManager EntityManager => m_EntityManager;
@@ -102,6 +107,22 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             CompositionFlags sourceTramUpgradeFlags = source.TramUpgradeFlags;
             RoadLaneCounts originalEffectiveCounts = source.OriginalEffectiveCounts;
             RoadLaneCounts desiredEffectiveCounts = source.DesiredEffectiveCounts;
+
+            if (TryGetCustomRoadAssetMatchTarget(source.Prefab, out string customTargetPrefabName))
+            {
+                if (TryBuildCustomRoadAssetMatch(
+                        source,
+                        customTargetPrefabName,
+                        out match,
+                        out ReplacementSearchStats customStats,
+                        out string customDetail))
+                {
+                    Mod.LogEssential($"[CustomRoadAssetMatch] Preferred target selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, match.Prefab)} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} score={match.Score} scanned={customStats.Scanned} detail={customDetail}.");
+                    return true;
+                }
+
+                Mod.LogEssential($"[CustomRoadAssetMatch] Preferred target rejected; falling back to automatic matcher sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} targetPrefabName={customTargetPrefabName} nodeSide={(nodeIsStart ? "start" : "end")} reason={customDetail}.");
+            }
 
             using (NativeArray<Entity> prefabEntities = m_RoadPrefabQuery.ToEntityArray(Allocator.Temp))
             {
@@ -185,6 +206,327 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             return m_RoadPrefabEligibility.IsHighwayRoadEdge(edgeEntity, out detail);
         }
 
+        internal void GetRoadAssetSourceOptions(
+            string query,
+            List<RoadAssetPrefabOption> options,
+            int maxCount)
+        {
+            options?.Clear();
+            if (options == null)
+            {
+                return;
+            }
+
+            using (NativeArray<Entity> prefabEntities = m_RoadPrefabQuery.ToEntityArray(Allocator.Temp))
+            {
+                for (int i = 0; i < prefabEntities.Length; i++)
+                {
+                    Entity sourcePrefab = prefabEntities[i];
+                    if (!TryBuildDefaultSourceReplacementContext(
+                            sourcePrefab,
+                            false,
+                            out _,
+                            out string endDetail) &&
+                        !TryBuildDefaultSourceReplacementContext(
+                            sourcePrefab,
+                            true,
+                            out _,
+                            out string startDetail))
+                    {
+                        if (!string.IsNullOrEmpty(query))
+                        {
+                            string name = PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, sourcePrefab);
+                            if (MatchesQuery(name, query))
+                            {
+                                Mod.LogDiagnostic($"[CustomRoadAssetMatch] Source search skipped prefab={name} entity={FormatEntity(sourcePrefab)} endValidation={endDetail} startValidation={startDetail}.");
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    if (!TryBuildRoadAssetPrefabOption(sourcePrefab, out RoadAssetPrefabOption option) ||
+                        !OptionMatchesQuery(option, query))
+                    {
+                        continue;
+                    }
+
+                    options.Add(option);
+                }
+            }
+
+            SortAndTrimOptions(options, maxCount);
+        }
+
+        internal bool TryGetCompatibleTargetOptions(
+            string sourcePrefabName,
+            string query,
+            List<RoadAssetPrefabOption> options,
+            int maxCount,
+            out RoadAssetPrefabOption sourceOption,
+            out string detail)
+        {
+            sourceOption = default;
+            detail = string.Empty;
+            options?.Clear();
+            if (options == null)
+            {
+                detail = "options=null";
+                return false;
+            }
+
+            if (!TryFindRoadPrefabByName(sourcePrefabName, out Entity sourcePrefab))
+            {
+                detail = $"sourceMissing sourcePrefabName={sourcePrefabName}";
+                return false;
+            }
+
+            if (!TryBuildRoadAssetPrefabOption(sourcePrefab, out sourceOption))
+            {
+                detail = $"sourceInvalid sourcePrefabName={sourcePrefabName}";
+                return false;
+            }
+
+            bool hasEndContext = TryBuildDefaultSourceReplacementContext(
+                sourcePrefab,
+                false,
+                out SourceReplacementContext endContext,
+                out string endDetail);
+            bool hasStartContext = TryBuildDefaultSourceReplacementContext(
+                sourcePrefab,
+                true,
+                out SourceReplacementContext startContext,
+                out string startDetail);
+
+            if (!hasEndContext && !hasStartContext)
+            {
+                detail = $"sourceInvalid sourcePrefabName={sourcePrefabName} endValidation={endDetail} startValidation={startDetail}";
+                return false;
+            }
+
+            using (NativeArray<Entity> prefabEntities = m_RoadPrefabQuery.ToEntityArray(Allocator.Temp))
+            {
+                for (int i = 0; i < prefabEntities.Length; i++)
+                {
+                    Entity targetPrefab = prefabEntities[i];
+                    if (!TryBuildRoadAssetPrefabOption(targetPrefab, out RoadAssetPrefabOption targetOption) ||
+                        !OptionMatchesQuery(targetOption, query))
+                    {
+                        continue;
+                    }
+
+                    bool compatible =
+                        hasEndContext &&
+                        TryBuildCustomRoadAssetMatch(
+                            endContext,
+                            targetPrefab,
+                            out _,
+                            out _,
+                            out _);
+                    if (!compatible && hasStartContext)
+                    {
+                        compatible = TryBuildCustomRoadAssetMatch(
+                            startContext,
+                            targetPrefab,
+                            out _,
+                            out _,
+                            out _);
+                    }
+
+                    if (!compatible)
+                    {
+                        continue;
+                    }
+
+                    options.Add(targetOption);
+                }
+            }
+
+            SortAndTrimOptions(options, maxCount);
+            detail = $"sourcePrefabName={sourcePrefabName} targets={options.Count} endContext={hasEndContext} startContext={hasStartContext}";
+            return true;
+        }
+
+        internal bool IsValidCustomRoadAssetMatch(
+            string sourcePrefabName,
+            string targetPrefabName,
+            out string detail)
+        {
+            detail = string.Empty;
+            if (!TryFindRoadPrefabByName(sourcePrefabName, out Entity sourcePrefab))
+            {
+                detail = $"sourceMissing sourcePrefabName={sourcePrefabName}";
+                return false;
+            }
+
+            if (!TryFindRoadPrefabByName(targetPrefabName, out Entity targetPrefab))
+            {
+                detail = $"targetMissing targetPrefabName={targetPrefabName}";
+                return false;
+            }
+
+            bool hasEndContext = TryBuildDefaultSourceReplacementContext(
+                sourcePrefab,
+                false,
+                out SourceReplacementContext endContext,
+                out string endDetail);
+            bool hasStartContext = TryBuildDefaultSourceReplacementContext(
+                sourcePrefab,
+                true,
+                out SourceReplacementContext startContext,
+                out string startDetail);
+
+            if (hasEndContext &&
+                TryBuildCustomRoadAssetMatch(
+                    endContext,
+                    targetPrefab,
+                    out _,
+                    out ReplacementSearchStats endStats,
+                    out string validEndDetail))
+            {
+                detail = $"valid nodeSide=end scanned={endStats.Scanned} {validEndDetail}";
+                return true;
+            }
+
+            if (hasStartContext &&
+                TryBuildCustomRoadAssetMatch(
+                    startContext,
+                    targetPrefab,
+                    out _,
+                    out ReplacementSearchStats startStats,
+                    out string validStartDetail))
+            {
+                detail = $"valid nodeSide=start scanned={startStats.Scanned} {validStartDetail}";
+                return true;
+            }
+
+            detail = $"incompatible sourcePrefabName={sourcePrefabName} targetPrefabName={targetPrefabName} endContext={hasEndContext} endValidation={endDetail} startContext={hasStartContext} startValidation={startDetail}";
+            return false;
+        }
+
+        internal bool TryGetRoadAssetPrefabOption(
+            string prefabName,
+            out RoadAssetPrefabOption option,
+            out string detail)
+        {
+            option = default;
+            if (!TryFindRoadPrefabByName(prefabName, out Entity prefabEntity))
+            {
+                detail = $"prefabMissing prefabName={prefabName}";
+                return false;
+            }
+
+            if (!TryBuildRoadAssetPrefabOption(prefabEntity, out option))
+            {
+                detail = $"prefabInvalid prefabName={prefabName}";
+                return false;
+            }
+
+            detail = "ok";
+            return true;
+        }
+
+        private bool TryGetCustomRoadAssetMatchTarget(
+            Entity sourcePrefab,
+            out string targetPrefabName)
+        {
+            targetPrefabName = null;
+            if (m_GetCustomRoadAssetMatchTarget == null || sourcePrefab == Entity.Null)
+            {
+                return false;
+            }
+
+            string sourcePrefabName = PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, sourcePrefab);
+            if (string.IsNullOrWhiteSpace(sourcePrefabName) ||
+                sourcePrefabName[0] == '<')
+            {
+                return false;
+            }
+
+            targetPrefabName = m_GetCustomRoadAssetMatchTarget(sourcePrefabName);
+            return !string.IsNullOrWhiteSpace(targetPrefabName);
+        }
+
+        private bool TryBuildCustomRoadAssetMatch(
+            SourceReplacementContext source,
+            string targetPrefabName,
+            out ReplacementPrefabMatch match,
+            out ReplacementSearchStats stats,
+            out string detail)
+        {
+            match = default;
+            stats = ReplacementSearchStats.Create();
+            if (!TryFindRoadPrefabByName(targetPrefabName, out Entity targetPrefab))
+            {
+                detail = $"targetMissing targetPrefabName={targetPrefabName}";
+                return false;
+            }
+
+            return TryBuildCustomRoadAssetMatch(
+                source,
+                targetPrefab,
+                out match,
+                out stats,
+                out detail);
+        }
+
+        private bool TryBuildCustomRoadAssetMatch(
+            SourceReplacementContext source,
+            Entity targetPrefab,
+            out ReplacementPrefabMatch match,
+            out ReplacementSearchStats stats,
+            out string detail)
+        {
+            match = default;
+            stats = ReplacementSearchStats.Create();
+            stats.Scanned = 1;
+
+            if (!TryBuildCandidateReplacementContext(
+                    targetPrefab,
+                    source,
+                    ref stats,
+                    out CandidateReplacementContext candidate))
+            {
+                detail = $"candidateRejected targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, targetPrefab)} stats=({FormatCustomRuleStats(stats)})";
+                return false;
+            }
+
+            if (!TryMatchReplacementCandidateLaneProfile(
+                    targetPrefab,
+                    candidate.Name,
+                    candidate.IsSourcePrefab,
+                    candidate.LooksLikeRoadBuilder,
+                    candidate.Profile,
+                    source.Profile,
+                    source.DesiredCounts,
+                    source.OriginalEffectiveCounts,
+                    source.DesiredEffectiveCounts,
+                    source.HasTramTracks,
+                    source.HasIndependentTram,
+                    source.TramUpgradeFlags,
+                    ref stats,
+                    out CandidateLaneMatch candidateMatch))
+            {
+                detail = $"laneProfileMismatch targetPrefab={candidate.Name} sourceLanes={source.OriginalCounts} desiredLanes={source.DesiredCounts} candidateLanes={candidate.Profile.RoadCounts} stats=({FormatCustomRuleStats(stats)})";
+                return false;
+            }
+
+            stats.LaneMatches++;
+            if (candidate.IsSourcePrefab)
+            {
+                stats.SourcePrefabLaneMatches++;
+            }
+
+            CandidateScoreResult scoreResult = CalculateCandidateScore(
+                source,
+                candidate,
+                candidateMatch,
+                ref stats);
+            match = BuildReplacementPrefabMatch(source, candidate, candidateMatch, scoreResult);
+            detail = $"targetPrefab={candidate.Name} targetEntity={FormatEntity(targetPrefab)} sourceLanes={source.OriginalCounts} desiredLanes={source.DesiredCounts} candidateLanes={candidate.Profile.RoadCounts} targetEffectiveLanes={candidateMatch.TargetEffectiveCounts} orientation={(candidateMatch.Invert ? "reversed" : "direct")} tramMatch={candidateMatch.TramMatchDetail} layoutScore={scoreResult.LayoutScore} score={scoreResult.Score} stats=({FormatCustomRuleStats(stats)})";
+            return true;
+        }
+
         private bool TryBuildSourceReplacementContext(
             Entity nodeEntity,
             Entity edgeEntity,
@@ -257,6 +599,70 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 OriginalEffectiveCounts = RoadLaneCounts.Add(originalCounts, sourceProfile.IndependentTramCounts),
                 DesiredEffectiveCounts = RoadLaneCounts.Add(desiredCounts, sourceProfile.IndependentTramCounts)
             };
+            return true;
+        }
+
+        private bool TryBuildDefaultSourceReplacementContext(
+            Entity sourcePrefab,
+            bool nodeIsStart,
+            out SourceReplacementContext context,
+            out string detail)
+        {
+            context = default;
+            detail = string.Empty;
+
+            if (sourcePrefab == Entity.Null ||
+                !EntityManager.TryGetComponent(sourcePrefab, out NetGeometryData sourceGeometry) ||
+                !EntityManager.TryGetComponent(sourcePrefab, out RoadData sourceRoadData) ||
+                !EntityManager.TryGetComponent(sourcePrefab, out NetData sourceNetData))
+            {
+                detail = $"missingSourcePrefabData sourcePrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, sourcePrefab)} entity={FormatEntity(sourcePrefab)}";
+                return false;
+            }
+
+            m_RoadPrefabEligibility.GetRoadContentProfile(sourcePrefab, out bool sourceIsDlc, out string sourceContentDetail);
+            if (m_RoadPrefabEligibility.IsBridgeRoadPrefab(sourcePrefab, out string sourceBridgeDetail))
+            {
+                detail = $"sourceBridgeExcluded {sourceBridgeDetail}";
+                return false;
+            }
+
+            if (m_RoadPrefabEligibility.IsHighwayRoadPrefab(sourcePrefab, out string sourceHighwayDetail))
+            {
+                detail = $"sourceHighwayExcluded {sourceHighwayDetail}";
+                return false;
+            }
+
+            if (!TryGetDefaultRoadLaneProfile(
+                    sourcePrefab,
+                    out RoadLaneProfile sourceProfile))
+            {
+                detail = $"sourceLaneProfileMissing sourcePrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, sourcePrefab)} entity={FormatEntity(sourcePrefab)}";
+                return false;
+            }
+
+            RoadLaneCounts originalCounts = sourceProfile.RoadCounts;
+            RoadLaneCounts desiredCounts = GetDesiredPocketLaneCounts(originalCounts, nodeIsStart);
+            context = new SourceReplacementContext
+            {
+                Prefab = sourcePrefab,
+                Geometry = sourceGeometry,
+                RoadData = sourceRoadData,
+                NetData = sourceNetData,
+                IsDlc = sourceIsDlc,
+                ContentDetail = sourceContentDetail,
+                NodeIsStart = nodeIsStart,
+                Profile = sourceProfile,
+                OriginalCounts = originalCounts,
+                DesiredCounts = desiredCounts,
+                HasTramTracks = !sourceProfile.TramTrackCounts.IsEmpty,
+                HasIndependentTram = !sourceProfile.IndependentTramCounts.IsEmpty,
+                HasUpgraded = false,
+                TramUpgradeFlags = default,
+                OriginalEffectiveCounts = RoadLaneCounts.Add(originalCounts, sourceProfile.IndependentTramCounts),
+                DesiredEffectiveCounts = RoadLaneCounts.Add(desiredCounts, sourceProfile.IndependentTramCounts)
+            };
+            detail = "ok";
             return true;
         }
 
@@ -525,6 +931,183 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         private static RoadLaneCounts GetDesiredPocketLaneCounts(RoadLaneCounts originalCounts, bool currentNodeIsStart)
         {
             return originalCounts.WithAddedIncomingAtNode(currentNodeIsStart);
+        }
+
+        private bool TryFindRoadPrefabByName(string prefabName, out Entity prefabEntity)
+        {
+            prefabEntity = Entity.Null;
+            if (string.IsNullOrWhiteSpace(prefabName))
+            {
+                return false;
+            }
+
+            string normalizedName = prefabName.Trim();
+            using (NativeArray<Entity> prefabEntities = m_RoadPrefabQuery.ToEntityArray(Allocator.Temp))
+            {
+                for (int i = 0; i < prefabEntities.Length; i++)
+                {
+                    Entity candidate = prefabEntities[i];
+                    if (!m_PrefabSystem.TryGetPrefab(candidate, out PrefabBase prefabBase))
+                    {
+                        continue;
+                    }
+
+                    if (!string.Equals(prefabBase.name, normalizedName, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    prefabEntity = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool TryBuildRoadAssetPrefabOption(
+            Entity prefabEntity,
+            out RoadAssetPrefabOption option)
+        {
+            option = default;
+            if (prefabEntity == Entity.Null ||
+                !m_PrefabSystem.TryGetPrefab(prefabEntity, out PrefabBase prefabBase) ||
+                !EntityManager.TryGetComponent(prefabEntity, out NetGeometryData geometry) ||
+                !TryGetDefaultRoadLaneProfile(prefabEntity, out RoadLaneProfile profile))
+            {
+                return false;
+            }
+
+            m_RoadPrefabEligibility.GetRoadContentProfile(prefabEntity, out bool isDlc, out string contentDetail);
+            string transitSummary = string.Empty;
+            if (!profile.TramTrackCounts.IsEmpty)
+            {
+                transitSummary += $" tram={profile.TramTrackCounts}";
+            }
+
+            if (profile.BusLaneLayout.HasAny)
+            {
+                transitSummary += $" bus={profile.BusLaneLayout}";
+            }
+
+            if (profile.HasMarkedParking)
+            {
+                transitSummary += " markedParking=True";
+            }
+
+            option = new RoadAssetPrefabOption
+            {
+                PrefabName = prefabBase.name,
+                DisplayName = GetLocalizedAssetName(prefabBase),
+                Icon = GetRoadAssetIcon(prefabBase),
+                Summary = $"lanes={profile.RoadCounts} width={geometry.m_DefaultWidth:0.##}m content={(isDlc ? "dlc" : "base")} profile={profile.Source}{transitSummary}",
+                IsDlc = isDlc,
+                ContentDetail = contentDetail
+            };
+            return true;
+        }
+
+        private static string GetRoadAssetIcon(PrefabBase prefabBase)
+        {
+            if (prefabBase != null)
+            {
+                UIObject uiObject = prefabBase.GetComponent<UIObject>();
+                if (uiObject != null && !string.IsNullOrEmpty(uiObject.m_Icon))
+                {
+                    return uiObject.m_Icon;
+                }
+
+                if (!string.IsNullOrEmpty(prefabBase.thumbnailUrl))
+                {
+                    return prefabBase.thumbnailUrl;
+                }
+            }
+
+            return "Media/Editor/DefaultObject.svg";
+        }
+
+        private static string GetLocalizedAssetName(PrefabBase prefabBase)
+        {
+            if (prefabBase == null)
+            {
+                return string.Empty;
+            }
+
+            string prefabName = prefabBase.name ?? string.Empty;
+            if (TryGetLocalizedAssetName(prefabName, out string localizedName))
+            {
+                return localizedName;
+            }
+
+            if (prefabBase.asset != null)
+            {
+                if (TryGetLocalizedAssetName(prefabBase.asset.identifier, out localizedName) ||
+                    TryGetLocalizedAssetName(prefabBase.asset.uniqueName, out localizedName) ||
+                    TryGetLocalizedAssetName(prefabBase.asset.name, out localizedName))
+                {
+                    return localizedName;
+                }
+            }
+
+            return prefabName;
+        }
+
+        private static bool TryGetLocalizedAssetName(string assetId, out string localizedName)
+        {
+            localizedName = string.Empty;
+            if (string.IsNullOrWhiteSpace(assetId))
+            {
+                return false;
+            }
+
+            try
+            {
+                string key = $"Assets.NAME[{assetId}]";
+                return GameManager.instance?.localizationManager?.activeDictionary?.TryGetValue(key, out localizedName) == true &&
+                       !string.IsNullOrWhiteSpace(localizedName);
+            }
+            catch
+            {
+                localizedName = string.Empty;
+                return false;
+            }
+        }
+
+        private static bool OptionMatchesQuery(RoadAssetPrefabOption option, string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return true;
+            }
+
+            return MatchesQuery(option.PrefabName, query) ||
+                   MatchesQuery(option.DisplayName, query) ||
+                   MatchesQuery(option.Summary, query);
+        }
+
+        private static bool MatchesQuery(string value, string query)
+        {
+            return string.IsNullOrWhiteSpace(query) ||
+                   (!string.IsNullOrEmpty(value) &&
+                    value.IndexOf(query.Trim(), StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static void SortAndTrimOptions(List<RoadAssetPrefabOption> options, int maxCount)
+        {
+            options.Sort((left, right) => string.Compare(
+                left.DisplayName,
+                right.DisplayName,
+                StringComparison.OrdinalIgnoreCase));
+
+            if (maxCount > 0 && options.Count > maxCount)
+            {
+                options.RemoveRange(maxCount, options.Count - maxCount);
+            }
+        }
+
+        private static string FormatCustomRuleStats(ReplacementSearchStats stats)
+        {
+            return $"lockedExcluded={stats.LockedExcluded} dlcBlocked={stats.DlcBlocked} widthMatches={stats.WidthMatches} parkingExcluded={stats.ParkingExcluded} highwayExcluded={stats.HighwayExcluded} missingLaneData={stats.MissingLaneData} roadBuilderDiscarded={stats.RoadBuilderDiscarded} roadBuilderNotInPlaysetExcluded={stats.RoadBuilderNotInPlaysetExcluded} roadBuilderVisibilityUnknown={stats.RoadBuilderVisibilityUnknown} tramUpgradeRejected={stats.TramUpgradeRejected} busUpgradeRejected={stats.BusUpgradeRejected} laneMatches={stats.LaneMatches}";
         }
 
         private struct SourceReplacementContext

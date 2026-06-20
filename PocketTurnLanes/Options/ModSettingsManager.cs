@@ -17,6 +17,8 @@ namespace PocketTurnLanes.Options
 
         public DedicatedTurnLaneSettings Settings { get; private set; }
 
+        public CustomRoadAssetMatchRuleStore CustomRoadAssetMatches { get; private set; }
+
         public bool DiagnosticLoggingEnabled => Settings?.EnableDiagnosticLogging ?? false;
 
         public void Load()
@@ -39,6 +41,9 @@ namespace PocketTurnLanes.Options
             {
                 ModLogger.LogException(ex, "[Settings] Failed to register or load settings; using in-memory defaults.");
             }
+
+            CustomRoadAssetMatches = new CustomRoadAssetMatchRuleStore(Settings);
+            ModLogger.LogEssential($"[CustomRoadAssetMatch] Loaded custom road asset match rules count={CustomRoadAssetMatches.Count} settingsAssetName=\"{DedicatedTurnLaneSettings.SettingsAssetName}\".");
         }
 
         public void Dispose()
@@ -58,6 +63,7 @@ namespace PocketTurnLanes.Options
             }
             finally
             {
+                CustomRoadAssetMatches = null;
                 Settings = null;
             }
         }

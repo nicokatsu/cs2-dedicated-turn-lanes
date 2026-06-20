@@ -133,7 +133,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 () => GetBufferLookup<NetSubSection>(true),
                 () => GetBufferLookup<NetSectionPiece>(true),
                 () => GetComponentLookup<NetLaneData>(true),
-                () => GetBufferLookup<NetPieceLane>(true));
+                () => GetBufferLookup<NetPieceLane>(true),
+                sourcePrefabName => Mod.CustomRoadAssetMatchRules?.GetTargetPrefabName(sourcePrefabName));
             m_DisplayOverridePropertyInfo = typeof(Game.Input.ProxyAction).GetProperty("displayOverride");
             m_ToolSystem.EventToolChanged += ToolChanged;
 
@@ -584,7 +585,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 string activeToolId = system?.toolID ?? "<null>";
                 string reason = $"active tool changed to {activeToolId}";
                 QueuePendingToolCommand(PendingToolCommand.Disable, reason, false, true);
-                Mod.LogEssential($"[IntersectionTool] Deferred cleanup because active tool changed to {activeToolId}; cleanup will run during the next tool update. {GetToolExitSnapshot()}");
+                Mod.LogEssential($"[IntersectionTool] Deferred cleanup because active tool changed to {activeToolId}; cleanup will run during backend UI update. {GetToolExitSnapshot()}");
             }
         }
 

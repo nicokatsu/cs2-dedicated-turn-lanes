@@ -36,6 +36,7 @@ namespace PocketTurnLanes
 
         public static bool TrafficModDetected { get; private set; }
         public static bool TrafficLaneConnectionFixEnabled { get; private set; }
+        internal static CustomRoadAssetMatchRuleStore CustomRoadAssetMatchRules { get; private set; }
 
         public void OnLoad(UpdateSystem updateSystem)
         {
@@ -53,6 +54,7 @@ namespace PocketTurnLanes
             m_SettingsManager = new ModSettingsManager(this);
             ModLogger.SetDiagnosticLoggingProvider(() => m_SettingsManager?.DiagnosticLoggingEnabled ?? false);
             m_SettingsManager.Load();
+            CustomRoadAssetMatchRules = m_SettingsManager.CustomRoadAssetMatches;
         }
 
         private void LogCurrentModAsset()
@@ -105,6 +107,7 @@ namespace PocketTurnLanes
 
             m_SettingsManager?.Dispose();
             m_SettingsManager = null;
+            CustomRoadAssetMatchRules = null;
             ModLogger.SetDiagnosticLoggingProvider(null);
         }
 

@@ -129,7 +129,7 @@
     <Target Name="BuildFrontend" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true'">
         <Message Text="[$(ModId)] Building UI module channel=$(ModChannel)" Importance="high" />
         <Exec Command="npm.cmd install --prefer-offline --no-audit" WorkingDirectory="UI" Condition="!Exists('UI\node_modules')" EnvironmentVariables="MOD_CHANNEL=$(ModChannel);MOD_ID=$(ModId);MOD_DISPLAY_NAME=$(ModDisplayName)" />
-        <Exec Command="npm.cmd run build" WorkingDirectory="UI" EnvironmentVariables="MOD_CHANNEL=$(ModChannel);MOD_ID=$(ModId);MOD_DISPLAY_NAME=$(ModDisplayName)" />
+        <Exec Command="npm.cmd run build" WorkingDirectory="UI" EnvironmentVariables="MOD_CHANNEL=$(ModChannel);MOD_ID=$(ModId);MOD_DISPLAY_NAME=$(ModDisplayName);DEPLOY_UI_TO_MODS=true" />
     </Target>
 
 </Project>
