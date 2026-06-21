@@ -1,4 +1,5 @@
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { bindValue, call, trigger, useValue } from "cs2/api";
 import { useLocalization } from "cs2/l10n";
 import * as Cs2Ui from "cs2/ui";
@@ -10,8 +11,9 @@ import {
     PanelSection,
     PanelSectionRow,
     Scrollable,
+    Tooltip,
 } from "cs2/ui";
-import { VanillaUiModules } from "./vanilla-ui";
+import type { VanillaCheckboxComponent, VanillaUiModules } from "./vanilla-ui";
 import styles from "./custom-road-asset-match-panel.module.scss";
 
 type RoadAssetOption = {
@@ -21,10 +23,20 @@ type RoadAssetOption = {
     summary: string;
     isDlc: boolean;
     contentDetail: string;
+    hasTram?: boolean;
+    hasPublicTransport?: boolean;
+    hasAsymmetricRoadLanes?: boolean;
+    hasReverseSourceSide?: boolean;
+    hasForwardTargetCandidates?: boolean;
+    hasReverseTargetCandidates?: boolean;
 };
 
 type RoadAssetRule = {
     source: RoadAssetOption;
+    sourceFeatureMask?: number;
+    sourceHasTram?: boolean;
+    sourceHasPublicTransport?: boolean;
+    sourceIsReversed?: boolean;
     target: RoadAssetOption;
 };
 
@@ -78,6 +90,16 @@ const icons = {
     close: "coui://uil/Standard/XClose.svg",
     delete: "coui://uil/Standard/Trash.svg",
     arrowRight: "coui://uil/Standard/ArrowRight.svg",
+    tram: "Media/Game/Icons/DoubleTramTrack.svg",
+    publicTransport: "Media/Game/Icons/DoublePublicTransportLane.svg",
+    reverse: "coui://uil/Colored/Reset.svg",
+};
+
+const sourceFeatureMasks = {
+    none: 0,
+    tram: 1,
+    publicTransport: 2,
+    reverse: 4,
 };
 
 function parseJson<T>(value: string, fallback: T): T {
@@ -96,12 +118,19 @@ function isSameOption(left?: RoadAssetOption | null, right?: RoadAssetOption | n
     return !!left && !!right && left.prefabName === right.prefabName;
 }
 
-function findRuleForSource(rules: RoadAssetRule[], source?: RoadAssetOption | null): RoadAssetRule | undefined {
+function findRuleForSource(
+    rules: RoadAssetRule[],
+    source?: RoadAssetOption | null,
+    sourceFeatureMask = sourceFeatureMasks.none
+): RoadAssetRule | undefined {
     if (!source) {
         return undefined;
     }
 
-    return rules.find((rule) => rule.source.prefabName === source.prefabName);
+    return rules.find((rule) =>
+        rule.source.prefabName === source.prefabName &&
+        getRuleSourceFeatureMask(rule) === normalizeSourceFeatureMask(sourceFeatureMask)
+    );
 }
 
 export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element | null {
@@ -115,6 +144,7 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
     const [sourceOptions, setSourceOptions] = useState<RoadAssetOption[]>([]);
     const [targetOptions, setTargetOptions] = useState<RoadAssetOption[]>([]);
     const [selectedSource, setSelectedSource] = useState<RoadAssetOption | null>(null);
+    const [selectedSourceFeatureMask, setSelectedSourceFeatureMask] = useState(sourceFeatureMasks.none);
     const [selectedTarget, setSelectedTarget] = useState<RoadAssetOption | null>(null);
 
     const t = useCallback((id: string, fallback: string) => {
@@ -127,8 +157,15 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
         setSourceOptions(sortRoadAssetOptions(response.items ?? []));
     }, []);
 
-    const loadTargets = useCallback(async (source: RoadAssetOption) => {
-        const responseJson = await call<string>(__MOD_ID__, "SearchCustomRoadAssetTargets", source.prefabName, "");
+    const loadTargets = useCallback(async (source: RoadAssetOption, sourceFeatureMask: number) => {
+        const normalizedFeatureMask = normalizeSourceFeatureMaskForSource(sourceFeatureMask, source);
+        const responseJson = await call<string>(
+            __MOD_ID__,
+            "SearchCustomRoadAssetTargets",
+            source.prefabName,
+            "",
+            String(normalizedFeatureMask)
+        );
         const response = parseJson<SourceSelectionResponse>(responseJson, { targets: [] });
         setTargetOptions(sortRoadAssetOptions(response.targets ?? []));
     }, []);
@@ -137,6 +174,7 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
         if (!toolEnabled) {
             setEditing(false);
             setSelectedSource(null);
+            setSelectedSourceFeatureMask(sourceFeatureMasks.none);
             setSelectedTarget(null);
             setSourceOptions([]);
             setTargetOptions([]);
@@ -159,15 +197,23 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
             return;
         }
 
-        void loadTargets(selectedSource);
-    }, [editing, loadTargets, selectedSource, toolEnabled]);
+        void loadTargets(selectedSource, selectedSourceFeatureMask);
+    }, [editing, loadTargets, selectedSource, selectedSourceFeatureMask, toolEnabled]);
 
     useEffect(() => {
-        const currentRule = findRuleForSource(rules, selectedSource);
-        if (currentRule && !isSameOption(currentRule.target, selectedTarget)) {
+        const currentRule = findRuleForSource(rules, selectedSource, selectedSourceFeatureMask);
+        if (!currentRule) {
+            if (selectedTarget) {
+                setSelectedTarget(null);
+            }
+
+            return;
+        }
+
+        if (!isSameOption(currentRule.target, selectedTarget)) {
             setSelectedTarget(currentRule.target);
         }
-    }, [rules, selectedSource, selectedTarget]);
+    }, [rules, selectedSource, selectedSourceFeatureMask, selectedTarget]);
 
     const toggleEditing = useCallback(() => {
         setEditing((current) => {
@@ -180,15 +226,33 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
         });
     }, [loadSources]);
 
-    const selectSource = useCallback(async (source: RoadAssetOption) => {
+    const selectSource = useCallback(async (
+        source: RoadAssetOption,
+        sourceFeatureMask = selectedSourceFeatureMask
+    ) => {
         setSelectedSource(source);
-        const existingRule = findRuleForSource(rules, source);
+        const normalizedFeatureMask = normalizeSourceFeatureMaskForSource(sourceFeatureMask, source);
+        setSelectedSourceFeatureMask(normalizedFeatureMask);
+        const existingRule = findRuleForSource(rules, source, normalizedFeatureMask);
         setSelectedTarget(existingRule?.target ?? null);
 
-        const responseJson = await call<string>(__MOD_ID__, "SelectCustomRoadAssetSource", source.prefabName);
+        const responseJson = await call<string>(
+            __MOD_ID__,
+            "SelectCustomRoadAssetSource",
+            source.prefabName,
+            String(normalizedFeatureMask)
+        );
         const response = parseJson<SourceSelectionResponse>(responseJson, { targets: [] });
         setTargetOptions(sortRoadAssetOptions(response.targets ?? []));
-    }, [rules]);
+    }, [rules, selectedSourceFeatureMask]);
+
+    const selectSourceFromDropdown = useCallback((source: RoadAssetOption) => {
+        const sourceChanged = !isSameOption(source, selectedSource);
+        const sourceFeatureMask = sourceChanged
+            ? sourceFeatureMasks.none
+            : normalizeSourceFeatureMaskForSource(selectedSourceFeatureMask, source);
+        void selectSource(source, sourceFeatureMask);
+    }, [selectSource, selectedSource, selectedSourceFeatureMask]);
 
     const selectTarget = useCallback(async (target: RoadAssetOption) => {
         if (!selectedSource) {
@@ -200,22 +264,39 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
             __MOD_ID__,
             "SetCustomRoadAssetMatch",
             selectedSource.prefabName,
-            target.prefabName
+            target.prefabName,
+            String(selectedSourceFeatureMask)
         );
         parseJson<MatchState>(responseJson, { rules: [] });
-    }, [selectedSource]);
+    }, [selectedSource, selectedSourceFeatureMask]);
 
     const editRule = useCallback((rule: RoadAssetRule) => {
+        const sourceFeatureMask = getRuleSourceFeatureMask(rule);
         setEditing(true);
-        void selectSource(rule.source);
+        setSelectedSourceFeatureMask(sourceFeatureMask);
+        void selectSource(rule.source, sourceFeatureMask);
     }, [selectSource]);
 
-    const deleteRule = useCallback(async (sourcePrefabName: string) => {
-        const responseJson = await call<string>(__MOD_ID__, "DeleteCustomRoadAssetMatch", sourcePrefabName);
+    const deleteRule = useCallback(async (sourcePrefabName: string, sourceFeatureMask: number) => {
+        const normalizedFeatureMask = normalizeSourceFeatureMask(sourceFeatureMask);
+        const responseJson = await call<string>(
+            __MOD_ID__,
+            "DeleteCustomRoadAssetMatch",
+            sourcePrefabName,
+            String(normalizedFeatureMask)
+        );
         parseJson<MatchState>(responseJson, { rules: [] });
-        if (selectedSource?.prefabName === sourcePrefabName) {
+        if (selectedSource?.prefabName === sourcePrefabName &&
+            selectedSourceFeatureMask === normalizedFeatureMask) {
             setSelectedTarget(null);
         }
+    }, [selectedSource, selectedSourceFeatureMask]);
+
+    const setSelectedSourceFeature = useCallback((featureMask: number, checked: boolean) => {
+        setSelectedSourceFeatureMask((current) => normalizeSourceFeatureMaskForSource(
+            checked ? current | featureMask : current & ~featureMask,
+            selectedSource
+        ));
     }, [selectedSource]);
 
     const closePanel = useCallback(() => {
@@ -261,14 +342,33 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
                             />
                         }
                     >
-                        <RoadAssetDropdown
-                            options={sourceOptions}
-                            selected={selectedSource}
-                            placeholder={t("SourcePlaceholder", "Select source road")}
-                            emptyText={t("NoSources", "No matching source roads.")}
-                            theme={vanilla.dropdownTheme}
-                            onSelect={(option) => void selectSource(option)}
-                        />
+                        <div className={styles.sourceEditorControl}>
+                            <RoadAssetDropdown
+                                options={sourceOptions}
+                                selected={selectedSource}
+                                placeholder={t("SourcePlaceholder", "Select source road")}
+                                emptyText={t("NoSources", "No matching source roads.")}
+                                theme={vanilla.dropdownTheme}
+                                onSelect={selectSourceFromDropdown}
+                            />
+                            {selectedSource ? (
+                                <SourceFeatureCheckboxRow
+                                    vanilla={vanilla}
+                                    sourceFeatureMask={selectedSourceFeatureMask}
+                                    tramTooltip={t("SourceFeatureTramTooltip", "Tram tracks")}
+                                    publicTransportTooltip={t(
+                                        "SourceFeaturePublicTransportTooltip",
+                                        "Public transport lanes"
+                                    )}
+                                    reverseTooltip={t("SourceFeatureReverseTooltip", "Reverse direction")}
+                                    showReverse={canShowReverseSourceFeature(
+                                        selectedSource,
+                                        selectedSourceFeatureMask
+                                    )}
+                                    onCheckedChange={setSelectedSourceFeature}
+                                />
+                            ) : null}
+                        </div>
                     </DropdownField>
                     <DropdownField label={t("Target", "Target")}>
                         <RoadAssetDropdown
@@ -307,12 +407,12 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
                     </div>
                     {sortedRules.map((rule) => (
                         <RoadAssetRuleCard
-                            key={rule.source.prefabName}
+                            key={`${rule.source.prefabName}:${getRuleSourceFeatureMask(rule)}`}
                             rule={rule}
                             vanilla={vanilla}
                             deleteTooltip={t("DeleteMatch", "Delete match")}
                             onSelect={() => editRule(rule)}
-                            onDelete={() => void deleteRule(rule.source.prefabName)}
+                            onDelete={() => void deleteRule(rule.source.prefabName, getRuleSourceFeatureMask(rule))}
                         />
                     ))}
                 </Scrollable>
@@ -427,6 +527,106 @@ function RoadAssetName({ name }: { name: string }): JSX.Element {
     return <span className={styles.roadAssetName}>{name}</span>;
 }
 
+type SourceFeatureCheckboxRowProps = {
+    vanilla: VanillaUiModules;
+    sourceFeatureMask: number;
+    tramTooltip: string;
+    publicTransportTooltip: string;
+    reverseTooltip: string;
+    showReverse: boolean;
+    onCheckedChange: (featureMask: number, checked: boolean) => void;
+};
+
+function SourceFeatureCheckboxRow({
+    vanilla,
+    sourceFeatureMask,
+    tramTooltip,
+    publicTransportTooltip,
+    reverseTooltip,
+    showReverse,
+    onCheckedChange,
+}: SourceFeatureCheckboxRowProps): JSX.Element | null {
+    const CheckboxComponent = vanilla.checkboxComponent;
+    const tramChecked = hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.tram);
+    const publicTransportChecked = hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.publicTransport);
+    const reverseChecked = hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.reverse);
+    if (!CheckboxComponent) {
+        return null;
+    }
+
+    return (
+        <div className={styles.sourceFeatureCheckboxRow}>
+            <SourceFeatureCheckbox
+                CheckboxComponent={CheckboxComponent}
+                checkboxTheme={vanilla.checkboxTheme}
+                checked={tramChecked}
+                icon={icons.tram}
+                tooltip={tramTooltip}
+                onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.tram, checked)}
+            />
+            <SourceFeatureCheckbox
+                CheckboxComponent={CheckboxComponent}
+                checkboxTheme={vanilla.checkboxTheme}
+                checked={publicTransportChecked}
+                icon={icons.publicTransport}
+                tooltip={publicTransportTooltip}
+                onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.publicTransport, checked)}
+            />
+            {showReverse ? (
+                <SourceFeatureCheckbox
+                    CheckboxComponent={CheckboxComponent}
+                    checkboxTheme={vanilla.checkboxTheme}
+                    checked={reverseChecked}
+                    icon={icons.reverse}
+                    tooltip={reverseTooltip}
+                    onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.reverse, checked)}
+                />
+            ) : null}
+        </div>
+    );
+}
+
+type SourceFeatureCheckboxProps = {
+    CheckboxComponent: VanillaCheckboxComponent;
+    checkboxTheme?: Record<string, string>;
+    checked: boolean;
+    icon: string;
+    tooltip: string;
+    onCheckedChange: (checked: boolean) => void;
+};
+
+function SourceFeatureCheckbox({
+    CheckboxComponent,
+    checkboxTheme,
+    checked,
+    icon,
+    tooltip,
+    onCheckedChange,
+}: SourceFeatureCheckboxProps): JSX.Element {
+    const handleCheckboxChange = useCallback((nextChecked: boolean) => {
+        onCheckedChange(nextChecked);
+    }, [onCheckedChange]);
+
+    const handleLabelClick = useCallback((event: MouseEvent<HTMLLabelElement>) => {
+        event.preventDefault();
+        onCheckedChange(!checked);
+    }, [checked, onCheckedChange]);
+
+    return (
+        <Tooltip tooltip={tooltip}>
+            <label className={styles.sourceFeatureCheckbox} onClick={handleLabelClick}>
+                <img src={icon} className={styles.sourceFeatureCheckboxIcon} />
+                <CheckboxComponent
+                    checked={checked}
+                    theme={checkboxTheme}
+                    className={styles.sourceFeatureCheckboxControl}
+                    onChange={handleCheckboxChange}
+                />
+            </label>
+        </Tooltip>
+    );
+}
+
 type RoadAssetRuleCardProps = {
     rule: RoadAssetRule;
     vanilla: VanillaUiModules;
@@ -479,10 +679,41 @@ function RoadAssetRuleMatch({ rule }: { rule: RoadAssetRule }): JSX.Element {
             <div className={styles.ruleSourceLine}>
                 <RoadAssetRuleEndpoint option={rule.source} className={styles.ruleSourceEndpoint} />
             </div>
+            <SourceFeatureIconRow
+                sourceFeatureMask={getRuleSourceFeatureMask(rule)}
+                className={styles.ruleFeatureLine}
+            />
             <div className={styles.ruleTargetLine}>
                 <img src={icons.arrowRight} className={styles.ruleArrow} />
                 <RoadAssetRuleEndpoint option={rule.target} className={styles.ruleTargetEndpoint} />
             </div>
+        </div>
+    );
+}
+
+function SourceFeatureIconRow({
+    sourceFeatureMask,
+    className,
+}: {
+    sourceFeatureMask: number;
+    className?: string;
+}): JSX.Element | null {
+    const normalizedFeatureMask = normalizeSourceFeatureMask(sourceFeatureMask);
+    if (normalizedFeatureMask === sourceFeatureMasks.none) {
+        return null;
+    }
+
+    return (
+        <div className={joinClasses(styles.sourceFeatureIconRow, className)}>
+            {hasSourceFeature(normalizedFeatureMask, sourceFeatureMasks.tram) ? (
+                <img src={icons.tram} className={styles.sourceFeatureIcon} />
+            ) : null}
+            {hasSourceFeature(normalizedFeatureMask, sourceFeatureMasks.publicTransport) ? (
+                <img src={icons.publicTransport} className={styles.sourceFeatureIcon} />
+            ) : null}
+            {hasSourceFeature(normalizedFeatureMask, sourceFeatureMasks.reverse) ? (
+                <img src={icons.reverse} className={styles.sourceFeatureIcon} />
+            ) : null}
         </div>
     );
 }
@@ -505,6 +736,11 @@ function sortRoadAssetRules(rules: RoadAssetRule[]): RoadAssetRule[] {
         const sourceCompare = compareRoadAssetOptions(left.source, right.source);
         if (sourceCompare !== 0) {
             return sourceCompare;
+        }
+
+        const sourceFeatureCompare = getRuleSourceFeatureMask(left) - getRuleSourceFeatureMask(right);
+        if (sourceFeatureCompare !== 0) {
+            return sourceFeatureCompare;
         }
 
         return compareRoadAssetOptions(left.target, right.target);
@@ -535,6 +771,57 @@ function getLaneSortInfo(option: RoadAssetOption): { total: number } {
     const forward = Number.parseInt(match[1], 10);
     const backward = Number.parseInt(match[2], 10);
     return { total: forward + backward };
+}
+
+function getRuleSourceFeatureMask(rule: RoadAssetRule): number {
+    if (typeof rule.sourceFeatureMask === "number") {
+        return normalizeSourceFeatureMask(rule.sourceFeatureMask);
+    }
+
+    let sourceFeatureMask = sourceFeatureMasks.none;
+    if (rule.sourceHasTram) {
+        sourceFeatureMask |= sourceFeatureMasks.tram;
+    }
+
+    if (rule.sourceHasPublicTransport) {
+        sourceFeatureMask |= sourceFeatureMasks.publicTransport;
+    }
+
+    if (rule.sourceIsReversed) {
+        sourceFeatureMask |= sourceFeatureMasks.reverse;
+    }
+
+    return normalizeSourceFeatureMask(sourceFeatureMask);
+}
+
+function normalizeSourceFeatureMask(sourceFeatureMask: number): number {
+    return sourceFeatureMask & (
+        sourceFeatureMasks.tram |
+        sourceFeatureMasks.publicTransport |
+        sourceFeatureMasks.reverse
+    );
+}
+
+function normalizeSourceFeatureMaskForSource(
+    sourceFeatureMask: number,
+    source?: RoadAssetOption | null
+): number {
+    const allowedFeatureMask = canShowReverseSourceFeature(source, sourceFeatureMask)
+        ? normalizeSourceFeatureMask(sourceFeatureMask)
+        : normalizeSourceFeatureMask(sourceFeatureMask) & ~sourceFeatureMasks.reverse;
+    return allowedFeatureMask;
+}
+
+function hasSourceFeature(sourceFeatureMask: number, featureMask: number): boolean {
+    return (normalizeSourceFeatureMask(sourceFeatureMask) & featureMask) !== 0;
+}
+
+function canShowReverseSourceFeature(
+    source?: RoadAssetOption | null,
+    sourceFeatureMask = sourceFeatureMasks.none
+): boolean {
+    return source?.hasReverseTargetCandidates === true ||
+           hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.reverse);
 }
 
 function joinClasses(...classes: Array<string | undefined>): string | undefined {

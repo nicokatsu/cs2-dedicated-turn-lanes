@@ -27,20 +27,29 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return BuildOptionListJson("source-search", query, options, cleaned, string.Empty);
         }
 
-        internal string SelectCustomRoadAssetSourceJson(string sourcePrefabName)
+        internal string SelectCustomRoadAssetSourceJson(string sourcePrefabName, string sourceFeatureMask)
         {
             int cleaned = CleanInvalidCustomRoadAssetMatches("source-select");
             List<RoadAssetPrefabOption> targets = new List<RoadAssetPrefabOption>();
             RoadAssetPrefabOption sourceOption = default;
             string detail = "matcher-unavailable";
-            bool success = m_ReplacementPrefabMatcher != null &&
-                           m_ReplacementPrefabMatcher.TryGetCompatibleTargetOptions(
-                               sourcePrefabName,
-                               string.Empty,
-                               targets,
-                               MaxCustomRoadAssetDropdownOptions,
-                               out sourceOption,
-                               out detail);
+            bool success = false;
+            if (!CustomRoadAssetSourceFeatureUtility.TryParse(sourceFeatureMask, out CustomRoadAssetSourceFeatures sourceFeatures))
+            {
+                detail = $"invalid-source-features {sourceFeatureMask}";
+            }
+            else
+            {
+                success = m_ReplacementPrefabMatcher != null &&
+                          m_ReplacementPrefabMatcher.TryGetCompatibleTargetOptions(
+                              sourcePrefabName,
+                              sourceFeatures,
+                              string.Empty,
+                              targets,
+                              MaxCustomRoadAssetDropdownOptions,
+                              out sourceOption,
+                              out detail);
+            }
 
             if (!success)
             {
@@ -59,20 +68,29 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 detail);
         }
 
-        internal string SearchCustomRoadAssetTargetsJson(string sourcePrefabName, string query)
+        internal string SearchCustomRoadAssetTargetsJson(string sourcePrefabName, string query, string sourceFeatureMask)
         {
             int cleaned = CleanInvalidCustomRoadAssetMatches("target-search");
             List<RoadAssetPrefabOption> targets = new List<RoadAssetPrefabOption>();
             RoadAssetPrefabOption sourceOption = default;
             string detail = "matcher-unavailable";
-            bool success = m_ReplacementPrefabMatcher != null &&
-                           m_ReplacementPrefabMatcher.TryGetCompatibleTargetOptions(
-                               sourcePrefabName,
-                               query,
-                               targets,
-                               MaxCustomRoadAssetDropdownOptions,
-                               out sourceOption,
-                               out detail);
+            bool success = false;
+            if (!CustomRoadAssetSourceFeatureUtility.TryParse(sourceFeatureMask, out CustomRoadAssetSourceFeatures sourceFeatures))
+            {
+                detail = $"invalid-source-features {sourceFeatureMask}";
+            }
+            else
+            {
+                success = m_ReplacementPrefabMatcher != null &&
+                          m_ReplacementPrefabMatcher.TryGetCompatibleTargetOptions(
+                              sourcePrefabName,
+                              sourceFeatures,
+                              query,
+                              targets,
+                              MaxCustomRoadAssetDropdownOptions,
+                              out sourceOption,
+                              out detail);
+            }
 
             if (!success)
             {
@@ -91,7 +109,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 detail);
         }
 
-        internal string SetCustomRoadAssetMatchJson(string sourcePrefabName, string targetPrefabName)
+        internal string SetCustomRoadAssetMatchJson(
+            string sourcePrefabName,
+            string sourceFeatureMask,
+            string targetPrefabName)
         {
             int cleaned = CleanInvalidCustomRoadAssetMatches("set-before");
             CustomRoadAssetMatchRuleStore store = Mod.CustomRoadAssetMatchRules;
@@ -100,16 +121,22 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return BuildCustomRoadAssetMatchStateJson("set", cleaned, "rule-store-or-matcher-unavailable");
             }
 
+            if (!CustomRoadAssetSourceFeatureUtility.TryParse(sourceFeatureMask, out CustomRoadAssetSourceFeatures sourceFeatures))
+            {
+                return BuildCustomRoadAssetMatchStateJson("set", cleaned, $"invalid-source-features {sourceFeatureMask}");
+            }
+
             if (!m_ReplacementPrefabMatcher.IsValidCustomRoadAssetMatch(
                     sourcePrefabName,
+                    sourceFeatures,
                     targetPrefabName,
                     out string validationDetail))
             {
-                Mod.LogEssential($"[CustomRoadAssetMatch] Set rejected sourcePrefab={sourcePrefabName} targetPrefab={targetPrefabName} validation={validationDetail}.");
+                Mod.LogEssential($"[CustomRoadAssetMatch] Set rejected sourcePrefab={sourcePrefabName} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} targetPrefab={targetPrefabName} validation={validationDetail}.");
                 return BuildCustomRoadAssetMatchStateJson("set", cleaned, $"invalid-rule {validationDetail}");
             }
 
-            if (!store.SetRule(sourcePrefabName, targetPrefabName, out string setDetail))
+            if (!store.SetRule(sourcePrefabName, sourceFeatures, targetPrefabName, out string setDetail))
             {
                 return BuildCustomRoadAssetMatchStateJson("set", cleaned, setDetail);
             }
@@ -118,14 +145,19 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return BuildCustomRoadAssetMatchStateJson("set", cleaned + cleanedAfter, setDetail);
         }
 
-        internal string DeleteCustomRoadAssetMatchJson(string sourcePrefabName)
+        internal string DeleteCustomRoadAssetMatchJson(string sourcePrefabName, string sourceFeatureMask)
         {
             int cleaned = CleanInvalidCustomRoadAssetMatches("delete-before");
             CustomRoadAssetMatchRuleStore store = Mod.CustomRoadAssetMatchRules;
             string detail = "rule-store-unavailable";
-            if (store != null)
+            CustomRoadAssetSourceFeatures sourceFeatures = CustomRoadAssetSourceFeatures.None;
+            if (!CustomRoadAssetSourceFeatureUtility.TryParse(sourceFeatureMask, out sourceFeatures))
             {
-                store.DeleteRule(sourcePrefabName, out detail);
+                detail = $"invalid-source-features {sourceFeatureMask}";
+            }
+            else if (store != null)
+            {
+                store.DeleteRule(sourcePrefabName, sourceFeatures, out detail);
             }
 
             int cleanedAfter = CleanInvalidCustomRoadAssetMatches("delete-after");
@@ -150,8 +182,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             int cleaned,
             string message)
         {
-            Dictionary<string, string> snapshot = Mod.CustomRoadAssetMatchRules?.GetSnapshot() ??
-                                                  new Dictionary<string, string>(StringComparer.Ordinal);
+            List<CustomRoadAssetMatchRule> snapshot = Mod.CustomRoadAssetMatchRules?.GetSnapshot() ??
+                                                      new List<CustomRoadAssetMatchRule>();
             StringBuilder builder = new StringBuilder();
             builder.Append('{');
             AppendJsonProperty(builder, "schemaVersion", 1);
@@ -166,11 +198,11 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
             bool first = true;
             int appended = 0;
-            foreach (KeyValuePair<string, string> rule in snapshot)
+            foreach (CustomRoadAssetMatchRule rule in snapshot)
             {
                 if (m_ReplacementPrefabMatcher == null ||
-                    !m_ReplacementPrefabMatcher.TryGetRoadAssetPrefabOption(rule.Key, out RoadAssetPrefabOption source, out _) ||
-                    !m_ReplacementPrefabMatcher.TryGetRoadAssetPrefabOption(rule.Value, out RoadAssetPrefabOption target, out _))
+                    !m_ReplacementPrefabMatcher.TryGetRoadAssetPrefabOption(rule.SourcePrefabName, out RoadAssetPrefabOption source, out _) ||
+                    !m_ReplacementPrefabMatcher.TryGetRoadAssetPrefabOption(rule.TargetPrefabName, out RoadAssetPrefabOption target, out _))
                 {
                     continue;
                 }
@@ -185,6 +217,14 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 builder.Append('{');
                 builder.Append("\"source\":");
                 AppendOption(builder, source);
+                builder.Append(',');
+                AppendJsonProperty(builder, "sourceFeatureMask", (int)rule.SourceFeatures);
+                builder.Append(',');
+                AppendJsonProperty(builder, "sourceHasTram", HasSourceFeature(rule.SourceFeatures, CustomRoadAssetSourceFeatures.Tram));
+                builder.Append(',');
+                AppendJsonProperty(builder, "sourceHasPublicTransport", HasSourceFeature(rule.SourceFeatures, CustomRoadAssetSourceFeatures.PublicTransport));
+                builder.Append(',');
+                AppendJsonProperty(builder, "sourceIsReversed", HasSourceFeature(rule.SourceFeatures, CustomRoadAssetSourceFeatures.Reverse));
                 builder.Append(',');
                 builder.Append("\"target\":");
                 AppendOption(builder, target);
@@ -296,7 +336,26 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             AppendJsonProperty(builder, "isDlc", option.IsDlc);
             builder.Append(',');
             AppendJsonProperty(builder, "contentDetail", option.ContentDetail ?? string.Empty);
+            builder.Append(',');
+            AppendJsonProperty(builder, "hasTram", option.HasTram);
+            builder.Append(',');
+            AppendJsonProperty(builder, "hasPublicTransport", option.HasPublicTransport);
+            builder.Append(',');
+            AppendJsonProperty(builder, "hasAsymmetricRoadLanes", option.HasAsymmetricRoadLanes);
+            builder.Append(',');
+            AppendJsonProperty(builder, "hasReverseSourceSide", option.HasReverseSourceSide);
+            builder.Append(',');
+            AppendJsonProperty(builder, "hasForwardTargetCandidates", option.HasForwardTargetCandidates);
+            builder.Append(',');
+            AppendJsonProperty(builder, "hasReverseTargetCandidates", option.HasReverseTargetCandidates);
             builder.Append('}');
+        }
+
+        private static bool HasSourceFeature(
+            CustomRoadAssetSourceFeatures features,
+            CustomRoadAssetSourceFeatures feature)
+        {
+            return (CustomRoadAssetSourceFeatureUtility.Normalize(features) & feature) != 0;
         }
 
         private static void AppendJsonProperty(

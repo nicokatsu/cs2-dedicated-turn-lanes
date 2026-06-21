@@ -143,18 +143,31 @@ namespace PocketTurnLanes.Tool.Traffic
         }
     }
 
+    internal readonly struct CenterStraightRewrite
+    {
+        public readonly CenterLaneMovementSummary SourceLane;
+        public readonly CenterConnectorCandidate StraightTemplate;
+        public readonly LaneEndpoint TargetEndpoint;
+
+        public CenterStraightRewrite(
+            CenterLaneMovementSummary sourceLane,
+            CenterConnectorCandidate straightTemplate,
+            LaneEndpoint targetEndpoint)
+        {
+            SourceLane = sourceLane;
+            StraightTemplate = straightTemplate;
+            TargetEndpoint = targetEndpoint;
+        }
+    }
+
     internal struct CenterPatternSelection
     {
         public CenterLaneMovementSummary SmallLane;
-        public CenterLaneMovementSummary MiddleLane;
         public CenterLaneMovementSummary BigLane;
-        public CenterConnectorCandidate SmallLaneStraightTemplate;
-        public CenterConnectorCandidate MiddleLaneStraightTemplate;
-        public LaneEndpoint SmallLaneStraightTarget;
-        public LaneEndpoint MiddleLaneStraightTarget;
+        public List<CenterLaneMovementSummary> SourceRun;
+        public List<CenterStraightRewrite> StraightRewrites;
         public string RewriteMode;
         public string ShiftDetail;
-        public int StraightMappingsWritten;
         public int SmallTurnsClearedFromStraightLane;
     }
 

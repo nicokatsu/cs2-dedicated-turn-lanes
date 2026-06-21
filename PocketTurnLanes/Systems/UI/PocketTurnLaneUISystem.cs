@@ -23,10 +23,10 @@ namespace PocketTurnLanes.Systems.UI
             AddBinding(m_CustomRoadAssetMatchStateBinding = new ValueBinding<string>(BindingGroup, "CustomRoadAssetMatchState", "{}"));
             AddBinding(new TriggerBinding(BindingGroup, "ToggleTool", ToggleTool));
             AddBinding(new CallBinding<string, string>(BindingGroup, "SearchCustomRoadAssetSources", SearchCustomRoadAssetSources, new StringReader()));
-            AddBinding(new CallBinding<string, string>(BindingGroup, "SelectCustomRoadAssetSource", SelectCustomRoadAssetSource, new StringReader()));
-            AddBinding(new CallBinding<string, string, string>(BindingGroup, "SearchCustomRoadAssetTargets", SearchCustomRoadAssetTargets, new StringReader(), new StringReader()));
-            AddBinding(new CallBinding<string, string, string>(BindingGroup, "SetCustomRoadAssetMatch", SetCustomRoadAssetMatch, new StringReader(), new StringReader()));
-            AddBinding(new CallBinding<string, string>(BindingGroup, "DeleteCustomRoadAssetMatch", DeleteCustomRoadAssetMatch, new StringReader()));
+            AddBinding(new CallBinding<string, string, string>(BindingGroup, "SelectCustomRoadAssetSource", SelectCustomRoadAssetSource, new StringReader(), new StringReader()));
+            AddBinding(new CallBinding<string, string, string, string>(BindingGroup, "SearchCustomRoadAssetTargets", SearchCustomRoadAssetTargets, new StringReader(), new StringReader(), new StringReader()));
+            AddBinding(new CallBinding<string, string, string, string>(BindingGroup, "SetCustomRoadAssetMatch", SetCustomRoadAssetMatch, new StringReader(), new StringReader(), new StringReader()));
+            AddBinding(new CallBinding<string, string, string>(BindingGroup, "DeleteCustomRoadAssetMatch", DeleteCustomRoadAssetMatch, new StringReader(), new StringReader()));
             RefreshCustomRoadAssetMatchStateBinding();
         }
 
@@ -58,30 +58,30 @@ namespace PocketTurnLanes.Systems.UI
             return result;
         }
 
-        private string SelectCustomRoadAssetSource(string sourcePrefabName)
+        private string SelectCustomRoadAssetSource(string sourcePrefabName, string sourceFeatureMask)
         {
-            string result = m_IntersectionToolSystem.SelectCustomRoadAssetSourceJson(sourcePrefabName);
+            string result = m_IntersectionToolSystem.SelectCustomRoadAssetSourceJson(sourcePrefabName, sourceFeatureMask);
             RefreshCustomRoadAssetMatchStateBinding();
             return result;
         }
 
-        private string SearchCustomRoadAssetTargets(string sourcePrefabName, string query)
+        private string SearchCustomRoadAssetTargets(string sourcePrefabName, string query, string sourceFeatureMask)
         {
-            string result = m_IntersectionToolSystem.SearchCustomRoadAssetTargetsJson(sourcePrefabName, query);
+            string result = m_IntersectionToolSystem.SearchCustomRoadAssetTargetsJson(sourcePrefabName, query, sourceFeatureMask);
             RefreshCustomRoadAssetMatchStateBinding();
             return result;
         }
 
-        private string SetCustomRoadAssetMatch(string sourcePrefabName, string targetPrefabName)
+        private string SetCustomRoadAssetMatch(string sourcePrefabName, string targetPrefabName, string sourceFeatureMask)
         {
-            string result = m_IntersectionToolSystem.SetCustomRoadAssetMatchJson(sourcePrefabName, targetPrefabName);
+            string result = m_IntersectionToolSystem.SetCustomRoadAssetMatchJson(sourcePrefabName, sourceFeatureMask, targetPrefabName);
             UpdateCustomRoadAssetMatchStateBinding(result);
             return result;
         }
 
-        private string DeleteCustomRoadAssetMatch(string sourcePrefabName)
+        private string DeleteCustomRoadAssetMatch(string sourcePrefabName, string sourceFeatureMask)
         {
-            string result = m_IntersectionToolSystem.DeleteCustomRoadAssetMatchJson(sourcePrefabName);
+            string result = m_IntersectionToolSystem.DeleteCustomRoadAssetMatchJson(sourcePrefabName, sourceFeatureMask);
             UpdateCustomRoadAssetMatchStateBinding(result);
             return result;
         }

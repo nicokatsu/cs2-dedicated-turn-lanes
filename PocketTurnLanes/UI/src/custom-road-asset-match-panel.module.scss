@@ -51,6 +51,46 @@
     min-width: 0;
 }
 
+.sourceEditorControl {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    min-width: 0;
+}
+
+.sourceFeatureCheckboxRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+    min-height: 24rem;
+    margin-top: 4rem;
+}
+
+.sourceFeatureCheckbox {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    min-width: 0;
+    min-height: 24rem;
+    margin: 0 20rem 2rem 0;
+    cursor: pointer;
+}
+
+.sourceFeatureCheckboxControl {
+    flex: 0 0 auto;
+}
+
+.sourceFeatureCheckboxIcon {
+    width: 18rem;
+    height: 18rem;
+    flex: 0 0 auto;
+    object-fit: contain;
+    margin-right: 5rem;
+}
+
 .editorAction {
     display: flex;
     justify-content: flex-end;
@@ -130,6 +170,11 @@
     padding-right: 10rem;
 }
 
+.ruleFeatureLine {
+    margin-top: 1rem;
+    padding-left: 26rem;
+}
+
 .ruleEndpoint {
     display: flex;
     align-items: center;
@@ -169,6 +214,21 @@
     object-fit: contain;
     margin: 0 8rem 0 0;
     opacity: 0.65;
+}
+
+.sourceFeatureIconRow {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.sourceFeatureIcon {
+    width: 16rem;
+    height: 16rem;
+    flex: 0 0 auto;
+    object-fit: contain;
+    margin-right: 5rem;
 }
 
 .dropdownEmpty {

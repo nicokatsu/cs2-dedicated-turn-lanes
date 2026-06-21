@@ -134,7 +134,8 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 () => GetBufferLookup<NetSectionPiece>(true),
                 () => GetComponentLookup<NetLaneData>(true),
                 () => GetBufferLookup<NetPieceLane>(true),
-                sourcePrefabName => Mod.CustomRoadAssetMatchRules?.GetTargetPrefabName(sourcePrefabName));
+                (sourcePrefabName, sourceFeatures) =>
+                    Mod.CustomRoadAssetMatchRules?.GetCandidateRules(sourcePrefabName, sourceFeatures));
             m_DisplayOverridePropertyInfo = typeof(Game.Input.ProxyAction).GetProperty("displayOverride");
             m_ToolSystem.EventToolChanged += ToolChanged;
 

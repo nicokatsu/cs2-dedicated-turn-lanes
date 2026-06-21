@@ -111,70 +111,115 @@ namespace PocketTurnLanes.Tool.Traffic
             return true;
         }
 
-        public static bool TryResolveCascadeStraightTargets(
-            IReadOnlyList<LaneEndpoint> sourceEndpoints,
-            CenterLaneMovementSummary smallLane,
-            CenterLaneMovementSummary middleLane,
-            CenterLaneMovementSummary bigLane,
-            CenterConnectorCandidate middleCurrentStraight,
-            CenterConnectorCandidate bigCurrentStraight,
+        public static bool TryResolveStraightRunTargets(
+            IReadOnlyList<CenterLaneMovementSummary> sourceRun,
             TryGetTargetEndpoints tryGetTargetEndpoints,
-            out LaneEndpoint smallLaneStraightTarget,
-            out LaneEndpoint middleLaneStraightTarget,
+            out List<CenterStraightRewrite> straightRewrites,
             out string detail)
         {
-            smallLaneStraightTarget = default;
-            middleLaneStraightTarget = default;
+            straightRewrites = null;
             detail = string.Empty;
 
-            if (!middleCurrentStraight.HasTargetEndpoint ||
-                !bigCurrentStraight.HasTargetEndpoint)
+            if (sourceRun == null || sourceRun.Count < 3)
             {
-                detail = $"straight endpoint missing middle={middleCurrentStraight.HasTargetEndpoint} big={bigCurrentStraight.HasTargetEndpoint}";
+                detail = $"source run too short count={sourceRun?.Count ?? 0}";
                 return false;
             }
 
-            if (!TryValidateThreeLaneSourceCascade(
-                    sourceEndpoints,
-                    smallLane.SourceEndpoint,
-                    middleLane.SourceEndpoint,
-                    bigLane.SourceEndpoint,
-                    out string sourceDetail))
+            LaneEndpoint smallSource = sourceRun[0].SourceEndpoint;
+            LaneEndpoint bigSource = sourceRun[sourceRun.Count - 1].SourceEndpoint;
+            float sourceDelta = bigSource.Lateral - smallSource.Lateral;
+            if (math.abs(sourceDelta) <= 0.0001f)
             {
-                detail = sourceDetail;
+                detail = $"source lateral tie small={smallSource.LaneIndex}@{smallSource.Lateral:0.###} big={bigSource.LaneIndex}@{bigSource.Lateral:0.###}";
                 return false;
             }
 
-            if (middleCurrentStraight.Connector.TargetEdge != bigCurrentStraight.Connector.TargetEdge)
+            for (int i = 0; i < sourceRun.Count - 1; i++)
             {
-                detail = $"straight target edge mismatch middle={FormatEntity(middleCurrentStraight.Connector.TargetEdge)} big={FormatEntity(bigCurrentStraight.Connector.TargetEdge)} source=({sourceDetail})";
+                float laneDelta = sourceRun[i + 1].SourceEndpoint.Lateral - sourceRun[i].SourceEndpoint.Lateral;
+                if (math.abs(laneDelta) <= 0.0001f ||
+                    laneDelta > 0f != sourceDelta > 0f)
+                {
+                    detail = $"source run lateral not ordered lanes={FormatSourceRun(sourceRun)}";
+                    return false;
+                }
+            }
+
+            bool hasTargetEdge = false;
+            Entity targetEdge = Entity.Null;
+            List<CenterConnectorCandidate> straightOwners = new List<CenterConnectorCandidate>(sourceRun.Count - 1);
+            for (int i = 1; i < sourceRun.Count; i++)
+            {
+                CenterLaneMovementSummary summary = sourceRun[i];
+                if (summary.Straight.Count != 1)
+                {
+                    detail = $"straight count invalid lane={summary.SourceEndpoint.LaneIndex} count={summary.Straight.Count} sourceRun={FormatSourceRun(sourceRun)}";
+                    return false;
+                }
+
+                CenterConnectorCandidate straight = summary.Straight[0];
+                if (!straight.HasTargetEndpoint)
+                {
+                    detail = $"straight endpoint missing lane={summary.SourceEndpoint.LaneIndex} target={FormatEntity(straight.Connector.TargetEdge)}:{straight.Connector.TargetLaneIndex}";
+                    return false;
+                }
+
+                if (!hasTargetEdge)
+                {
+                    targetEdge = straight.Connector.TargetEdge;
+                    hasTargetEdge = true;
+                }
+                else if (straight.Connector.TargetEdge != targetEdge)
+                {
+                    detail = $"straight target edge mismatch lane={summary.SourceEndpoint.LaneIndex} target={FormatEntity(straight.Connector.TargetEdge)} expected={FormatEntity(targetEdge)} sourceRun={FormatSourceRun(sourceRun)}";
+                    return false;
+                }
+
+                straightOwners.Add(straight);
+            }
+
+            if (!tryGetTargetEndpoints(targetEdge, out IReadOnlyList<LaneEndpoint> targetEndpoints))
+            {
+                detail = $"target endpoint list missing edge={FormatEntity(targetEdge)}";
                 return false;
             }
 
-            if (!tryGetTargetEndpoints(bigCurrentStraight.Connector.TargetEdge, out IReadOnlyList<LaneEndpoint> targetEndpoints))
+            List<int> targetOrders = new List<int>(straightOwners.Count);
+            for (int i = 0; i < straightOwners.Count; i++)
             {
-                detail = $"target endpoint list missing edge={FormatEntity(bigCurrentStraight.Connector.TargetEdge)}";
-                return false;
+                CenterConnectorCandidate straight = straightOwners[i];
+                int targetOrder = TrafficLaneEndpointHelpers.FindOrder(targetEndpoints, straight.Connector.TargetLaneIndex);
+                if (targetOrder < 0)
+                {
+                    detail = $"straight target order missing sourceLane={straight.SourceEndpoint.LaneIndex} targetLane={straight.Connector.TargetLaneIndex} targets={FormatLaneOrder(targetEndpoints)}";
+                    return false;
+                }
+
+                targetOrders.Add(targetOrder);
             }
 
-            int middleTargetOrder = TrafficLaneEndpointHelpers.FindOrder(targetEndpoints, middleCurrentStraight.Connector.TargetLaneIndex);
-            int bigTargetOrder = TrafficLaneEndpointHelpers.FindOrder(targetEndpoints, bigCurrentStraight.Connector.TargetLaneIndex);
-            if (middleTargetOrder < 0 || bigTargetOrder < 0)
+            int expectedTargetShift = smallSource.Lateral > bigSource.Lateral ? -1 : 1;
+            for (int i = 0; i < targetOrders.Count - 1; i++)
             {
-                detail = $"straight target order missing middleLane={middleCurrentStraight.Connector.TargetLaneIndex} bigLane={bigCurrentStraight.Connector.TargetLaneIndex} targets={FormatLaneOrder(targetEndpoints)}";
-                return false;
+                if (targetOrders[i] != targetOrders[i + 1] + expectedTargetShift)
+                {
+                    detail = $"straight target order gap ownerLane={sourceRun[i + 1].SourceEndpoint.LaneIndex} order={targetOrders[i]} nextOwnerLane={sourceRun[i + 2].SourceEndpoint.LaneIndex} nextOrder={targetOrders[i + 1]} expectedShift={expectedTargetShift} targets={FormatLaneOrder(targetEndpoints)} sourceRun={FormatSourceRun(sourceRun)}";
+                    return false;
+                }
             }
 
-            int expectedTargetShift = smallLane.SourceEndpoint.Lateral > bigLane.SourceEndpoint.Lateral ? -1 : 1;
-            if (middleTargetOrder != bigTargetOrder + expectedTargetShift)
+            straightRewrites = new List<CenterStraightRewrite>(sourceRun.Count - 1);
+            for (int i = 0; i < sourceRun.Count - 1; i++)
             {
-                detail = $"straight target not adjacent middleOrder={middleTargetOrder} bigOrder={bigTargetOrder} expectedShift={expectedTargetShift} targets={FormatLaneOrder(targetEndpoints)} source=({sourceDetail})";
-                return false;
+                CenterConnectorCandidate straightTemplate = straightOwners[i];
+                straightRewrites.Add(new CenterStraightRewrite(
+                    sourceRun[i],
+                    straightTemplate,
+                    straightTemplate.TargetEndpoint));
             }
 
-            smallLaneStraightTarget = middleCurrentStraight.TargetEndpoint;
-            middleLaneStraightTarget = bigCurrentStraight.TargetEndpoint;
-            detail = $"source=({sourceDetail}) straightCascade smallLane {smallLane.SourceEndpoint.LaneIndex}->{smallLaneStraightTarget.LaneIndex} middleLane {middleLane.SourceEndpoint.LaneIndex}->{middleLaneStraightTarget.LaneIndex} targetEdge={FormatEntity(bigCurrentStraight.Connector.TargetEdge)} targetOrders middle={middleTargetOrder} big={bigTargetOrder} expectedShift={expectedTargetShift}";
+            detail = $"sourceRun=({FormatSourceRun(sourceRun)}) straightRunCascade targetEdge={FormatEntity(targetEdge)} targetOrders=({FormatTargetOrders(sourceRun, targetOrders)}) expectedShift={expectedTargetShift} straightRewrites=({FormatStraightRewrites(straightRewrites)})";
             return true;
         }
 
@@ -292,6 +337,62 @@ namespace PocketTurnLanes.Tool.Traffic
 
             detail = $"small={smallSource.LaneIndex}@{smallOrder} middle={middleSource.LaneIndex}@{middleOrder} big={bigSource.LaneIndex}@{bigOrder} direction={direction}";
             return true;
+        }
+
+        private static string FormatSourceRun(IReadOnlyList<CenterLaneMovementSummary> sourceRun)
+        {
+            if (sourceRun == null || sourceRun.Count == 0)
+            {
+                return "<none>";
+            }
+
+            List<string> lanes = new List<string>(sourceRun.Count);
+            for (int i = 0; i < sourceRun.Count; i++)
+            {
+                CenterLaneMovementSummary summary = sourceRun[i];
+                lanes.Add($"{summary.SourceEndpoint.LaneIndex}@{i}:small={summary.SmallTurn.Count},straight={summary.Straight.Count},big={summary.BigTurn.Count},other={summary.Other.Count}");
+            }
+
+            return string.Join("|", lanes);
+        }
+
+        private static string FormatTargetOrders(
+            IReadOnlyList<CenterLaneMovementSummary> sourceRun,
+            IReadOnlyList<int> targetOrders)
+        {
+            if (targetOrders == null || targetOrders.Count == 0)
+            {
+                return "<none>";
+            }
+
+            List<string> orders = new List<string>(targetOrders.Count);
+            for (int i = 0; i < targetOrders.Count; i++)
+            {
+                int sourceRunIndex = i + 1;
+                string lane = sourceRun != null && sourceRunIndex < sourceRun.Count
+                    ? sourceRun[sourceRunIndex].SourceEndpoint.LaneIndex.ToString()
+                    : "?";
+                orders.Add($"{lane}={targetOrders[i]}");
+            }
+
+            return string.Join(",", orders);
+        }
+
+        private static string FormatStraightRewrites(IReadOnlyList<CenterStraightRewrite> straightRewrites)
+        {
+            if (straightRewrites == null || straightRewrites.Count == 0)
+            {
+                return "<none>";
+            }
+
+            List<string> rewrites = new List<string>(straightRewrites.Count);
+            for (int i = 0; i < straightRewrites.Count; i++)
+            {
+                CenterStraightRewrite rewrite = straightRewrites[i];
+                rewrites.Add($"{rewrite.SourceLane.SourceEndpoint.LaneIndex}->{FormatEntity(rewrite.TargetEndpoint.Edge)}:{rewrite.TargetEndpoint.LaneIndex}/templateSource={rewrite.StraightTemplate.SourceEndpoint.LaneIndex}");
+            }
+
+            return string.Join(",", rewrites);
         }
 
         private static string FormatLaneOrder(IReadOnlyList<LaneEndpoint> lanes)

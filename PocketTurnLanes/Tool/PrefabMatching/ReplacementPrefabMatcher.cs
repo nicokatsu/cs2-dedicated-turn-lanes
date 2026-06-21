@@ -24,7 +24,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         private readonly RoadBuilderPrefabSemantics m_RoadBuilderPrefabSemantics;
         private readonly RoadLaneProfileBuilder m_RoadLaneProfileBuilder;
         private readonly ReplacementRoadUpgradeMatcher m_RoadUpgradeMatcher;
-        private readonly Func<string, string> m_GetCustomRoadAssetMatchTarget;
+        private readonly Func<string, CustomRoadAssetSourceFeatures, IReadOnlyList<CustomRoadAssetMatchRule>> m_GetCustomRoadAssetMatchRules;
 
         internal ReplacementPrefabMatcher(
             EntityManager entityManager,
@@ -35,7 +35,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             Func<BufferLookup<NetSectionPiece>> getNetSectionPieceLookup,
             Func<ComponentLookup<NetLaneData>> getNetLaneDataLookup,
             Func<BufferLookup<NetPieceLane>> getNetPieceLaneLookup,
-            Func<string, string> getCustomRoadAssetMatchTarget = null)
+            Func<string, CustomRoadAssetSourceFeatures, IReadOnlyList<CustomRoadAssetMatchRule>> getCustomRoadAssetMatchRules = null)
         {
             m_EntityManager = entityManager;
             m_PrefabSystem = prefabSystem;
@@ -55,7 +55,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 entityManager,
                 prefabSystem,
                 m_RoadLaneProfileBuilder);
-            m_GetCustomRoadAssetMatchTarget = getCustomRoadAssetMatchTarget;
+            m_GetCustomRoadAssetMatchRules = getCustomRoadAssetMatchRules;
         }
 
         private EntityManager EntityManager => m_EntityManager;
@@ -108,20 +108,25 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             RoadLaneCounts originalEffectiveCounts = source.OriginalEffectiveCounts;
             RoadLaneCounts desiredEffectiveCounts = source.DesiredEffectiveCounts;
 
-            if (TryGetCustomRoadAssetMatchTarget(source.Prefab, out string customTargetPrefabName))
+            CustomRoadAssetSourceFeatures sourceFeatures = GetSourceFeatures(source);
+            if (TryGetCustomRoadAssetMatchRules(source.Prefab, sourceFeatures, out IReadOnlyList<CustomRoadAssetMatchRule> customRules))
             {
-                if (TryBuildCustomRoadAssetMatch(
-                        source,
-                        customTargetPrefabName,
-                        out match,
-                        out ReplacementSearchStats customStats,
-                        out string customDetail))
+                for (int i = 0; i < customRules.Count; i++)
                 {
-                    Mod.LogEssential($"[CustomRoadAssetMatch] Preferred target selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, match.Prefab)} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} score={match.Score} scanned={customStats.Scanned} detail={customDetail}.");
-                    return true;
-                }
+                    CustomRoadAssetMatchRule rule = customRules[i];
+                    if (TryBuildCustomRoadAssetMatch(
+                            source,
+                            rule.TargetPrefabName,
+                            out match,
+                            out ReplacementSearchStats customStats,
+                            out string customDetail))
+                    {
+                        Mod.LogEssential($"[CustomRoadAssetMatch] Preferred target selected sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} ruleFeatures={CustomRoadAssetSourceFeatureUtility.Format(rule.SourceFeatures)} targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, match.Prefab)} orientation={(match.Invert ? "reversed" : "direct")} nodeSide={(nodeIsStart ? "start" : "end")} candidateIndex={i + 1}/{customRules.Count} score={match.Score} scanned={customStats.Scanned} detail={customDetail}.");
+                        return true;
+                    }
 
-                Mod.LogEssential($"[CustomRoadAssetMatch] Preferred target rejected; falling back to automatic matcher sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} targetPrefabName={customTargetPrefabName} nodeSide={(nodeIsStart ? "start" : "end")} reason={customDetail}.");
+                    Mod.LogEssential($"[CustomRoadAssetMatch] Preferred target rejected; trying next custom rule or automatic matcher sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} ruleFeatures={CustomRoadAssetSourceFeatureUtility.Format(rule.SourceFeatures)} targetPrefabName={rule.TargetPrefabName} nodeSide={(nodeIsStart ? "start" : "end")} candidateIndex={i + 1}/{customRules.Count} reason={customDetail}.");
+                }
             }
 
             using (NativeArray<Entity> prefabEntities = m_RoadPrefabQuery.ToEntityArray(Allocator.Temp))
@@ -222,35 +227,27 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 for (int i = 0; i < prefabEntities.Length; i++)
                 {
                     Entity sourcePrefab = prefabEntities[i];
-                    if (!TryBuildDefaultSourceReplacementContext(
-                            sourcePrefab,
-                            false,
-                            out _,
-                            out string endDetail) &&
-                        !TryBuildDefaultSourceReplacementContext(
-                            sourcePrefab,
-                            true,
-                            out _,
-                            out string startDetail))
-                    {
-                        if (!string.IsNullOrEmpty(query))
-                        {
-                            string name = PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, sourcePrefab);
-                            if (MatchesQuery(name, query))
-                            {
-                                Mod.LogDiagnostic($"[CustomRoadAssetMatch] Source search skipped prefab={name} entity={FormatEntity(sourcePrefab)} endValidation={endDetail} startValidation={startDetail}.");
-                            }
-                        }
-
-                        continue;
-                    }
-
                     if (!TryBuildRoadAssetPrefabOption(sourcePrefab, out RoadAssetPrefabOption option) ||
                         !OptionMatchesQuery(option, query))
                     {
                         continue;
                     }
 
+                    if (!TryGetSourceTargetAvailability(
+                            sourcePrefab,
+                            prefabEntities,
+                            out SourceTargetAvailability availability,
+                            out string availabilityDetail))
+                    {
+                        if (!string.IsNullOrEmpty(query))
+                        {
+                            Mod.LogDiagnostic($"[CustomRoadAssetMatch] Source search skipped prefab={option.PrefabName} entity={FormatEntity(sourcePrefab)} reason=no-compatible-targets detail={availabilityDetail}.");
+                        }
+
+                        continue;
+                    }
+
+                    ApplySourceTargetAvailability(ref option, availability);
                     options.Add(option);
                 }
             }
@@ -260,6 +257,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         internal bool TryGetCompatibleTargetOptions(
             string sourcePrefabName,
+            CustomRoadAssetSourceFeatures sourceFeatures,
             string query,
             List<RoadAssetPrefabOption> options,
             int maxCount,
@@ -275,6 +273,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
+            sourceFeatures = CustomRoadAssetSourceFeatureUtility.Normalize(sourceFeatures);
             if (!TryFindRoadPrefabByName(sourcePrefabName, out Entity sourcePrefab))
             {
                 detail = $"sourceMissing sourcePrefabName={sourcePrefabName}";
@@ -287,13 +286,23 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
+            if (TryGetSourceTargetAvailability(
+                    sourcePrefab,
+                    out SourceTargetAvailability availability,
+                    out _))
+            {
+                ApplySourceTargetAvailability(ref sourceOption, availability);
+            }
+
             bool hasEndContext = TryBuildDefaultSourceReplacementContext(
                 sourcePrefab,
+                sourceFeatures,
                 false,
                 out SourceReplacementContext endContext,
                 out string endDetail);
             bool hasStartContext = TryBuildDefaultSourceReplacementContext(
                 sourcePrefab,
+                sourceFeatures,
                 true,
                 out SourceReplacementContext startContext,
                 out string startDetail);
@@ -343,16 +352,18 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             SortAndTrimOptions(options, maxCount);
-            detail = $"sourcePrefabName={sourcePrefabName} targets={options.Count} endContext={hasEndContext} startContext={hasStartContext}";
+            detail = $"sourcePrefabName={sourcePrefabName} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} targets={options.Count} endContext={hasEndContext} startContext={hasStartContext}";
             return true;
         }
 
         internal bool IsValidCustomRoadAssetMatch(
             string sourcePrefabName,
+            CustomRoadAssetSourceFeatures sourceFeatures,
             string targetPrefabName,
             out string detail)
         {
             detail = string.Empty;
+            sourceFeatures = CustomRoadAssetSourceFeatureUtility.Normalize(sourceFeatures);
             if (!TryFindRoadPrefabByName(sourcePrefabName, out Entity sourcePrefab))
             {
                 detail = $"sourceMissing sourcePrefabName={sourcePrefabName}";
@@ -367,11 +378,13 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             bool hasEndContext = TryBuildDefaultSourceReplacementContext(
                 sourcePrefab,
+                sourceFeatures,
                 false,
                 out SourceReplacementContext endContext,
                 out string endDetail);
             bool hasStartContext = TryBuildDefaultSourceReplacementContext(
                 sourcePrefab,
+                sourceFeatures,
                 true,
                 out SourceReplacementContext startContext,
                 out string startDetail);
@@ -384,7 +397,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     out ReplacementSearchStats endStats,
                     out string validEndDetail))
             {
-                detail = $"valid nodeSide=end scanned={endStats.Scanned} {validEndDetail}";
+                detail = $"valid sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} nodeSide=end scanned={endStats.Scanned} {validEndDetail}";
                 return true;
             }
 
@@ -396,11 +409,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     out ReplacementSearchStats startStats,
                     out string validStartDetail))
             {
-                detail = $"valid nodeSide=start scanned={startStats.Scanned} {validStartDetail}";
+                detail = $"valid sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} nodeSide=start scanned={startStats.Scanned} {validStartDetail}";
                 return true;
             }
 
-            detail = $"incompatible sourcePrefabName={sourcePrefabName} targetPrefabName={targetPrefabName} endContext={hasEndContext} endValidation={endDetail} startContext={hasStartContext} startValidation={startDetail}";
+            detail = $"incompatible sourcePrefabName={sourcePrefabName} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} targetPrefabName={targetPrefabName} endContext={hasEndContext} endValidation={endDetail} startContext={hasStartContext} startValidation={startDetail}";
             return false;
         }
 
@@ -422,16 +435,160 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
+            if (TryGetSourceTargetAvailability(
+                    prefabEntity,
+                    out SourceTargetAvailability availability,
+                    out _))
+            {
+                ApplySourceTargetAvailability(ref option, availability);
+            }
+            else
+            {
+                option.HasForwardTargetCandidates = false;
+                option.HasReverseTargetCandidates = false;
+                option.HasReverseSourceSide = false;
+            }
+
             detail = "ok";
             return true;
         }
 
-        private bool TryGetCustomRoadAssetMatchTarget(
+        private bool TryGetSourceTargetAvailability(
             Entity sourcePrefab,
-            out string targetPrefabName)
+            out SourceTargetAvailability availability,
+            out string detail)
         {
-            targetPrefabName = null;
-            if (m_GetCustomRoadAssetMatchTarget == null || sourcePrefab == Entity.Null)
+            using (NativeArray<Entity> prefabEntities = m_RoadPrefabQuery.ToEntityArray(Allocator.Temp))
+            {
+                return TryGetSourceTargetAvailability(
+                    sourcePrefab,
+                    prefabEntities,
+                    out availability,
+                    out detail);
+            }
+        }
+
+        private bool TryGetSourceTargetAvailability(
+            Entity sourcePrefab,
+            NativeArray<Entity> prefabEntities,
+            out SourceTargetAvailability availability,
+            out string detail)
+        {
+            availability = default;
+            bool hasForwardCandidates = HasCompatibleTargetForSourceFeatures(
+                sourcePrefab,
+                CustomRoadAssetSourceFeatures.None,
+                prefabEntities,
+                out string forwardDetail);
+            bool canReverse = CanHaveReverseSourceSide(sourcePrefab, out string reverseSourceDetail);
+            bool hasReverseCandidates = false;
+            string reverseDetail = "reverse-source-unavailable";
+            if (canReverse)
+            {
+                hasReverseCandidates = HasCompatibleTargetForSourceFeatures(
+                    sourcePrefab,
+                    CustomRoadAssetSourceFeatures.Reverse,
+                    prefabEntities,
+                    out reverseDetail);
+            }
+
+            availability = new SourceTargetAvailability
+            {
+                HasForwardTargetCandidates = hasForwardCandidates,
+                HasReverseTargetCandidates = hasReverseCandidates
+            };
+            detail = $"forward={hasForwardCandidates} forwardDetail=({forwardDetail}) reverseSource=({reverseSourceDetail}) reverse={hasReverseCandidates} reverseDetail=({reverseDetail})";
+            return availability.HasAnyTargetCandidates;
+        }
+
+        private bool HasCompatibleTargetForSourceFeatures(
+            Entity sourcePrefab,
+            CustomRoadAssetSourceFeatures sourceFeatures,
+            NativeArray<Entity> prefabEntities,
+            out string detail)
+        {
+            bool hasEndContext = TryBuildDefaultSourceReplacementContext(
+                sourcePrefab,
+                sourceFeatures,
+                false,
+                out SourceReplacementContext endContext,
+                out string endDetail);
+            bool hasStartContext = TryBuildDefaultSourceReplacementContext(
+                sourcePrefab,
+                sourceFeatures,
+                true,
+                out SourceReplacementContext startContext,
+                out string startDetail);
+
+            if (!hasEndContext && !hasStartContext)
+            {
+                detail = $"no-source-context endValidation={endDetail} startValidation={startDetail}";
+                return false;
+            }
+
+            for (int i = 0; i < prefabEntities.Length; i++)
+            {
+                Entity targetPrefab = prefabEntities[i];
+                if (hasEndContext &&
+                    TryBuildCustomRoadAssetMatch(
+                        endContext,
+                        targetPrefab,
+                        out _,
+                        out _,
+                        out string endMatchDetail))
+                {
+                    detail = $"nodeSide=end targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, targetPrefab)} {endMatchDetail}";
+                    return true;
+                }
+
+                if (hasStartContext &&
+                    TryBuildCustomRoadAssetMatch(
+                        startContext,
+                        targetPrefab,
+                        out _,
+                        out _,
+                        out string startMatchDetail))
+                {
+                    detail = $"nodeSide=start targetPrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, targetPrefab)} {startMatchDetail}";
+                    return true;
+                }
+            }
+
+            detail = $"no-compatible-targets endContext={hasEndContext} endValidation={endDetail} startContext={hasStartContext} startValidation={startDetail}";
+            return false;
+        }
+
+        private bool CanHaveReverseSourceSide(Entity sourcePrefab, out string detail)
+        {
+            if (!TryGetDefaultRoadLaneProfile(sourcePrefab, out RoadLaneProfile profile))
+            {
+                detail = "sourceLaneProfileMissing";
+                return false;
+            }
+
+            bool canReverse = profile.RoadCounts.IsAsymmetric &&
+                              profile.RoadCounts.Forward > 0 &&
+                              profile.RoadCounts.Backward > 0;
+            detail = $"sourceLanes={profile.RoadCounts} asymmetric={profile.RoadCounts.IsAsymmetric} forward={profile.RoadCounts.Forward} backward={profile.RoadCounts.Backward}";
+            return canReverse;
+        }
+
+        private static void ApplySourceTargetAvailability(
+            ref RoadAssetPrefabOption option,
+            SourceTargetAvailability availability)
+        {
+            option.HasForwardTargetCandidates = availability.HasForwardTargetCandidates;
+            option.HasReverseTargetCandidates = availability.HasReverseTargetCandidates;
+            option.HasReverseSourceSide = availability.HasReverseTargetCandidates;
+        }
+
+        private bool TryGetCustomRoadAssetMatchRules(
+            Entity sourcePrefab,
+            CustomRoadAssetSourceFeatures sourceFeatures,
+            out IReadOnlyList<CustomRoadAssetMatchRule> rules)
+        {
+            rules = null;
+            if (m_GetCustomRoadAssetMatchRules == null || sourcePrefab == Entity.Null)
             {
                 return false;
             }
@@ -443,8 +600,36 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
-            targetPrefabName = m_GetCustomRoadAssetMatchTarget(sourcePrefabName);
-            return !string.IsNullOrWhiteSpace(targetPrefabName);
+            rules = m_GetCustomRoadAssetMatchRules(sourcePrefabName, sourceFeatures);
+            return rules != null && rules.Count > 0;
+        }
+
+        private static CustomRoadAssetSourceFeatures GetSourceFeatures(SourceReplacementContext source)
+        {
+            RoadLaneProfile sourceProfile = source.Profile;
+            CustomRoadAssetSourceFeatures features = CustomRoadAssetSourceFeatures.None;
+            if (!sourceProfile.TramTrackCounts.IsEmpty)
+            {
+                features |= CustomRoadAssetSourceFeatures.Tram;
+            }
+
+            if (sourceProfile.BusLaneLayout.HasAny)
+            {
+                features |= CustomRoadAssetSourceFeatures.PublicTransport;
+            }
+
+            if (IsReverseAsymmetricSourceSide(source.OriginalCounts, source.NodeIsStart))
+            {
+                features |= CustomRoadAssetSourceFeatures.Reverse;
+            }
+
+            return features;
+        }
+
+        private static bool IsReverseAsymmetricSourceSide(RoadLaneCounts originalCounts, bool nodeIsStart)
+        {
+            return originalCounts.IsAsymmetric &&
+                   originalCounts.GetIncomingAtNode(nodeIsStart) < originalCounts.GetOutgoingAtNode(nodeIsStart);
         }
 
         private bool TryBuildCustomRoadAssetMatch(
@@ -575,6 +760,13 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             RoadLaneCounts originalCounts = sourceProfile.RoadCounts;
+            int originalIncomingCount = originalCounts.GetIncomingAtNode(nodeIsStart);
+            if (originalIncomingCount <= 0)
+            {
+                Mod.LogDiagnostic($"[IntersectionTool] Skip replacement prefab search sourceEdge={FormatEntity(edgeEntity)} sourcePrefab={GetPrefabName(edgeEntity)} nodeSide={(nodeIsStart ? "start" : "end")}: source side has no incoming road lanes; originalLanes={originalCounts} incoming={originalIncomingCount} outgoing={originalCounts.GetOutgoingAtNode(nodeIsStart)}.");
+                return false;
+            }
+
             RoadLaneCounts desiredCounts = GetDesiredPocketLaneCounts(originalCounts, nodeIsStart);
 
             bool sourceHasUpgraded = EntityManager.TryGetComponent(edgeEntity, out Upgraded sourceUpgraded);
@@ -604,6 +796,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         private bool TryBuildDefaultSourceReplacementContext(
             Entity sourcePrefab,
+            CustomRoadAssetSourceFeatures sourceFeatures,
             bool nodeIsStart,
             out SourceReplacementContext context,
             out string detail)
@@ -641,7 +834,33 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
+            sourceFeatures = CustomRoadAssetSourceFeatureUtility.Normalize(sourceFeatures);
             RoadLaneCounts originalCounts = sourceProfile.RoadCounts;
+            bool wantsReverse = (sourceFeatures & CustomRoadAssetSourceFeatures.Reverse) != 0;
+            bool isReverseSide = IsReverseAsymmetricSourceSide(originalCounts, nodeIsStart);
+            int incomingCount = originalCounts.GetIncomingAtNode(nodeIsStart);
+            int outgoingCount = originalCounts.GetOutgoingAtNode(nodeIsStart);
+            if (wantsReverse && !originalCounts.IsAsymmetric)
+            {
+                detail = $"sourceReverseNotAvailable sourceLanes={originalCounts} nodeSide={(nodeIsStart ? "start" : "end")} incoming={incomingCount} outgoing={outgoingCount}";
+                return false;
+            }
+
+            if (wantsReverse != isReverseSide)
+            {
+                detail = wantsReverse
+                    ? $"sourceNodeSideIsForward sourceLanes={originalCounts} nodeSide={(nodeIsStart ? "start" : "end")} incoming={incomingCount} outgoing={outgoingCount}"
+                    : $"sourceNodeSideIsReverse sourceLanes={originalCounts} nodeSide={(nodeIsStart ? "start" : "end")} incoming={incomingCount} outgoing={outgoingCount}";
+                return false;
+            }
+
+            int originalIncomingCount = originalCounts.GetIncomingAtNode(nodeIsStart);
+            if (originalIncomingCount <= 0)
+            {
+                detail = $"sourceNodeSideHasNoIncomingLanes sourceLanes={originalCounts} nodeSide={(nodeIsStart ? "start" : "end")} incoming={originalIncomingCount} outgoing={originalCounts.GetOutgoingAtNode(nodeIsStart)}";
+                return false;
+            }
+
             RoadLaneCounts desiredCounts = GetDesiredPocketLaneCounts(originalCounts, nodeIsStart);
             context = new SourceReplacementContext
             {
@@ -1002,7 +1221,13 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 Icon = GetRoadAssetIcon(prefabBase),
                 Summary = $"lanes={profile.RoadCounts} width={geometry.m_DefaultWidth:0.##}m content={(isDlc ? "dlc" : "base")} profile={profile.Source}{transitSummary}",
                 IsDlc = isDlc,
-                ContentDetail = contentDetail
+                ContentDetail = contentDetail,
+                HasTram = !profile.TramTrackCounts.IsEmpty,
+                HasPublicTransport = profile.BusLaneLayout.HasAny,
+                HasAsymmetricRoadLanes = profile.RoadCounts.IsAsymmetric,
+                HasReverseSourceSide = profile.RoadCounts.IsAsymmetric &&
+                                       profile.RoadCounts.Forward > 0 &&
+                                       profile.RoadCounts.Backward > 0
             };
             return true;
         }
@@ -1128,6 +1353,14 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             public CompositionFlags TramUpgradeFlags;
             public RoadLaneCounts OriginalEffectiveCounts;
             public RoadLaneCounts DesiredEffectiveCounts;
+        }
+
+        private struct SourceTargetAvailability
+        {
+            public bool HasForwardTargetCandidates;
+            public bool HasReverseTargetCandidates;
+
+            public bool HasAnyTargetCandidates => HasForwardTargetCandidates || HasReverseTargetCandidates;
         }
 
         private struct CandidateReplacementContext

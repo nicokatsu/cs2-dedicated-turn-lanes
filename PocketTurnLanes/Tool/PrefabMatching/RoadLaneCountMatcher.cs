@@ -12,6 +12,8 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         public bool IsEmpty => Forward == 0 && Backward == 0;
 
+        public bool IsAsymmetric => Forward != Backward;
+
         public RoadLaneCounts Swapped()
         {
             return new RoadLaneCounts

@@ -253,6 +253,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
+            List<CenterLaneMovementSummary> orderedSummaries = new List<CenterLaneMovementSummary>(sourceEndpoints.Count);
+            for (int i = 0; i < sourceEndpoints.Count; i++)
+            {
+                orderedSummaries.Add(summaries[sourceEndpoints[i].LaneIndex]);
+            }
+
             int pocketExtraCenterLane = -1;
             bool activePocketScope = requirePocketExtraLane && sourceEdge == request.PocketEdge;
             if (activePocketScope &&
@@ -280,6 +286,7 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
 
             if (!TrafficCenterPatternSelector.TrySelect(
                     sourceEndpoints,
+                    orderedSummaries,
                     smallExclusive,
                     bigStraight,
                     bigExclusive,
@@ -295,17 +302,18 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             }
 
             CenterLaneMovementSummary smallLane = pattern.SmallLane;
-            CenterLaneMovementSummary middleLane = pattern.MiddleLane;
             CenterLaneMovementSummary bigLane = pattern.BigLane;
-            CenterConnectorCandidate smallLaneStraightTemplate = pattern.SmallLaneStraightTemplate;
-            CenterConnectorCandidate middleLaneStraightTemplate = pattern.MiddleLaneStraightTemplate;
-            LaneEndpoint smallLaneStraightTarget = pattern.SmallLaneStraightTarget;
-            LaneEndpoint middleLaneStraightTarget = pattern.MiddleLaneStraightTarget;
+            IReadOnlyList<CenterStraightRewrite> straightRewrites = pattern.StraightRewrites;
             string rewriteMode = pattern.RewriteMode;
             string shiftDetail = pattern.ShiftDetail;
-            int straightMappingsWritten = pattern.StraightMappingsWritten;
+            int straightMappingsWritten = straightRewrites?.Count ?? 0;
             int straightUnsafeCleared = 0;
             int smallTurnsClearedFromStraightLane = pattern.SmallTurnsClearedFromStraightLane;
+            if (straightMappingsWritten == 0)
+            {
+                AddCenterApproachSkip(plan, sourceEdge, "noStraightRewritesSelected", approachConnectors, sourceClass);
+                return;
+            }
 
             for (int i = 0; i < smallLane.SmallTurn.Count; i++)
             {
@@ -325,31 +333,19 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
                 }
             }
 
-            if (!TrafficCenterMappingBuilder.TryAddShiftedStraightMapping(
-                    approachBySource,
-                    approachSourceEndpoints,
-                    approachTargetEndpoints,
-                    smallLaneStraightTemplate,
-                    smallLane.SourceEndpoint,
-                    smallLaneStraightTarget,
-                    out string straightReason))
+            for (int i = 0; i < straightRewrites.Count; i++)
             {
-                AddCenterApproachSkip(plan, sourceEdge, $"straightMappingFailed detail=({straightReason})", approachConnectors, sourceClass);
-                return;
-            }
-
-            if (middleLane != null)
-            {
+                CenterStraightRewrite rewrite = straightRewrites[i];
                 if (!TrafficCenterMappingBuilder.TryAddShiftedStraightMapping(
                         approachBySource,
                         approachSourceEndpoints,
                         approachTargetEndpoints,
-                        middleLaneStraightTemplate,
-                        middleLane.SourceEndpoint,
-                        middleLaneStraightTarget,
-                        out string middleStraightReason))
+                        rewrite.StraightTemplate,
+                        rewrite.SourceLane.SourceEndpoint,
+                        rewrite.TargetEndpoint,
+                        out string straightReason))
                 {
-                    AddCenterApproachSkip(plan, sourceEdge, $"middleStraightMappingFailed detail=({middleStraightReason})", approachConnectors, sourceClass);
+                    AddCenterApproachSkip(plan, sourceEdge, $"straightMappingFailed sourceLane={rewrite.SourceLane.SourceEndpoint.LaneIndex} targetLane={rewrite.TargetEndpoint.LaneIndex} detail=({straightReason})", approachConnectors, sourceClass);
                     return;
                 }
             }
@@ -393,15 +389,12 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             plan.ApproachesRewritten++;
             plan.PlannedConnections += connectionCount;
             plan.StraightConnectionsWrittenSafe += straightMappingsWritten;
-            if ((smallLaneStraightTemplate.Connector.CarFlags & (CarLaneFlags.Unsafe | CarLaneFlags.Forbidden)) != 0)
+            for (int i = 0; i < straightRewrites.Count; i++)
             {
-                straightUnsafeCleared++;
-            }
-
-            if (middleLane != null &&
-                (middleLaneStraightTemplate.Connector.CarFlags & (CarLaneFlags.Unsafe | CarLaneFlags.Forbidden)) != 0)
-            {
-                straightUnsafeCleared++;
+                if ((straightRewrites[i].StraightTemplate.Connector.CarFlags & (CarLaneFlags.Unsafe | CarLaneFlags.Forbidden)) != 0)
+                {
+                    straightUnsafeCleared++;
+                }
             }
 
             plan.StraightUnsafeCleared += straightUnsafeCleared;
@@ -415,10 +408,41 @@ namespace PocketTurnLanes.Systems.Tool.SplitLaneConnectionFix
             string extraEvidence = sourceEdge == request.PocketEdge
                 ? $"pocketExtraCenterLane={pocketExtraCenterLane}"
                 : "extraEvidence=legacyOffScopeRuntimePatternOnly";
-            string middleEvidence = middleLane != null
-                ? $" middleLane={middleLane.SourceEndpoint.LaneIndex} clearedMiddleSmallTurn={smallTurnsClearedFromStraightLane}"
-                : string.Empty;
-            plan.Diagnostics.Add($"centerRewritePlanned sourceEdge={FormatEntity(sourceEdge)} mode={rewriteMode} smallLane={smallLane.SourceEndpoint.LaneIndex}{middleEvidence} bigLane={bigLane.SourceEndpoint.LaneIndex} {extraEvidence} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} shift=({shiftDetail}) sourceClass=({sourceClass}) connections={connectionCount} straightSafe={straightMappingsWritten} straightUnsafeCleared={straightUnsafeCleared} roadBicycle={roadBicycleConnections} runtimePreserved={preservationStats.Connections} preservedUturn={preservationStats.UturnConnections} preservedNonRoad={preservationStats.NonRoadConnections} preservedUnsafe={preservationStats.UnsafeConnections} preservationSkipped={preservationStats.Skipped}");
+            plan.Diagnostics.Add($"centerRewritePlanned sourceEdge={FormatEntity(sourceEdge)} mode={rewriteMode} smallLane={smallLane.SourceEndpoint.LaneIndex} bigLane={bigLane.SourceEndpoint.LaneIndex} {extraEvidence} bigTurn={plan.BigTurn} smallTurn={plan.SmallTurn} sourceRun={FormatCenterSourceRun(pattern.SourceRun)} straightRewrites={FormatCenterStraightRewrites(straightRewrites)} clearedMiddleSmallTurn={smallTurnsClearedFromStraightLane} shift=({shiftDetail}) sourceClass=({sourceClass}) connections={connectionCount} straightSafe={straightMappingsWritten} straightUnsafeCleared={straightUnsafeCleared} roadBicycle={roadBicycleConnections} runtimePreserved={preservationStats.Connections} preservedUturn={preservationStats.UturnConnections} preservedNonRoad={preservationStats.NonRoadConnections} preservedUnsafe={preservationStats.UnsafeConnections} preservationSkipped={preservationStats.Skipped}");
+        }
+
+        private static string FormatCenterSourceRun(IReadOnlyList<CenterLaneMovementSummary> sourceRun)
+        {
+            if (sourceRun == null || sourceRun.Count == 0)
+            {
+                return "<none>";
+            }
+
+            List<string> lanes = new List<string>(sourceRun.Count);
+            for (int i = 0; i < sourceRun.Count; i++)
+            {
+                CenterLaneMovementSummary summary = sourceRun[i];
+                lanes.Add($"{summary.SourceEndpoint.LaneIndex}@{i}:small={summary.SmallTurn.Count},straight={summary.Straight.Count},big={summary.BigTurn.Count},other={summary.Other.Count}");
+            }
+
+            return string.Join("|", lanes);
+        }
+
+        private static string FormatCenterStraightRewrites(IReadOnlyList<CenterStraightRewrite> straightRewrites)
+        {
+            if (straightRewrites == null || straightRewrites.Count == 0)
+            {
+                return "<none>";
+            }
+
+            List<string> rewrites = new List<string>(straightRewrites.Count);
+            for (int i = 0; i < straightRewrites.Count; i++)
+            {
+                CenterStraightRewrite rewrite = straightRewrites[i];
+                rewrites.Add($"{rewrite.SourceLane.SourceEndpoint.LaneIndex}->{FormatEntity(rewrite.TargetEndpoint.Edge)}:{rewrite.TargetEndpoint.LaneIndex}/templateSource={rewrite.StraightTemplate.SourceEndpoint.LaneIndex}");
+            }
+
+            return string.Join(",", rewrites);
         }
 
         private bool TryGetPocketExtraCenterLaneIndex(Request request, out int centerLaneIndex)

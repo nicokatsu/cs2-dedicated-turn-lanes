@@ -4,15 +4,9 @@ namespace PocketTurnLanes.Diagnostics
 {
     internal static class ModLogger
     {
-        private const int MaxDiagnosticMessageCharacters = 2048;
-        private const int MaxDiagnosticMessagesPerSecond = 60;
+        private const int MaxDiagnosticMessageCharacters = 20000;
 
-        private static readonly object s_DiagnosticRateLimitLock = new object();
         private static Func<bool> s_IsDiagnosticLoggingEnabled = () => false;
-        private static DateTime s_DiagnosticWindowStartUtc = DateTime.MinValue;
-        private static int s_DiagnosticWindowMessageCount;
-        private static int s_SuppressedDiagnosticCount;
-        private static long s_SuppressedDiagnosticCharacters;
 
         public static bool DiagnosticLoggingEnabled => s_IsDiagnosticLoggingEnabled();
 
@@ -101,34 +95,7 @@ namespace PocketTurnLanes.Diagnostics
         private static bool TryEnterDiagnosticRateLimit(int diagnosticCharacters, out string suppressedSummary)
         {
             suppressedSummary = null;
-            DateTime nowUtc = DateTime.UtcNow;
-
-            lock (s_DiagnosticRateLimitLock)
-            {
-                if (s_DiagnosticWindowStartUtc == DateTime.MinValue ||
-                    (nowUtc - s_DiagnosticWindowStartUtc).TotalSeconds >= 1)
-                {
-                    s_DiagnosticWindowStartUtc = nowUtc;
-                    s_DiagnosticWindowMessageCount = 0;
-                    if (s_SuppressedDiagnosticCount > 0)
-                    {
-                        suppressedSummary = $"[Diagnostics] suppressed={s_SuppressedDiagnosticCount} chars={s_SuppressedDiagnosticCharacters} reason=rateLimit";
-                        s_SuppressedDiagnosticCount = 0;
-                        s_SuppressedDiagnosticCharacters = 0;
-                        s_DiagnosticWindowMessageCount++;
-                    }
-                }
-
-                if (s_DiagnosticWindowMessageCount >= MaxDiagnosticMessagesPerSecond)
-                {
-                    s_SuppressedDiagnosticCount++;
-                    s_SuppressedDiagnosticCharacters += diagnosticCharacters;
-                    return false;
-                }
-
-                s_DiagnosticWindowMessageCount++;
-                return true;
-            }
+            return true;
         }
     }
 }

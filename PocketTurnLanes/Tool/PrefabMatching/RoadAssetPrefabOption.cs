@@ -8,5 +8,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public string Summary;
         public bool IsDlc;
         public string ContentDetail;
+        public bool HasTram;
+        public bool HasPublicTransport;
+        public bool HasAsymmetricRoadLanes;
+        public bool HasReverseSourceSide;
+        public bool HasForwardTargetCandidates;
+        public bool HasReverseTargetCandidates;
     }
 }
