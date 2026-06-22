@@ -14,6 +14,11 @@ namespace PocketTurnLanes.Options
         string targetPrefabName,
         out string detail);
 
+    internal delegate bool CustomRoadAssetMandatorySourceFeatureProvider(
+        string sourcePrefabName,
+        out CustomRoadAssetSourceFeatures mandatoryFeatures,
+        out string detail);
+
     internal sealed class CustomRoadAssetMatchRuleStore
     {
         private const string VersionedKeyPrefix = "v2|";
@@ -244,6 +249,87 @@ namespace PocketTurnLanes.Options
             return invalidRules.Count;
         }
 
+        internal int CanonicalizeMandatorySourceFeatures(
+            CustomRoadAssetMandatorySourceFeatureProvider mandatoryFeatureProvider,
+            string reason)
+        {
+            if (mandatoryFeatureProvider == null || m_Rules.Count == 0)
+            {
+                return 0;
+            }
+
+            Dictionary<RuleKey, CanonicalRulePlan> canonicalRules =
+                new Dictionary<RuleKey, CanonicalRulePlan>(m_Rules.Count);
+            int changed = 0;
+            foreach (KeyValuePair<RuleKey, string> rule in m_Rules)
+            {
+                RuleKey canonicalKey = rule.Key;
+                CustomRoadAssetSourceFeatures mandatoryFeatures = CustomRoadAssetSourceFeatures.None;
+                string mandatoryDetail = string.Empty;
+                if (mandatoryFeatureProvider(
+                        rule.Key.SourcePrefabName,
+                        out mandatoryFeatures,
+                        out mandatoryDetail))
+                {
+                    mandatoryFeatures = CustomRoadAssetSourceFeatureUtility.Normalize(mandatoryFeatures) &
+                                        (CustomRoadAssetSourceFeatures.Tram |
+                                         CustomRoadAssetSourceFeatures.PublicTransport);
+                    canonicalKey = new RuleKey(
+                        rule.Key.SourcePrefabName,
+                        rule.Key.SourceFeatures | mandatoryFeatures);
+                }
+
+                bool isChanged = !rule.Key.Equals(canonicalKey);
+                int preferenceScore = GetCanonicalRulePreferenceScore(rule.Key.SourceFeatures, isChanged);
+                CanonicalRulePlan plan = new CanonicalRulePlan(
+                    rule.Key,
+                    rule.Value,
+                    preferenceScore);
+
+                if (!canonicalRules.TryGetValue(canonicalKey, out CanonicalRulePlan existingPlan))
+                {
+                    canonicalRules.Add(canonicalKey, plan);
+                    if (isChanged)
+                    {
+                        changed++;
+                        ModLogger.LogEssential($"[CustomRoadAssetMatch] Canonicalizing rule sourcePrefab={rule.Key.SourcePrefabName} oldSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(rule.Key.SourceFeatures)} newSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(canonicalKey.SourceFeatures)} mandatorySourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(mandatoryFeatures)} targetPrefab={rule.Value} reason={reason} detail={mandatoryDetail}.");
+                    }
+
+                    continue;
+                }
+
+                if (preferenceScore > existingPlan.PreferenceScore)
+                {
+                    canonicalRules[canonicalKey] = plan;
+                    changed++;
+                    ModLogger.LogEssential($"[CustomRoadAssetMatch] Removing duplicate canonical rule sourcePrefab={existingPlan.OriginalKey.SourcePrefabName} oldSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(existingPlan.OriginalKey.SourceFeatures)} canonicalSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(canonicalKey.SourceFeatures)} removedTargetPrefab={existingPlan.TargetPrefabName} keptTargetPrefab={rule.Value} reason={reason} keptRuleWasMoreSpecific=true.");
+                    if (isChanged)
+                    {
+                        ModLogger.LogEssential($"[CustomRoadAssetMatch] Canonicalizing rule sourcePrefab={rule.Key.SourcePrefabName} oldSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(rule.Key.SourceFeatures)} newSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(canonicalKey.SourceFeatures)} mandatorySourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(mandatoryFeatures)} targetPrefab={rule.Value} reason={reason} detail={mandatoryDetail}.");
+                    }
+                }
+                else
+                {
+                    changed++;
+                    ModLogger.LogEssential($"[CustomRoadAssetMatch] Removing duplicate canonical rule sourcePrefab={rule.Key.SourcePrefabName} oldSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(rule.Key.SourceFeatures)} canonicalSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(canonicalKey.SourceFeatures)} removedTargetPrefab={rule.Value} keptTargetPrefab={existingPlan.TargetPrefabName} reason={reason} keptRuleWasMoreSpecific={existingPlan.PreferenceScore > preferenceScore}.");
+                }
+            }
+
+            if (changed == 0)
+            {
+                return 0;
+            }
+
+            m_Rules.Clear();
+            foreach (KeyValuePair<RuleKey, CanonicalRulePlan> rule in canonicalRules)
+            {
+                m_Rules.Add(rule.Key, rule.Value.TargetPrefabName);
+            }
+
+            Save($"canonicalize-mandatory-source-features reason={reason} changed={changed}");
+            return changed;
+        }
+
         private void TryAddCandidateRule(
             List<CustomRoadAssetMatchRule> rules,
             string sourcePrefabName,
@@ -442,6 +528,48 @@ namespace PocketTurnLanes.Options
             }
 
             builder.Append('"');
+        }
+
+        private static int GetCanonicalRulePreferenceScore(
+            CustomRoadAssetSourceFeatures sourceFeatures,
+            bool isChanged)
+        {
+            int score = isChanged ? 0 : 1000;
+            if ((sourceFeatures & CustomRoadAssetSourceFeatures.Tram) != 0)
+            {
+                score += 4;
+            }
+
+            if ((sourceFeatures & CustomRoadAssetSourceFeatures.PublicTransport) != 0)
+            {
+                score += 2;
+            }
+
+            if ((sourceFeatures & CustomRoadAssetSourceFeatures.Reverse) != 0)
+            {
+                score += 1;
+            }
+
+            return score;
+        }
+
+        private readonly struct CanonicalRulePlan
+        {
+            public CanonicalRulePlan(
+                RuleKey originalKey,
+                string targetPrefabName,
+                int preferenceScore)
+            {
+                OriginalKey = originalKey;
+                TargetPrefabName = targetPrefabName;
+                PreferenceScore = preferenceScore;
+            }
+
+            public RuleKey OriginalKey { get; }
+
+            public string TargetPrefabName { get; }
+
+            public int PreferenceScore { get; }
         }
 
         private readonly struct RuleKey : IEquatable<RuleKey>

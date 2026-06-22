@@ -52,6 +52,8 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public DirectionalLaneOffsetProfile IndependentTramLayout;
         public DirectionalLaneOffsetProfile PublicTransportTramLayout;
         public DirectionalLaneOffsetProfile BusLaneLayout;
+        public DirectionalLaneOffsetProfile DedicatedPublicTransportLaneLayout;
+        public CustomRoadAssetSourceFeatures MandatorySourceFeatures;
         public int DrivableLaneEnvelopeCount;
         public float DrivableLaneEnvelopeMin;
         public float DrivableLaneEnvelopeMax;
@@ -63,6 +65,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public string IndependentTramDetail;
         public string PublicTransportTramDetail;
         public string BusLaneDetail;
+        public string DedicatedPublicTransportLaneDetail;
         public string Source;
 
         public static RoadLaneProfile CreateEmpty(string source)
@@ -75,6 +78,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 IndependentTramDetail = "<none>",
                 PublicTransportTramDetail = "<none>",
                 BusLaneDetail = "<none>",
+                DedicatedPublicTransportLaneDetail = "<none>",
                 Source = source
             };
         }

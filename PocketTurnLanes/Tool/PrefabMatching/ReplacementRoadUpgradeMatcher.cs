@@ -86,11 +86,6 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 return false;
             }
 
-            if (!TryGetUpgradeCompositions(prefabEntity, "tramUpgrade", out DynamicBuffer<NetGeometryComposition> compositions, out detail))
-            {
-                return false;
-            }
-
             RoadLaneCounts orientedDesiredRoadCounts = invertTarget ? desiredRoadCounts.Swapped() : desiredRoadCounts;
             RoadLaneCounts orientedDesiredEffectiveCounts = invertTarget ? desiredEffectiveCounts.Swapped() : desiredEffectiveCounts;
             RoadLaneCounts orientedRequiredTramCounts = invertTarget ? requiredTramCounts.Swapped() : requiredTramCounts;
@@ -99,70 +94,47 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             CompositionFlags bestUpgradeFlags = default;
             RoadLaneProfile bestProfile = default;
 
-            for (int i = 0; i < compositions.Length; i++)
+            bool hasUpgradeCompositions = TryGetUpgradeCompositions(
+                prefabEntity,
+                "tramUpgrade",
+                out DynamicBuffer<NetGeometryComposition> compositions,
+                out string compositionDetail);
+            stats.CompositionDetail = compositionDetail;
+            if (hasUpgradeCompositions)
             {
-                stats.ScannedCompositions++;
-                NetGeometryComposition composition = compositions[i];
-                CompositionFlags upgradeFlags = GetTramTrackUpgradeFlags(composition.m_Mask);
-                if (upgradeFlags == default(CompositionFlags))
+                for (int i = 0; i < compositions.Length; i++)
                 {
-                    continue;
-                }
+                    stats.ScannedCompositions++;
+                    NetGeometryComposition composition = compositions[i];
+                    CompositionFlags upgradeFlags = GetTramTrackUpgradeFlags(composition.m_Mask);
+                    if (upgradeFlags == default(CompositionFlags))
+                    {
+                        continue;
+                    }
 
-                stats.TrackMasks++;
-                if (!m_RoadLaneProfileBuilder.TryGetCompositionRoadLaneProfile(composition.m_Composition, out RoadLaneProfile profile))
-                {
-                    continue;
-                }
+                    stats.TrackMasks++;
+                    if (!m_RoadLaneProfileBuilder.TryGetCompositionRoadLaneProfile(composition.m_Composition, out RoadLaneProfile profile))
+                    {
+                        continue;
+                    }
 
-                stats.LaneProfiles++;
-                RoadLaneCounts effectiveCounts = RoadLaneCounts.Add(profile.RoadCounts, profile.IndependentTramCounts);
-                if (!CountsEqual(effectiveCounts, orientedDesiredEffectiveCounts))
-                {
-                    continue;
-                }
-
-                stats.EffectiveMatches++;
-                if (!CountsEqual(profile.TramTrackCounts, orientedRequiredTramCounts))
-                {
-                    continue;
-                }
-
-                stats.TramMatches++;
-                bool independentTramMatch = CountsEqual(profile.IndependentTramCounts, orientedRequiredTramCounts);
-                bool publicTransportTramMatch = CountsEqual(profile.PublicTransportTramCounts, orientedRequiredTramCounts);
-                if (independentTramMatch)
-                {
-                    stats.IndependentTramMatches++;
-                }
-
-                if (publicTransportTramMatch)
-                {
-                    stats.PublicTransportTramMatches++;
-                }
-
-                bool preferredRoadCounts = CountsEqual(profile.RoadCounts, orientedDesiredRoadCounts);
-                if (preferredRoadCounts)
-                {
-                    stats.RoadPreferredMatches++;
-                }
-
-                int laneTypeScore = independentTramMatch
-                    ? 0
-                    : publicTransportTramMatch
-                        ? PublicTransportTramUpgradeLaneTypePenalty
-                        : OtherTramUpgradeLaneTypePenalty;
-                int score = CountTramTrackUpgradeFlags(upgradeFlags) + (preferredRoadCounts ? 0 : 100) + laneTypeScore;
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    bestUpgradeFlags = upgradeFlags;
-                    bestProfile = profile;
+                    stats.DirectProfiles++;
+                    TryAcceptTramUpgradeProfile(
+                        profile,
+                        upgradeFlags,
+                        orientedDesiredRoadCounts,
+                        orientedDesiredEffectiveCounts,
+                        orientedRequiredTramCounts,
+                        ref stats,
+                        ref bestScore,
+                        ref bestUpgradeFlags,
+                        ref bestProfile);
                 }
             }
 
             if (bestUpgradeFlags == default(CompositionFlags))
             {
+                string sourceUpgradeDetail = "sourceUpgradeFallback=not-used";
                 if (stats.TrackMasks == 0 &&
                     sourceTramUpgradeFlags != default(CompositionFlags) &&
                     TryBuildSourceTramUpgradeFallbackProfile(
@@ -174,13 +146,13 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                         invertTarget,
                         out targetUpgrade,
                         out targetProfile,
-                        out string sourceUpgradeDetail))
+                        out sourceUpgradeDetail))
                 {
                     detail = $"tramUpgrade=source-flags-fallback prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} {stats.Format()} {sourceUpgradeDetail}";
                     return true;
                 }
 
-                detail = $"tramUpgrade=no-match prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} {stats.Format()} desiredRoad={desiredRoadCounts} desiredEffective={desiredEffectiveCounts} requiredTram={requiredTramCounts} orientedDesiredRoad={orientedDesiredRoadCounts} orientedDesiredEffective={orientedDesiredEffectiveCounts} orientedRequiredTram={orientedRequiredTramCounts} invertTarget={invertTarget}";
+                detail = $"tramUpgrade=no-match prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} {stats.Format()} {sourceUpgradeDetail} desiredRoad={desiredRoadCounts} desiredEffective={desiredEffectiveCounts} requiredTram={requiredTramCounts} orientedDesiredRoad={orientedDesiredRoadCounts} orientedDesiredEffective={orientedDesiredEffectiveCounts} orientedRequiredTram={orientedRequiredTramCounts} invertTarget={invertTarget}";
                 return false;
             }
 
@@ -193,6 +165,63 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             RoadLaneCounts bestEffectiveCounts = RoadLaneCounts.Add(bestProfile.RoadCounts, bestProfile.IndependentTramCounts);
             detail = $"tramUpgrade=matched prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} upgradeFlags={targetFlags} rawUpgradeFlags={bestUpgradeFlags} upgradedRoad={bestProfile.RoadCounts} upgradedEffective={bestEffectiveCounts} upgradedIndependentTram={bestProfile.IndependentTramCounts} upgradedPublicTransportTram={bestProfile.PublicTransportTramCounts} upgradedTramTracks={bestProfile.TramTrackCounts} upgradedTramTrackLayout={bestProfile.TramTrackLayout} upgradedTramDetail={bestProfile.TramTrackDetail} upgradedPublicTransportTramDetail={bestProfile.PublicTransportTramDetail} upgradedBusLayout={bestProfile.BusLaneLayout} upgradedBusDetail={bestProfile.BusLaneDetail} {stats.Format()} invertTarget={invertTarget}";
             return true;
+        }
+
+        private static void TryAcceptTramUpgradeProfile(
+            RoadLaneProfile profile,
+            CompositionFlags upgradeFlags,
+            RoadLaneCounts orientedDesiredRoadCounts,
+            RoadLaneCounts orientedDesiredEffectiveCounts,
+            RoadLaneCounts orientedRequiredTramCounts,
+            ref TramUpgradeScanStats stats,
+            ref int bestScore,
+            ref CompositionFlags bestUpgradeFlags,
+            ref RoadLaneProfile bestProfile)
+        {
+            stats.LaneProfiles++;
+            RoadLaneCounts effectiveCounts = RoadLaneCounts.Add(profile.RoadCounts, profile.IndependentTramCounts);
+            if (!CountsEqual(effectiveCounts, orientedDesiredEffectiveCounts))
+            {
+                return;
+            }
+
+            stats.EffectiveMatches++;
+            if (!CountsEqual(profile.TramTrackCounts, orientedRequiredTramCounts))
+            {
+                return;
+            }
+
+            stats.TramMatches++;
+            bool independentTramMatch = CountsEqual(profile.IndependentTramCounts, orientedRequiredTramCounts);
+            bool publicTransportTramMatch = CountsEqual(profile.PublicTransportTramCounts, orientedRequiredTramCounts);
+            if (independentTramMatch)
+            {
+                stats.IndependentTramMatches++;
+            }
+
+            if (publicTransportTramMatch)
+            {
+                stats.PublicTransportTramMatches++;
+            }
+
+            bool preferredRoadCounts = CountsEqual(profile.RoadCounts, orientedDesiredRoadCounts);
+            if (preferredRoadCounts)
+            {
+                stats.RoadPreferredMatches++;
+            }
+
+            int laneTypeScore = independentTramMatch
+                ? 0
+                : publicTransportTramMatch
+                    ? PublicTransportTramUpgradeLaneTypePenalty
+                    : OtherTramUpgradeLaneTypePenalty;
+            int score = CountTramTrackUpgradeFlags(upgradeFlags) + (preferredRoadCounts ? 0 : 100) + laneTypeScore;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestUpgradeFlags = upgradeFlags;
+                bestProfile = profile;
+            }
         }
 
         internal bool TryFindMatchingBusUpgrade(
@@ -360,7 +389,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             RoadLaneProfile sourceProfile,
             RoadLaneCounts orientedDesiredEffectiveCounts,
             RoadLaneCounts orientedRequiredTramCounts,
-            CompositionFlags sourceTramUpgradeFlags,
+            CompositionFlags tramUpgradeFlags,
             bool invertTarget,
             out Upgraded targetUpgrade,
             out RoadLaneProfile targetProfile,
@@ -379,8 +408,8 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             CompositionFlags targetFlags = invertTarget
-                ? NetCompositionHelpers.InvertCompositionFlags(sourceTramUpgradeFlags)
-                : sourceTramUpgradeFlags;
+                ? NetCompositionHelpers.InvertCompositionFlags(tramUpgradeFlags)
+                : tramUpgradeFlags;
             targetUpgrade = new Upgraded { m_Flags = targetFlags };
             targetProfile.Source = $"SourceTramUpgrade:{targetFlags}";
             targetProfile.IndependentTramCounts = orientedRequiredTramCounts;
@@ -389,7 +418,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             targetProfile.TramTrackLayout = sourceProfile.TramTrackLayout.Oriented(invertTarget);
             targetProfile.IndependentTramDetail = sourceProfile.IndependentTramDetail;
             targetProfile.TramTrackDetail = sourceProfile.TramTrackDetail;
-            detail = $"sourceUpgradeFallback=matched sourceTrackFlags={sourceTramUpgradeFlags} targetFlags={targetFlags} candidateRoad={candidateDefaultProfile.RoadCounts} orientedDesiredEffective={orientedDesiredEffectiveCounts} sourceTramTracks={sourceProfile.TramTrackCounts} rawTargetTram={targetProfile.TramTrackCounts} rawTargetLayout={targetProfile.TramTrackLayout} invertTarget={invertTarget}";
+            detail = $"sourceUpgradeFallback=matched fallbackTrackFlags={tramUpgradeFlags} targetFlags={targetFlags} candidateRoad={candidateDefaultProfile.RoadCounts} orientedDesiredEffective={orientedDesiredEffectiveCounts} sourceTramTracks={sourceProfile.TramTrackCounts} rawTargetTram={targetProfile.TramTrackCounts} rawTargetLayout={targetProfile.TramTrackLayout} invertTarget={invertTarget}";
             return true;
         }
 
@@ -443,9 +472,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
         private struct TramUpgradeScanStats
         {
+            public string CompositionDetail;
             public int ScannedCompositions;
             public int TrackMasks;
             public int LaneProfiles;
+            public int DirectProfiles;
             public int EffectiveMatches;
             public int TramMatches;
             public int IndependentTramMatches;
@@ -454,7 +485,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             public string Format()
             {
-                return $"scannedCompositions={ScannedCompositions} trackMasks={TrackMasks} laneProfiles={LaneProfiles} effectiveMatches={EffectiveMatches} tramMatches={TramMatches} independentTramMatches={IndependentTramMatches} publicTransportTramMatches={PublicTransportTramMatches} roadPreferredMatches={RoadPreferredMatches}";
+                return $"compositionDetail=({CompositionDetail ?? "<none>"}) scannedCompositions={ScannedCompositions} trackMasks={TrackMasks} laneProfiles={LaneProfiles} directProfiles={DirectProfiles} effectiveMatches={EffectiveMatches} tramMatches={TramMatches} independentTramMatches={IndependentTramMatches} publicTransportTramMatches={PublicTransportTramMatches} roadPreferredMatches={RoadPreferredMatches}";
             }
         }
 

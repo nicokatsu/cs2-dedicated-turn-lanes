@@ -24,6 +24,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 query,
                 options,
                 MaxCustomRoadAssetDropdownOptions);
+            Mod.LogDiagnostic($"[CustomRoadAssetMatch] Source search query=\"{query ?? string.Empty}\" options={options.Count} cleaned={cleaned} sample={FormatRoadAssetOptionSample(options)}.");
             return BuildOptionListJson("source-search", query, options, cleaned, string.Empty);
         }
 
@@ -59,6 +60,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     : detail;
             }
 
+            Mod.LogDiagnostic($"[CustomRoadAssetMatch] Source select sourcePrefab={sourcePrefabName} sourceFeatures={sourceFeatureMask} success={success} source={FormatRoadAssetOption(sourceOption)} targets={targets.Count} cleaned={cleaned} detail={detail} targetSample={FormatRoadAssetOptionSample(targets)}.");
             return BuildSourceSelectionJson(
                 sourcePrefabName,
                 success,
@@ -100,6 +102,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                     : detail;
             }
 
+            Mod.LogDiagnostic($"[CustomRoadAssetMatch] Target search sourcePrefab={sourcePrefabName} query=\"{query ?? string.Empty}\" sourceFeatures={sourceFeatureMask} success={success} source={FormatRoadAssetOption(sourceOption)} targets={targets.Count} cleaned={cleaned} detail={detail} targetSample={FormatRoadAssetOptionSample(targets)}.");
             return BuildSourceSelectionJson(
                 sourcePrefabName,
                 success,
@@ -172,9 +175,13 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 return 0;
             }
 
-            return store.CleanInvalidRules(
+            int canonicalized = store.CanonicalizeMandatorySourceFeatures(
+                m_ReplacementPrefabMatcher.TryGetMandatoryCustomRoadAssetSourceFeatures,
+                reason);
+            int removed = store.CleanInvalidRules(
                 m_ReplacementPrefabMatcher.IsValidCustomRoadAssetMatch,
                 reason);
+            return canonicalized + removed;
         }
 
         private string BuildCustomRoadAssetMatchStateJson(
@@ -341,6 +348,10 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             builder.Append(',');
             AppendJsonProperty(builder, "hasPublicTransport", option.HasPublicTransport);
             builder.Append(',');
+            AppendJsonProperty(builder, "canHaveTram", option.CanHaveTram);
+            builder.Append(',');
+            AppendJsonProperty(builder, "canHavePublicTransport", option.CanHavePublicTransport);
+            builder.Append(',');
             AppendJsonProperty(builder, "hasAsymmetricRoadLanes", option.HasAsymmetricRoadLanes);
             builder.Append(',');
             AppendJsonProperty(builder, "hasReverseSourceSide", option.HasReverseSourceSide);
@@ -356,6 +367,67 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             CustomRoadAssetSourceFeatures feature)
         {
             return (CustomRoadAssetSourceFeatureUtility.Normalize(features) & feature) != 0;
+        }
+
+        private static string FormatRoadAssetOptionSample(List<RoadAssetPrefabOption> options)
+        {
+            if (options == null || options.Count == 0)
+            {
+                return "<none>";
+            }
+
+            StringBuilder builder = new StringBuilder();
+            int appended = 0;
+            for (int i = 0; i < options.Count && appended < 8; i++)
+            {
+                RoadAssetPrefabOption option = options[i];
+                if (!option.HasTram &&
+                    !option.HasPublicTransport &&
+                    !option.CanHaveTram &&
+                    !option.CanHavePublicTransport)
+                {
+                    continue;
+                }
+
+                if (appended > 0)
+                {
+                    builder.Append(" | ");
+                }
+
+                builder.Append(FormatRoadAssetOption(option));
+                appended++;
+            }
+
+            if (appended == 0)
+            {
+                int count = Math.Min(options.Count, 5);
+                for (int i = 0; i < count; i++)
+                {
+                    if (i > 0)
+                    {
+                        builder.Append(" | ");
+                    }
+
+                    builder.Append(FormatRoadAssetOption(options[i]));
+                }
+            }
+
+            if (options.Count > appended && appended > 0)
+            {
+                builder.Append($" | remaining={options.Count - appended}");
+            }
+
+            return builder.ToString();
+        }
+
+        private static string FormatRoadAssetOption(RoadAssetPrefabOption option)
+        {
+            if (string.IsNullOrEmpty(option.PrefabName))
+            {
+                return "<none>";
+            }
+
+            return $"{option.PrefabName} hasTram={option.HasTram} hasPT={option.HasPublicTransport} canHaveTram={option.CanHaveTram} canHavePT={option.CanHavePublicTransport} forwardTargets={option.HasForwardTargetCandidates} reverseTargets={option.HasReverseTargetCandidates} summary=({option.Summary})";
         }
 
         private static void AppendJsonProperty(

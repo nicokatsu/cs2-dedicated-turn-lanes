@@ -42,6 +42,8 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             {
                 profile.BusLaneLayout = configProfile.BusLaneLayout;
                 profile.BusLaneDetail = configProfile.BusLaneDetail;
+                profile.DedicatedPublicTransportLaneLayout = configProfile.DedicatedPublicTransportLaneLayout;
+                profile.DedicatedPublicTransportLaneDetail = configProfile.DedicatedPublicTransportLaneDetail;
                 changed = true;
             }
 
@@ -67,11 +69,42 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     profile.BusLaneDetail = $"{profile.BusLaneDetail} {detail}";
                 }
 
+                if (profile.DedicatedPublicTransportLaneDetail != "<none>")
+                {
+                    profile.DedicatedPublicTransportLaneDetail = $"{profile.DedicatedPublicTransportLaneDetail} {detail}";
+                }
+
                 if (profile.TramTrackDetail != "<none>")
                 {
                     profile.TramTrackDetail = $"{profile.TramTrackDetail} {detail}";
                 }
             }
+        }
+
+        public bool TryGetConfigSourceFeatureAvailability(
+            Entity prefabEntity,
+            out CustomRoadAssetSourceFeatures features,
+            out string detail)
+        {
+            features = CustomRoadAssetSourceFeatures.None;
+            if (!TryBuildConfigLaneProfile(prefabEntity, out RoadLaneProfile configProfile, out detail))
+            {
+                return false;
+            }
+
+            if (!configProfile.TramTrackCounts.IsEmpty)
+            {
+                features |= CustomRoadAssetSourceFeatures.Tram;
+            }
+
+            if (configProfile.BusLaneLayout.HasAny ||
+                !configProfile.PublicTransportTramCounts.IsEmpty)
+            {
+                features |= CustomRoadAssetSourceFeatures.PublicTransport;
+            }
+
+            detail = $"{detail} configSourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(features)}";
+            return features != CustomRoadAssetSourceFeatures.None;
         }
 
         public void GetComponentProfile(
@@ -249,9 +282,15 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 {
                     busLanes++;
                     AddDirectionalOffset(forward, centerOffset, ref profile.BusLaneLayout);
+                    AddDirectionalOffset(forward, centerOffset, ref profile.DedicatedPublicTransportLaneLayout);
                     if (profile.BusLaneDetail == "<none>")
                     {
                         profile.BusLaneDetail = "roadBuilderConfig";
+                    }
+
+                    if (profile.DedicatedPublicTransportLaneDetail == "<none>")
+                    {
+                        profile.DedicatedPublicTransportLaneDetail = "roadBuilderConfig";
                     }
                 }
 
@@ -295,7 +334,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                     16);
             }
 
-            detail = $"roadBuilderConfig=matched prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} lanes={lanes.Count} totalWidth={totalWidth:0.##}m busLanes={busLanes} tramLanes={tramLanes} independentTramLanes={independentTramLanes} publicTransportTramLanes={publicTransportTramLanes} busLayout={profile.BusLaneLayout} tramLayout={profile.TramTrackLayout} semanticSample={semanticSample}";
+            detail = $"roadBuilderConfig=matched prefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, prefabEntity)} lanes={lanes.Count} totalWidth={totalWidth:0.##}m busLanes={busLanes} tramLanes={tramLanes} independentTramLanes={independentTramLanes} publicTransportTramLanes={publicTransportTramLanes} busLayout={profile.BusLaneLayout} dedicatedPublicTransportLayout={profile.DedicatedPublicTransportLaneLayout} tramLayout={profile.TramTrackLayout} semanticSample={semanticSample}";
             return profile.BusLaneLayout.HasAny || !profile.TramTrackCounts.IsEmpty;
         }
 

@@ -25,6 +25,8 @@ type RoadAssetOption = {
     contentDetail: string;
     hasTram?: boolean;
     hasPublicTransport?: boolean;
+    canHaveTram?: boolean;
+    canHavePublicTransport?: boolean;
     hasAsymmetricRoadLanes?: boolean;
     hasReverseSourceSide?: boolean;
     hasForwardTargetCandidates?: boolean;
@@ -127,9 +129,10 @@ function findRuleForSource(
         return undefined;
     }
 
+    const normalizedFeatureMask = normalizeSourceFeatureMaskForSource(sourceFeatureMask, source);
     return rules.find((rule) =>
         rule.source.prefabName === source.prefabName &&
-        getRuleSourceFeatureMask(rule) === normalizeSourceFeatureMask(sourceFeatureMask)
+        normalizeSourceFeatureMaskForSource(getRuleSourceFeatureMask(rule), rule.source) === normalizedFeatureMask
     );
 }
 
@@ -249,7 +252,7 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
     const selectSourceFromDropdown = useCallback((source: RoadAssetOption) => {
         const sourceChanged = !isSameOption(source, selectedSource);
         const sourceFeatureMask = sourceChanged
-            ? sourceFeatureMasks.none
+            ? getDefaultSourceFeatureMask(source)
             : normalizeSourceFeatureMaskForSource(selectedSourceFeatureMask, source);
         void selectSource(source, sourceFeatureMask);
     }, [selectSource, selectedSource, selectedSourceFeatureMask]);
@@ -271,28 +274,32 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
     }, [selectedSource, selectedSourceFeatureMask]);
 
     const editRule = useCallback((rule: RoadAssetRule) => {
-        const sourceFeatureMask = getRuleSourceFeatureMask(rule);
+        const sourceFeatureMask = normalizeSourceFeatureMaskForSource(getRuleSourceFeatureMask(rule), rule.source);
         setEditing(true);
         setSelectedSourceFeatureMask(sourceFeatureMask);
         void selectSource(rule.source, sourceFeatureMask);
     }, [selectSource]);
 
-    const deleteRule = useCallback(async (sourcePrefabName: string, sourceFeatureMask: number) => {
-        const normalizedFeatureMask = normalizeSourceFeatureMask(sourceFeatureMask);
+    const deleteRule = useCallback(async (source: RoadAssetOption, sourceFeatureMask: number) => {
+        const normalizedFeatureMask = normalizeSourceFeatureMaskForSource(sourceFeatureMask, source);
         const responseJson = await call<string>(
             __MOD_ID__,
             "DeleteCustomRoadAssetMatch",
-            sourcePrefabName,
+            source.prefabName,
             String(normalizedFeatureMask)
         );
         parseJson<MatchState>(responseJson, { rules: [] });
-        if (selectedSource?.prefabName === sourcePrefabName &&
+        if (selectedSource?.prefabName === source.prefabName &&
             selectedSourceFeatureMask === normalizedFeatureMask) {
             setSelectedTarget(null);
         }
     }, [selectedSource, selectedSourceFeatureMask]);
 
     const setSelectedSourceFeature = useCallback((featureMask: number, checked: boolean) => {
+        if (hasSourceFeature(getDisabledSourceFeatureMask(selectedSource), featureMask)) {
+            return;
+        }
+
         setSelectedSourceFeatureMask((current) => normalizeSourceFeatureMaskForSource(
             checked ? current | featureMask : current & ~featureMask,
             selectedSource
@@ -355,6 +362,15 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
                                 <SourceFeatureCheckboxRow
                                     vanilla={vanilla}
                                     sourceFeatureMask={selectedSourceFeatureMask}
+                                    disabledFeatureMask={getDisabledSourceFeatureMask(selectedSource)}
+                                    showTram={canShowTramSourceFeature(
+                                        selectedSource,
+                                        selectedSourceFeatureMask
+                                    )}
+                                    showPublicTransport={canShowPublicTransportSourceFeature(
+                                        selectedSource,
+                                        selectedSourceFeatureMask
+                                    )}
                                     tramTooltip={t("SourceFeatureTramTooltip", "Tram tracks")}
                                     publicTransportTooltip={t(
                                         "SourceFeaturePublicTransportTooltip",
@@ -407,12 +423,15 @@ export function CustomRoadAssetMatchPanel({ vanilla }: PanelProps): JSX.Element 
                     </div>
                     {sortedRules.map((rule) => (
                         <RoadAssetRuleCard
-                            key={`${rule.source.prefabName}:${getRuleSourceFeatureMask(rule)}`}
+                            key={`${rule.source.prefabName}:${normalizeSourceFeatureMaskForSource(
+                                getRuleSourceFeatureMask(rule),
+                                rule.source
+                            )}`}
                             rule={rule}
                             vanilla={vanilla}
                             deleteTooltip={t("DeleteMatch", "Delete match")}
                             onSelect={() => editRule(rule)}
-                            onDelete={() => void deleteRule(rule.source.prefabName, getRuleSourceFeatureMask(rule))}
+                            onDelete={() => void deleteRule(rule.source, getRuleSourceFeatureMask(rule))}
                         />
                     ))}
                 </Scrollable>
@@ -530,6 +549,9 @@ function RoadAssetName({ name }: { name: string }): JSX.Element {
 type SourceFeatureCheckboxRowProps = {
     vanilla: VanillaUiModules;
     sourceFeatureMask: number;
+    disabledFeatureMask: number;
+    showTram: boolean;
+    showPublicTransport: boolean;
     tramTooltip: string;
     publicTransportTooltip: string;
     reverseTooltip: string;
@@ -540,6 +562,9 @@ type SourceFeatureCheckboxRowProps = {
 function SourceFeatureCheckboxRow({
     vanilla,
     sourceFeatureMask,
+    disabledFeatureMask,
+    showTram,
+    showPublicTransport,
     tramTooltip,
     publicTransportTooltip,
     reverseTooltip,
@@ -550,33 +575,47 @@ function SourceFeatureCheckboxRow({
     const tramChecked = hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.tram);
     const publicTransportChecked = hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.publicTransport);
     const reverseChecked = hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.reverse);
+    const tramDisabled = hasSourceFeature(disabledFeatureMask, sourceFeatureMasks.tram);
+    const publicTransportDisabled = hasSourceFeature(disabledFeatureMask, sourceFeatureMasks.publicTransport);
+    const reverseDisabled = hasSourceFeature(disabledFeatureMask, sourceFeatureMasks.reverse);
     if (!CheckboxComponent) {
+        return null;
+    }
+
+    if (!showTram && !showPublicTransport && !showReverse) {
         return null;
     }
 
     return (
         <div className={styles.sourceFeatureCheckboxRow}>
-            <SourceFeatureCheckbox
-                CheckboxComponent={CheckboxComponent}
-                checkboxTheme={vanilla.checkboxTheme}
-                checked={tramChecked}
-                icon={icons.tram}
-                tooltip={tramTooltip}
-                onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.tram, checked)}
-            />
-            <SourceFeatureCheckbox
-                CheckboxComponent={CheckboxComponent}
-                checkboxTheme={vanilla.checkboxTheme}
-                checked={publicTransportChecked}
-                icon={icons.publicTransport}
-                tooltip={publicTransportTooltip}
-                onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.publicTransport, checked)}
-            />
+            {showTram ? (
+                <SourceFeatureCheckbox
+                    CheckboxComponent={CheckboxComponent}
+                    checkboxTheme={vanilla.checkboxTheme}
+                    checked={tramChecked}
+                    disabled={tramDisabled}
+                    icon={icons.tram}
+                    tooltip={tramTooltip}
+                    onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.tram, checked)}
+                />
+            ) : null}
+            {showPublicTransport ? (
+                <SourceFeatureCheckbox
+                    CheckboxComponent={CheckboxComponent}
+                    checkboxTheme={vanilla.checkboxTheme}
+                    checked={publicTransportChecked}
+                    disabled={publicTransportDisabled}
+                    icon={icons.publicTransport}
+                    tooltip={publicTransportTooltip}
+                    onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.publicTransport, checked)}
+                />
+            ) : null}
             {showReverse ? (
                 <SourceFeatureCheckbox
                     CheckboxComponent={CheckboxComponent}
                     checkboxTheme={vanilla.checkboxTheme}
                     checked={reverseChecked}
+                    disabled={reverseDisabled}
                     icon={icons.reverse}
                     tooltip={reverseTooltip}
                     onCheckedChange={(checked) => onCheckedChange(sourceFeatureMasks.reverse, checked)}
@@ -590,6 +629,7 @@ type SourceFeatureCheckboxProps = {
     CheckboxComponent: VanillaCheckboxComponent;
     checkboxTheme?: Record<string, string>;
     checked: boolean;
+    disabled?: boolean;
     icon: string;
     tooltip: string;
     onCheckedChange: (checked: boolean) => void;
@@ -599,18 +639,27 @@ function SourceFeatureCheckbox({
     CheckboxComponent,
     checkboxTheme,
     checked,
+    disabled,
     icon,
     tooltip,
     onCheckedChange,
 }: SourceFeatureCheckboxProps): JSX.Element {
     const handleCheckboxChange = useCallback((nextChecked: boolean) => {
+        if (disabled) {
+            return;
+        }
+
         onCheckedChange(nextChecked);
-    }, [onCheckedChange]);
+    }, [disabled, onCheckedChange]);
 
     const handleLabelClick = useCallback((event: MouseEvent<HTMLLabelElement>) => {
         event.preventDefault();
+        if (disabled) {
+            return;
+        }
+
         onCheckedChange(!checked);
-    }, [checked, onCheckedChange]);
+    }, [checked, disabled, onCheckedChange]);
 
     return (
         <Tooltip tooltip={tooltip}>
@@ -618,6 +667,7 @@ function SourceFeatureCheckbox({
                 <img src={icon} className={styles.sourceFeatureCheckboxIcon} />
                 <CheckboxComponent
                     checked={checked}
+                    disabled={disabled}
                     theme={checkboxTheme}
                     className={styles.sourceFeatureCheckboxControl}
                     onChange={handleCheckboxChange}
@@ -680,7 +730,7 @@ function RoadAssetRuleMatch({ rule }: { rule: RoadAssetRule }): JSX.Element {
                 <RoadAssetRuleEndpoint option={rule.source} className={styles.ruleSourceEndpoint} />
             </div>
             <SourceFeatureIconRow
-                sourceFeatureMask={getRuleSourceFeatureMask(rule)}
+                sourceFeatureMask={normalizeSourceFeatureMaskForSource(getRuleSourceFeatureMask(rule), rule.source)}
                 className={styles.ruleFeatureLine}
             />
             <div className={styles.ruleTargetLine}>
@@ -738,7 +788,9 @@ function sortRoadAssetRules(rules: RoadAssetRule[]): RoadAssetRule[] {
             return sourceCompare;
         }
 
-        const sourceFeatureCompare = getRuleSourceFeatureMask(left) - getRuleSourceFeatureMask(right);
+        const sourceFeatureCompare =
+            normalizeSourceFeatureMaskForSource(getRuleSourceFeatureMask(left), left.source) -
+            normalizeSourceFeatureMaskForSource(getRuleSourceFeatureMask(right), right.source);
         if (sourceFeatureCompare !== 0) {
             return sourceFeatureCompare;
         }
@@ -802,13 +854,53 @@ function normalizeSourceFeatureMask(sourceFeatureMask: number): number {
     );
 }
 
+function getMandatorySourceFeatureMask(source?: RoadAssetOption | null): number {
+    let sourceFeatureMask = sourceFeatureMasks.none;
+    if (source?.hasTram === true) {
+        sourceFeatureMask |= sourceFeatureMasks.tram;
+    }
+
+    if (source?.hasPublicTransport === true) {
+        sourceFeatureMask |= sourceFeatureMasks.publicTransport;
+    }
+
+    return sourceFeatureMask;
+}
+
+function getDefaultSourceFeatureMask(source?: RoadAssetOption | null): number {
+    return normalizeSourceFeatureMask(
+        getMandatorySourceFeatureMask(source) |
+        getForcedSourceFeatureMask(source)
+    );
+}
+
+function getDisabledSourceFeatureMask(source?: RoadAssetOption | null): number {
+    return normalizeSourceFeatureMask(
+        getMandatorySourceFeatureMask(source) |
+        getForcedSourceFeatureMask(source)
+    );
+}
+
+function getForcedSourceFeatureMask(source?: RoadAssetOption | null): number {
+    return shouldForceReverseSourceFeature(source)
+        ? sourceFeatureMasks.reverse
+        : sourceFeatureMasks.none;
+}
+
+function shouldForceReverseSourceFeature(source?: RoadAssetOption | null): boolean {
+    return source?.hasReverseTargetCandidates === true &&
+           source?.hasForwardTargetCandidates === false;
+}
+
 function normalizeSourceFeatureMaskForSource(
     sourceFeatureMask: number,
     source?: RoadAssetOption | null
 ): number {
+    const mandatoryFeatureMask = getDisabledSourceFeatureMask(source);
+    const normalizedFeatureMask = normalizeSourceFeatureMask(sourceFeatureMask) | mandatoryFeatureMask;
     const allowedFeatureMask = canShowReverseSourceFeature(source, sourceFeatureMask)
-        ? normalizeSourceFeatureMask(sourceFeatureMask)
-        : normalizeSourceFeatureMask(sourceFeatureMask) & ~sourceFeatureMasks.reverse;
+        ? normalizedFeatureMask
+        : normalizedFeatureMask & ~sourceFeatureMasks.reverse;
     return allowedFeatureMask;
 }
 
@@ -820,8 +912,34 @@ function canShowReverseSourceFeature(
     source?: RoadAssetOption | null,
     sourceFeatureMask = sourceFeatureMasks.none
 ): boolean {
-    return source?.hasReverseTargetCandidates === true ||
-           hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.reverse);
+    if (source?.hasReverseTargetCandidates === true) {
+        return true;
+    }
+
+    if (source?.hasForwardTargetCandidates === true ||
+        source?.hasReverseTargetCandidates === false) {
+        return false;
+    }
+
+    return hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.reverse);
+}
+
+function canShowTramSourceFeature(
+    source?: RoadAssetOption | null,
+    sourceFeatureMask = sourceFeatureMasks.none
+): boolean {
+    return source?.hasTram === true ||
+           source?.canHaveTram === true ||
+           hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.tram);
+}
+
+function canShowPublicTransportSourceFeature(
+    source?: RoadAssetOption | null,
+    sourceFeatureMask = sourceFeatureMasks.none
+): boolean {
+    return source?.hasPublicTransport === true ||
+           source?.canHavePublicTransport === true ||
+           hasSourceFeature(sourceFeatureMask, sourceFeatureMasks.publicTransport);
 }
 
 function joinClasses(...classes: Array<string | undefined>): string | undefined {

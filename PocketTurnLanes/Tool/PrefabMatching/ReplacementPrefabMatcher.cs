@@ -352,7 +352,10 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             SortAndTrimOptions(options, maxCount);
-            detail = $"sourcePrefabName={sourcePrefabName} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} targets={options.Count} endContext={hasEndContext} startContext={hasStartContext}";
+            string contextDetail = sourceFeatures == CustomRoadAssetSourceFeatures.None
+                ? string.Empty
+                : $" endValidation=({endDetail}) startValidation=({startDetail})";
+            detail = $"sourcePrefabName={sourcePrefabName} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} targets={options.Count} endContext={hasEndContext} startContext={hasStartContext}{contextDetail}";
             return true;
         }
 
@@ -415,6 +418,248 @@ namespace PocketTurnLanes.Tool.PrefabMatching
 
             detail = $"incompatible sourcePrefabName={sourcePrefabName} sourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(sourceFeatures)} targetPrefabName={targetPrefabName} endContext={hasEndContext} endValidation={endDetail} startContext={hasStartContext} startValidation={startDetail}";
             return false;
+        }
+
+        internal bool TryGetMandatoryCustomRoadAssetSourceFeatures(
+            string sourcePrefabName,
+            out CustomRoadAssetSourceFeatures mandatoryFeatures,
+            out string detail)
+        {
+            mandatoryFeatures = CustomRoadAssetSourceFeatures.None;
+            detail = string.Empty;
+            if (!TryFindRoadPrefabByName(sourcePrefabName, out Entity sourcePrefab))
+            {
+                detail = $"sourceMissing sourcePrefabName={sourcePrefabName}";
+                return false;
+            }
+
+            if (!TryGetDefaultRoadLaneProfile(sourcePrefab, out RoadLaneProfile profile))
+            {
+                detail = $"sourceProfileMissing sourcePrefabName={sourcePrefabName}";
+                return false;
+            }
+
+            mandatoryFeatures = GetMandatoryCustomRoadAssetSourceFeatures(profile);
+            detail = $"sourcePrefabName={sourcePrefabName} mandatorySourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(mandatoryFeatures)} profileMandatorySourceFeatures={CustomRoadAssetSourceFeatureUtility.Format(profile.MandatorySourceFeatures)} independentTram={profile.IndependentTramCounts} publicTransportTram={profile.PublicTransportTramCounts} dedicatedPublicTransport={profile.DedicatedPublicTransportLaneLayout} tramTracks={profile.TramTrackCounts} busLayout={profile.BusLaneLayout} profileSource={profile.Source}";
+            return true;
+        }
+
+        private static CustomRoadAssetSourceFeatures GetMandatoryCustomRoadAssetSourceFeatures(
+            RoadLaneProfile profile)
+        {
+            return CustomRoadAssetSourceFeatureUtility.Normalize(profile.MandatorySourceFeatures) &
+                   (CustomRoadAssetSourceFeatures.Tram |
+                    CustomRoadAssetSourceFeatures.PublicTransport);
+        }
+
+        private CustomRoadAssetSourceFeatures GetAvailableCustomRoadAssetSourceFeatures(
+            Entity prefabEntity,
+            RoadLaneProfile profile)
+        {
+            CustomRoadAssetSourceFeatures mandatoryFeatures =
+                GetMandatoryCustomRoadAssetSourceFeatures(profile);
+            CustomRoadAssetSourceFeatures nativeUpgradeFeatures =
+                GetNativeUpgradeSourceFeatureAvailability(prefabEntity);
+            CustomRoadAssetSourceFeatures roadBuilderFeatures = CustomRoadAssetSourceFeatures.None;
+            if (m_RoadBuilderPrefabSemantics.TryGetConfigSourceFeatureAvailability(
+                    prefabEntity,
+                    out CustomRoadAssetSourceFeatures configFeatures,
+                    out _))
+            {
+                roadBuilderFeatures = configFeatures;
+            }
+
+            return CustomRoadAssetSourceFeatureUtility.Normalize(
+                    mandatoryFeatures |
+                    nativeUpgradeFeatures |
+                    roadBuilderFeatures) &
+                (CustomRoadAssetSourceFeatures.Tram |
+                 CustomRoadAssetSourceFeatures.PublicTransport);
+        }
+
+        private CustomRoadAssetSourceFeatures GetNativeUpgradeSourceFeatureAvailability(
+            Entity prefabEntity)
+        {
+            if (!m_RoadLaneProfileBuilder.TryGetPrefabCompositionOptionSideFlags(
+                prefabEntity,
+                out CompositionFlags.Side tramTrackProbeSideFlags,
+                out CompositionFlags.Side publicTransportLaneProbeSideFlags,
+                out _))
+            {
+                return CustomRoadAssetSourceFeatures.None;
+            }
+
+            CustomRoadAssetSourceFeatures features = CustomRoadAssetSourceFeatures.None;
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                tramTrackProbeSideFlags,
+                publicTransportLaneProbeSideFlags,
+                ref features);
+            return CustomRoadAssetSourceFeatureUtility.Normalize(features) &
+                   (CustomRoadAssetSourceFeatures.Tram |
+                    CustomRoadAssetSourceFeatures.PublicTransport);
+        }
+
+        private void AddCalculatedSourceFeatureAvailability(
+            Entity prefabEntity,
+            CompositionFlags.Side tramTrackProbeSideFlags,
+            CompositionFlags.Side publicTransportLaneProbeSideFlags,
+            ref CustomRoadAssetSourceFeatures features)
+        {
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                tramTrackProbeSideFlags,
+                true,
+                ref features);
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                publicTransportLaneProbeSideFlags,
+                false,
+                ref features);
+        }
+
+        private void AddCalculatedSourceFeatureAvailability(
+            Entity prefabEntity,
+            CompositionFlags.Side sideFlags,
+            bool tramTrackFlags,
+            ref CustomRoadAssetSourceFeatures features)
+        {
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                sideFlags,
+                tramTrackFlags,
+                CompositionFlags.Side.PrimaryTrack,
+                CompositionFlags.Side.PrimaryLane,
+                ref features);
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                sideFlags,
+                tramTrackFlags,
+                CompositionFlags.Side.SecondaryTrack,
+                CompositionFlags.Side.SecondaryLane,
+                ref features);
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                sideFlags,
+                tramTrackFlags,
+                CompositionFlags.Side.TertiaryTrack,
+                CompositionFlags.Side.TertiaryLane,
+                ref features);
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                sideFlags,
+                tramTrackFlags,
+                CompositionFlags.Side.QuaternaryTrack,
+                CompositionFlags.Side.QuaternaryLane,
+                ref features);
+        }
+
+        private void AddCalculatedSourceFeatureAvailability(
+            Entity prefabEntity,
+            CompositionFlags.Side sideFlags,
+            bool tramTrackFlags,
+            CompositionFlags.Side trackFlag,
+            CompositionFlags.Side laneFlag,
+            ref CustomRoadAssetSourceFeatures features)
+        {
+            CompositionFlags.Side flag = tramTrackFlags ? trackFlag : laneFlag;
+            if ((sideFlags & flag) == 0)
+            {
+                return;
+            }
+
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                new CompositionFlags(default, flag, default),
+                ref features);
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                new CompositionFlags(default, default, flag),
+                ref features);
+            AddCalculatedSourceFeatureAvailability(
+                prefabEntity,
+                new CompositionFlags(default, flag, flag),
+                ref features);
+        }
+
+        private void AddCalculatedSourceFeatureAvailability(
+            Entity prefabEntity,
+            CompositionFlags compositionFlags,
+            ref CustomRoadAssetSourceFeatures features)
+        {
+            if (!m_RoadLaneProfileBuilder.TryCalculateRoadLaneProfile(
+                    prefabEntity,
+                    compositionFlags,
+                    $"NetGeometrySection:feature-probe:{compositionFlags}",
+                    out RoadLaneProfile calculatedProfile))
+            {
+                return;
+            }
+
+            AddUpgradeProfileFeatureAvailability(calculatedProfile, ref features);
+        }
+
+        private static int CountEnabledSideFlags(CompositionFlags.Side flags)
+        {
+            int count = 0;
+            if ((flags & CompositionFlags.Side.PrimaryTrack) != 0)
+            {
+                count++;
+            }
+
+            if ((flags & CompositionFlags.Side.SecondaryTrack) != 0)
+            {
+                count++;
+            }
+
+            if ((flags & CompositionFlags.Side.TertiaryTrack) != 0)
+            {
+                count++;
+            }
+
+            if ((flags & CompositionFlags.Side.QuaternaryTrack) != 0)
+            {
+                count++;
+            }
+
+            if ((flags & CompositionFlags.Side.PrimaryLane) != 0)
+            {
+                count++;
+            }
+
+            if ((flags & CompositionFlags.Side.SecondaryLane) != 0)
+            {
+                count++;
+            }
+
+            if ((flags & CompositionFlags.Side.TertiaryLane) != 0)
+            {
+                count++;
+            }
+
+            if ((flags & CompositionFlags.Side.QuaternaryLane) != 0)
+            {
+                count++;
+            }
+
+            return count;
+        }
+
+        private static void AddUpgradeProfileFeatureAvailability(
+            RoadLaneProfile profile,
+            ref CustomRoadAssetSourceFeatures features)
+        {
+            if (!profile.TramTrackCounts.IsEmpty)
+            {
+                features |= CustomRoadAssetSourceFeatures.Tram;
+            }
+
+            if (profile.BusLaneLayout.HasAny ||
+                profile.DedicatedPublicTransportLaneLayout.HasAny ||
+                !profile.PublicTransportTramCounts.IsEmpty)
+            {
+                features |= CustomRoadAssetSourceFeatures.PublicTransport;
+            }
         }
 
         internal bool TryGetRoadAssetPrefabOption(
@@ -770,6 +1015,13 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             RoadLaneCounts desiredCounts = GetDesiredPocketLaneCounts(originalCounts, nodeIsStart);
 
             bool sourceHasUpgraded = EntityManager.TryGetComponent(edgeEntity, out Upgraded sourceUpgraded);
+            CompositionFlags sourceTramUpgradeFlags = sourceHasUpgraded
+                ? ReplacementRoadUpgradeMatcher.GetTramTrackUpgradeFlags(sourceUpgraded.m_Flags)
+                : default;
+            if (sourceTramUpgradeFlags == default(CompositionFlags))
+            {
+                sourceTramUpgradeFlags = GetSynthesizedIndependentTramUpgradeFlags(sourceProfile);
+            }
             context = new SourceReplacementContext
             {
                 Prefab = sourcePrefabRef.m_Prefab,
@@ -785,9 +1037,7 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 HasTramTracks = !sourceProfile.TramTrackCounts.IsEmpty,
                 HasIndependentTram = !sourceProfile.IndependentTramCounts.IsEmpty,
                 HasUpgraded = sourceHasUpgraded,
-                TramUpgradeFlags = sourceHasUpgraded
-                    ? ReplacementRoadUpgradeMatcher.GetTramTrackUpgradeFlags(sourceUpgraded.m_Flags)
-                    : default,
+                TramUpgradeFlags = sourceTramUpgradeFlags,
                 OriginalEffectiveCounts = RoadLaneCounts.Add(originalCounts, sourceProfile.IndependentTramCounts),
                 DesiredEffectiveCounts = RoadLaneCounts.Add(desiredCounts, sourceProfile.IndependentTramCounts)
             };
@@ -835,6 +1085,19 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             sourceFeatures = CustomRoadAssetSourceFeatureUtility.Normalize(sourceFeatures);
+            string requestedSourceFeatureDetail = "requestedSourceTram=not-requested";
+            CompositionFlags requestedSourceTramFlags = default;
+            if ((sourceFeatures & CustomRoadAssetSourceFeatures.Tram) != 0 &&
+                !TryApplyRequestedSourceTramFeature(
+                    sourcePrefab,
+                    ref sourceProfile,
+                    out requestedSourceTramFlags,
+                    out requestedSourceFeatureDetail))
+            {
+                detail = $"requestedSourceTramUnavailable sourcePrefab={PrefabDiagnosticFormat.GetPrefabName(m_PrefabSystem, sourcePrefab)} entity={FormatEntity(sourcePrefab)} {requestedSourceFeatureDetail}";
+                return false;
+            }
+
             RoadLaneCounts originalCounts = sourceProfile.RoadCounts;
             bool wantsReverse = (sourceFeatures & CustomRoadAssetSourceFeatures.Reverse) != 0;
             bool isReverseSide = IsReverseAsymmetricSourceSide(originalCounts, nodeIsStart);
@@ -862,6 +1125,11 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             }
 
             RoadLaneCounts desiredCounts = GetDesiredPocketLaneCounts(originalCounts, nodeIsStart);
+            CompositionFlags sourceTramUpgradeFlags = requestedSourceTramFlags;
+            if (sourceTramUpgradeFlags == default(CompositionFlags))
+            {
+                sourceTramUpgradeFlags = GetSynthesizedIndependentTramUpgradeFlags(sourceProfile);
+            }
             context = new SourceReplacementContext
             {
                 Prefab = sourcePrefab,
@@ -876,13 +1144,331 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 DesiredCounts = desiredCounts,
                 HasTramTracks = !sourceProfile.TramTrackCounts.IsEmpty,
                 HasIndependentTram = !sourceProfile.IndependentTramCounts.IsEmpty,
-                HasUpgraded = false,
-                TramUpgradeFlags = default,
+                HasUpgraded = requestedSourceTramFlags != default(CompositionFlags),
+                TramUpgradeFlags = sourceTramUpgradeFlags,
                 OriginalEffectiveCounts = RoadLaneCounts.Add(originalCounts, sourceProfile.IndependentTramCounts),
                 DesiredEffectiveCounts = RoadLaneCounts.Add(desiredCounts, sourceProfile.IndependentTramCounts)
             };
-            detail = "ok";
+            detail = $"ok {requestedSourceFeatureDetail}";
             return true;
+        }
+
+        private static CompositionFlags GetSynthesizedIndependentTramUpgradeFlags(
+            RoadLaneProfile sourceProfile)
+        {
+            if (sourceProfile.TramTrackCounts.IsEmpty ||
+                !CountsEqual(sourceProfile.TramTrackCounts, sourceProfile.IndependentTramCounts) ||
+                !sourceProfile.PublicTransportTramCounts.IsEmpty ||
+                !TryGetTrackSideFlags(
+                    sourceProfile.IndependentTramCounts.Forward,
+                    out CompositionFlags.Side forwardFlags) ||
+                !TryGetTrackSideFlags(
+                    sourceProfile.IndependentTramCounts.Backward,
+                    out CompositionFlags.Side backwardFlags))
+            {
+                return default;
+            }
+
+            return new CompositionFlags(default, forwardFlags, backwardFlags);
+        }
+
+        private static bool TryGetTrackSideFlags(
+            int count,
+            out CompositionFlags.Side sideFlags)
+        {
+            sideFlags = default;
+            if (count < 0 || count > 4)
+            {
+                return false;
+            }
+
+            CompositionFlags.Side[] orderedFlags =
+            {
+                CompositionFlags.Side.PrimaryTrack,
+                CompositionFlags.Side.SecondaryTrack,
+                CompositionFlags.Side.TertiaryTrack,
+                CompositionFlags.Side.QuaternaryTrack
+            };
+
+            for (int i = 0; i < count; i++)
+            {
+                sideFlags |= orderedFlags[i];
+            }
+
+            return true;
+        }
+
+        private bool TryApplyRequestedSourceTramFeature(
+            Entity sourcePrefab,
+            ref RoadLaneProfile sourceProfile,
+            out CompositionFlags requestedSourceTramFlags,
+            out string detail)
+        {
+            requestedSourceTramFlags = default;
+            if (!sourceProfile.TramTrackCounts.IsEmpty)
+            {
+                detail = $"requestedSourceTram=default profile={sourceProfile.Source} road={sourceProfile.RoadCounts} tram={sourceProfile.TramTrackCounts} independentTram={sourceProfile.IndependentTramCounts} publicTransportTram={sourceProfile.PublicTransportTramCounts} tramDetail={sourceProfile.TramTrackDetail}";
+                return true;
+            }
+
+            bool found = false;
+            int bestScore = int.MaxValue;
+            CompositionFlags bestFlags = default;
+            RoadLaneProfile bestProfile = default;
+            string bestDetail = "bestProfile=none";
+            RequestedSourceTramScanStats stats = default;
+
+            if (!m_RoadLaneProfileBuilder.TryGetPrefabCompositionOptionSideFlags(
+                    sourcePrefab,
+                    out CompositionFlags.Side tramTrackLeftProbeSideFlags,
+                    out CompositionFlags.Side tramTrackRightProbeSideFlags,
+                    out _,
+                    out _,
+                    out string sectionOptionDetail))
+            {
+                detail = $"requestedSourceTram=missing-section-option-flags {sectionOptionDetail}";
+                return false;
+            }
+
+            stats.SectionOptionDetail = sectionOptionDetail;
+            stats.SectionTrackSideFlags = CountEnabledSideFlags(tramTrackLeftProbeSideFlags | tramTrackRightProbeSideFlags);
+            ScanRequestedSourceTramSectionProfiles(
+                sourcePrefab,
+                tramTrackLeftProbeSideFlags,
+                tramTrackRightProbeSideFlags,
+                sourceProfile.RoadCounts,
+                ref found,
+                ref bestScore,
+                ref bestFlags,
+                ref bestProfile,
+                ref bestDetail,
+                ref stats);
+
+            if (!found)
+            {
+                detail = $"requestedSourceTram=no-profile {stats.Format()}";
+                return false;
+            }
+
+            sourceProfile = bestProfile;
+            requestedSourceTramFlags = bestFlags;
+            detail = $"requestedSourceTram=applied {bestDetail} {stats.Format()}";
+            return true;
+        }
+
+        private void ScanRequestedSourceTramSectionProfiles(
+            Entity sourcePrefab,
+            CompositionFlags.Side tramTrackLeftProbeSideFlags,
+            CompositionFlags.Side tramTrackRightProbeSideFlags,
+            RoadLaneCounts defaultRoadCounts,
+            ref bool found,
+            ref int bestScore,
+            ref CompositionFlags bestFlags,
+            ref RoadLaneProfile bestProfile,
+            ref string bestDetail,
+            ref RequestedSourceTramScanStats stats)
+        {
+            CompositionFlags.Side[] trackFlags =
+            {
+                CompositionFlags.Side.PrimaryTrack,
+                CompositionFlags.Side.SecondaryTrack,
+                CompositionFlags.Side.TertiaryTrack,
+                CompositionFlags.Side.QuaternaryTrack
+            };
+
+            List<CompositionFlags.Side> leftSubsets = BuildEnabledSideFlagSubsets(
+                tramTrackLeftProbeSideFlags,
+                trackFlags);
+            List<CompositionFlags.Side> rightSubsets = BuildEnabledSideFlagSubsets(
+                tramTrackRightProbeSideFlags,
+                trackFlags);
+
+            for (int leftIndex = 0; leftIndex < leftSubsets.Count; leftIndex++)
+            {
+                for (int rightIndex = 0; rightIndex < rightSubsets.Count; rightIndex++)
+                {
+                    CompositionFlags.Side leftSubset = leftSubsets[leftIndex];
+                    CompositionFlags.Side rightSubset = rightSubsets[rightIndex];
+                    if (leftSubset == default && rightSubset == default)
+                    {
+                        continue;
+                    }
+
+                    ScanRequestedSourceTramSectionProfileMask(
+                        sourcePrefab,
+                        leftSubset,
+                        rightSubset,
+                        defaultRoadCounts,
+                        ref found,
+                        ref bestScore,
+                        ref bestFlags,
+                        ref bestProfile,
+                        ref bestDetail,
+                        ref stats);
+                }
+            }
+        }
+
+        private void ScanRequestedSourceTramSectionProfileMask(
+            Entity sourcePrefab,
+            CompositionFlags.Side leftTrackFlags,
+            CompositionFlags.Side rightTrackFlags,
+            RoadLaneCounts defaultRoadCounts,
+            ref bool found,
+            ref int bestScore,
+            ref CompositionFlags bestFlags,
+            ref RoadLaneProfile bestProfile,
+            ref string bestDetail,
+            ref RequestedSourceTramScanStats stats)
+        {
+            if (leftTrackFlags == default && rightTrackFlags == default)
+            {
+                return;
+            }
+
+            TryAcceptRequestedSourceTramSectionProfile(
+                sourcePrefab,
+                new CompositionFlags(default, leftTrackFlags, rightTrackFlags),
+                defaultRoadCounts,
+                ref found,
+                ref bestScore,
+                ref bestFlags,
+                ref bestProfile,
+                ref bestDetail,
+                ref stats);
+        }
+
+        private static List<CompositionFlags.Side> BuildEnabledSideFlagSubsets(
+            CompositionFlags.Side availableFlags,
+            CompositionFlags.Side[] knownFlags)
+        {
+            List<CompositionFlags.Side> subsets = new List<CompositionFlags.Side>
+            {
+                default
+            };
+            int subsetLimit = 1 << knownFlags.Length;
+            for (int subsetBits = 1; subsetBits < subsetLimit; subsetBits++)
+            {
+                CompositionFlags.Side subset = default;
+                for (int i = 0; i < knownFlags.Length; i++)
+                {
+                    if ((subsetBits & (1 << i)) != 0)
+                    {
+                        subset |= knownFlags[i];
+                    }
+                }
+
+                if ((availableFlags & subset) == subset)
+                {
+                    subsets.Add(subset);
+                }
+            }
+
+            return subsets;
+        }
+
+        private void TryAcceptRequestedSourceTramSectionProfile(
+            Entity sourcePrefab,
+            CompositionFlags compositionMask,
+            RoadLaneCounts defaultRoadCounts,
+            ref bool found,
+            ref int bestScore,
+            ref CompositionFlags bestFlags,
+            ref RoadLaneProfile bestProfile,
+            ref string bestDetail,
+            ref RequestedSourceTramScanStats stats)
+        {
+            stats.SectionProbeMasks++;
+            if (!m_RoadLaneProfileBuilder.TryCalculateRoadLaneProfile(
+                    sourcePrefab,
+                    compositionMask,
+                    $"NetGeometrySection:requested-source-tram-probe:{compositionMask}",
+                    out RoadLaneProfile calculatedProfile))
+            {
+                return;
+            }
+
+            stats.SectionProbeProfiles++;
+            stats.CalculatedProfiles++;
+            TryAcceptRequestedSourceTramProfile(
+                calculatedProfile,
+                compositionMask,
+                defaultRoadCounts,
+                ref found,
+                ref bestScore,
+                ref bestFlags,
+                ref bestProfile,
+                ref bestDetail,
+                ref stats);
+        }
+
+        private static void TryAcceptRequestedSourceTramProfile(
+            RoadLaneProfile profile,
+            CompositionFlags compositionMask,
+            RoadLaneCounts defaultRoadCounts,
+            ref bool found,
+            ref int bestScore,
+            ref CompositionFlags bestFlags,
+            ref RoadLaneProfile bestProfile,
+            ref string bestDetail,
+            ref RequestedSourceTramScanStats stats)
+        {
+            stats.LaneProfiles++;
+            if (profile.TramTrackCounts.IsEmpty)
+            {
+                return;
+            }
+
+            stats.TramProfiles++;
+            if (!profile.IndependentTramCounts.IsEmpty)
+            {
+                stats.IndependentTramProfiles++;
+            }
+
+            if (!profile.PublicTransportTramCounts.IsEmpty)
+            {
+                stats.PublicTransportTramProfiles++;
+            }
+
+            int score = GetRequestedSourceTramProfileScore(profile, defaultRoadCounts);
+            if (found && score >= bestScore)
+            {
+                return;
+            }
+
+            found = true;
+            bestScore = score;
+            bestFlags = compositionMask;
+            bestProfile = profile;
+            bestDetail = $"profile={profile.Source} mask={compositionMask} score={score} road={profile.RoadCounts} tram={profile.TramTrackCounts} independentTram={profile.IndependentTramCounts} publicTransportTram={profile.PublicTransportTramCounts} tramDetail={profile.TramTrackDetail} independentTramDetail={profile.IndependentTramDetail}";
+        }
+
+        private static int GetRequestedSourceTramProfileScore(
+            RoadLaneProfile profile,
+            RoadLaneCounts defaultRoadCounts)
+        {
+            int score = 0;
+            if (profile.IndependentTramCounts.IsEmpty)
+            {
+                score += profile.PublicTransportTramCounts.IsEmpty ? 1000 : 500;
+            }
+
+            if (defaultRoadCounts.Forward == defaultRoadCounts.Backward)
+            {
+                int roadAsymmetry = Math.Abs(profile.RoadCounts.Forward - profile.RoadCounts.Backward);
+                int tramAsymmetry = Math.Abs(profile.TramTrackCounts.Forward - profile.TramTrackCounts.Backward);
+                int independentTramAsymmetry = Math.Abs(profile.IndependentTramCounts.Forward - profile.IndependentTramCounts.Backward);
+                score += (roadAsymmetry + tramAsymmetry + independentTramAsymmetry) * 250;
+                if (profile.TramTrackCounts.Forward == 0 ||
+                    profile.TramTrackCounts.Backward == 0)
+                {
+                    score += 500;
+                }
+            }
+
+            score += (Math.Abs(defaultRoadCounts.Forward - profile.RoadCounts.Forward) +
+                      Math.Abs(defaultRoadCounts.Backward - profile.RoadCounts.Backward)) * 10;
+            return score;
         }
 
         private bool TryBuildCandidateReplacementContext(
@@ -1209,11 +1795,22 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 transitSummary += $" bus={profile.BusLaneLayout}";
             }
 
+            if (profile.DedicatedPublicTransportLaneLayout.HasAny)
+            {
+                transitSummary += $" dedicatedPT={profile.DedicatedPublicTransportLaneLayout}";
+            }
+
             if (profile.HasMarkedParking)
             {
                 transitSummary += " markedParking=True";
             }
 
+            CustomRoadAssetSourceFeatures mandatoryFeatures =
+                GetMandatoryCustomRoadAssetSourceFeatures(profile);
+            CustomRoadAssetSourceFeatures availableFeatures =
+                GetAvailableCustomRoadAssetSourceFeatures(
+                    prefabEntity,
+                    profile);
             option = new RoadAssetPrefabOption
             {
                 PrefabName = prefabBase.name,
@@ -1222,8 +1819,10 @@ namespace PocketTurnLanes.Tool.PrefabMatching
                 Summary = $"lanes={profile.RoadCounts} width={geometry.m_DefaultWidth:0.##}m content={(isDlc ? "dlc" : "base")} profile={profile.Source}{transitSummary}",
                 IsDlc = isDlc,
                 ContentDetail = contentDetail,
-                HasTram = !profile.TramTrackCounts.IsEmpty,
-                HasPublicTransport = profile.BusLaneLayout.HasAny,
+                HasTram = (mandatoryFeatures & CustomRoadAssetSourceFeatures.Tram) != 0,
+                HasPublicTransport = (mandatoryFeatures & CustomRoadAssetSourceFeatures.PublicTransport) != 0,
+                CanHaveTram = (availableFeatures & CustomRoadAssetSourceFeatures.Tram) != 0,
+                CanHavePublicTransport = (availableFeatures & CustomRoadAssetSourceFeatures.PublicTransport) != 0,
                 HasAsymmetricRoadLanes = profile.RoadCounts.IsAsymmetric,
                 HasReverseSourceSide = profile.RoadCounts.IsAsymmetric &&
                                        profile.RoadCounts.Forward > 0 &&
@@ -1402,6 +2001,24 @@ namespace PocketTurnLanes.Tool.PrefabMatching
             public Upgraded TargetUpgrade;
             public RoadLaneProfile TargetLayoutProfile;
             public string TramMatchDetail;
+        }
+
+        private struct RequestedSourceTramScanStats
+        {
+            public string SectionOptionDetail;
+            public int SectionTrackSideFlags;
+            public int SectionProbeMasks;
+            public int SectionProbeProfiles;
+            public int LaneProfiles;
+            public int CalculatedProfiles;
+            public int TramProfiles;
+            public int IndependentTramProfiles;
+            public int PublicTransportTramProfiles;
+
+            public string Format()
+            {
+                return $"{(string.IsNullOrEmpty(SectionOptionDetail) ? "sectionOptionFlags=not-scanned" : SectionOptionDetail)} sectionTrackSideFlags={SectionTrackSideFlags} sectionProbeMasks={SectionProbeMasks} sectionProbeProfiles={SectionProbeProfiles} laneProfiles={LaneProfiles} calculatedProfiles={CalculatedProfiles} tramProfiles={TramProfiles} independentTramProfiles={IndependentTramProfiles} publicTransportTramProfiles={PublicTransportTramProfiles}";
+            }
         }
 
         internal bool TryGetRoadLaneProfile(
