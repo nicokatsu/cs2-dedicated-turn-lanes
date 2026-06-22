@@ -6,6 +6,9 @@ namespace PocketTurnLanes.Tool.PrefabMatching
         public string DisplayName;
         public string Icon;
         public string Summary;
+        public int ForwardRoadLanes;
+        public int BackwardRoadLanes;
+        public int TotalRoadLanes;
         public bool IsDlc;
         public string ContentDetail;
         public bool HasTram;

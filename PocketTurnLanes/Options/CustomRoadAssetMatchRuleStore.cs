@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Colossal.IO.AssetDatabase;
 using Colossal.Json;
 using PocketTurnLanes.Diagnostics;
+using PocketTurnLanes.Tool.Json;
 
 namespace PocketTurnLanes.Options
 {
@@ -49,14 +50,6 @@ namespace PocketTurnLanes.Options
             return snapshot;
         }
 
-        internal bool TryGetTargetPrefabName(string sourcePrefabName, out string targetPrefabName)
-        {
-            return TryGetTargetPrefabName(
-                sourcePrefabName,
-                CustomRoadAssetSourceFeatures.None,
-                out targetPrefabName);
-        }
-
         internal bool TryGetTargetPrefabName(
             string sourcePrefabName,
             CustomRoadAssetSourceFeatures sourceFeatures,
@@ -74,13 +67,6 @@ namespace PocketTurnLanes.Options
                 CustomRoadAssetSourceFeatureUtility.Normalize(sourceFeatures));
             return m_Rules.TryGetValue(key, out targetPrefabName) &&
                    !string.IsNullOrWhiteSpace(targetPrefabName);
-        }
-
-        internal string GetTargetPrefabName(string sourcePrefabName)
-        {
-            return TryGetTargetPrefabName(sourcePrefabName, out string targetPrefabName)
-                ? targetPrefabName
-                : null;
         }
 
         internal List<CustomRoadAssetMatchRule> GetCandidateRules(
@@ -419,9 +405,9 @@ namespace PocketTurnLanes.Options
                 }
 
                 first = false;
-                AppendJsonString(builder, EncodeRuleKey(rule.Key));
+                JsonStringBuilder.AppendString(builder, EncodeRuleKey(rule.Key));
                 builder.Append(':');
-                AppendJsonString(builder, rule.Value);
+                JsonStringBuilder.AppendString(builder, rule.Value);
             }
 
             builder.Append('}');
@@ -481,53 +467,6 @@ namespace PocketTurnLanes.Options
             }
 
             return prefabName.Trim();
-        }
-
-        private static void AppendJsonString(StringBuilder builder, string value)
-        {
-            builder.Append('"');
-            for (int i = 0; i < value.Length; i++)
-            {
-                char c = value[i];
-                switch (c)
-                {
-                    case '\\':
-                        builder.Append("\\\\");
-                        break;
-                    case '"':
-                        builder.Append("\\\"");
-                        break;
-                    case '\b':
-                        builder.Append("\\b");
-                        break;
-                    case '\f':
-                        builder.Append("\\f");
-                        break;
-                    case '\n':
-                        builder.Append("\\n");
-                        break;
-                    case '\r':
-                        builder.Append("\\r");
-                        break;
-                    case '\t':
-                        builder.Append("\\t");
-                        break;
-                    default:
-                        if (c < 32)
-                        {
-                            builder.Append("\\u");
-                            builder.Append(((int)c).ToString("x4"));
-                        }
-                        else
-                        {
-                            builder.Append(c);
-                        }
-
-                        break;
-                }
-            }
-
-            builder.Append('"');
         }
 
         private static int GetCanonicalRulePreferenceScore(
