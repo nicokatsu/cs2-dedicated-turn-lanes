@@ -42,7 +42,6 @@ namespace PocketTurnLanes.Systems.UI
 
         protected override void OnUpdate()
         {
-            m_IntersectionToolSystem?.ProcessDeferredToolChangedCleanup();
             SyncToolEnabledBinding();
         }
 

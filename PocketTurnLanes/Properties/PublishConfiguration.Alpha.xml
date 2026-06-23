@@ -46,16 +46,16 @@ Use the **Road Asset Matches** panel to save preferred source-to-target road rep
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.2.0" />
+	<ModVersion Value="0.2.1" />
 	<!--Recommended version of the base game to use the mod-->
-	<GameVersion Value="1.5.*" />
+	<GameVersion Value="1.6.*" />
 	<!--Dependency for the mod, can be set multiple times-->
 	<Dependency Id="80095" />
 	<Dependency Id="74417" />
 	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="Adds custom road asset match rules and the Road Asset Matches panel." />
+	<ChangeLog Value="Fixes errors and stale panel state when switching from the Dedicated Turn Lanes tool to other tools." />
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
 	<ExternalLink Type="discord" Url="https://discord.com/channels/1024242828114673724/1509986355868995715" />
 	<ExternalLink Type="github" Url="https://github.com/nicokatsu/cs2-dedicated-turn-lanes" />

@@ -149,18 +149,15 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
 
             try
             {
-                JobHandle cleanupHandle = ClearDefinitionsAndResetForToolExit(
-                    m_LastToolUpdateJobHandle,
-                    "system destroy",
-                    true,
-                    out string cleanupDetail);
-                cleanupHandle.Complete();
-                Mod.LogDiagnostic($"[IntersectionTool] Destroy cleanup complete. {cleanupDetail}");
+                m_LastToolUpdateJobHandle.Complete();
+                string cleanupDetail = ResetToolStateForExitWithoutDefinitionDestroy("system destroy", true);
+                Mod.LogDiagnostic($"[IntersectionTool] Destroy state cleanup complete without ToolOutputBarrier definition destroy. {cleanupDetail}");
             }
             catch (Exception ex)
             {
                 SetVanillaMutationSystemsEnabled(true);
-                Mod.LogException(ex, "[IntersectionTool] Failed during destroy cleanup; restored vanilla mutation systems.");
+                SetToolEnabled(false);
+                Mod.LogException(ex, "[IntersectionTool] Failed during destroy state cleanup; restored vanilla mutation systems and forced tool disabled.");
             }
 
             base.OnDestroy();
@@ -499,6 +496,41 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return result;
         }
 
+        private string ResetToolStateForExitWithoutDefinitionDestroy(
+            string reason,
+            bool switchToDefaultTool)
+        {
+            Entity previousHover = m_HoveredIntersection;
+            Entity previousPreview = m_PreviewIntersection;
+            Entity previousPreviewEdge = m_PreviewEdge;
+            int previousPreviewEdges = m_PreviewEdgeCount;
+            bool hadPreviewState = HasPreviewState();
+            bool wasEnabled = IsToolEnabled;
+            int definitionCountBefore = CalculateEntityCountSafe(m_DefinitionQuery);
+            int replacementDefinitionCountBefore = CalculateEntityCountSafe(m_ReplacementPreviewDefinitionQuery);
+
+            applyMode = ApplyMode.Clear;
+            m_PendingToolCommandState = default;
+            m_ClearSplitDefinitions = false;
+            UpdateHoveredIntersection(Entity.Null);
+            m_OverlaySystem?.Clear();
+            ResetPreviewState();
+
+            bool toolStateChanged = SetToolEnabled(false);
+            bool switchedToDefaultTool = false;
+            if (switchToDefaultTool &&
+                m_ToolSystem != null &&
+                m_ToolSystem.activeTool == this)
+            {
+                m_ToolSystem.activeTool = m_DefaultToolSystem;
+                switchedToDefaultTool = true;
+            }
+
+            SetVanillaMutationSystemsEnabled(true);
+
+            return $"reason={reason} wasEnabled={wasEnabled} toolStateChanged={toolStateChanged} switchedToDefaultTool={switchedToDefaultTool} hadPreviewState={hadPreviewState} definitionCountBefore={definitionCountBefore} replacementPreviewDefinitionCountBefore={replacementDefinitionCountBefore} previousHover={FormatEntity(previousHover)} previousPreview={FormatEntity(previousPreview)} previousPreviewEdge={FormatEntity(previousPreviewEdge)} previousPreviewEdges={previousPreviewEdges}";
+        }
+
         private static int CalculateEntityCountSafe(EntityQuery query)
         {
             try
@@ -586,7 +618,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
                 string activeToolId = system?.toolID ?? "<null>";
                 string reason = $"active tool changed to {activeToolId}";
                 QueuePendingToolCommand(PendingToolCommand.Disable, reason, false, true);
-                Mod.LogEssential($"[IntersectionTool] Deferred cleanup because active tool changed to {activeToolId}; cleanup will run during backend UI update. {GetToolExitSnapshot()}");
+                Mod.LogEssential($"[IntersectionTool] Deferred cleanup because active tool changed to {activeToolId}; cleanup will run during tool update cleanup runner. {GetToolExitSnapshot()}");
             }
         }
 

@@ -1,3 +1,4 @@
+using System;
 using Unity.Jobs;
 
 namespace PocketTurnLanes.Systems.Tool.IntersectionTool
@@ -144,7 +145,7 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             return true;
         }
 
-        internal void ProcessDeferredToolChangedCleanup()
+        internal void ProcessDeferredToolChangedCleanupFromToolUpdate()
         {
             PendingToolCommandState pendingCommand = m_PendingToolCommandState;
             if (pendingCommand.IsEmpty ||
@@ -155,14 +156,27 @@ namespace PocketTurnLanes.Systems.Tool.IntersectionTool
             }
 
             m_PendingToolCommandState = default;
-            Mod.LogDiagnostic($"[IntersectionTool] Processing deferred active-tool cleanup from backend UI update reason={pendingCommand.ProcessingReason} queuedActiveTool={pendingCommand.QueuedActiveToolOrDefault} currentActiveTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isEnabled={IsToolEnabled} {GetToolExitSnapshot()}.");
-            JobHandle result = DisableTool(
-                m_LastToolUpdateJobHandle,
-                pendingCommand.ProcessingReason,
-                pendingCommand.SwitchToDefaultTool,
-                true);
-            result.Complete();
-            TrackToolUpdateJobHandle(result);
+            Mod.LogDiagnostic($"[IntersectionTool] Processing deferred active-tool cleanup from tool update cleanup runner reason={pendingCommand.ProcessingReason} queuedActiveTool={pendingCommand.QueuedActiveToolOrDefault} currentActiveTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} isEnabled={IsToolEnabled} {GetToolExitSnapshot()}.");
+
+            JobHandle result = m_LastToolUpdateJobHandle;
+            try
+            {
+                result = DisableTool(
+                    result,
+                    pendingCommand.ProcessingReason,
+                    pendingCommand.SwitchToDefaultTool,
+                    true);
+                result.Complete();
+                TrackToolUpdateJobHandle(result);
+            }
+            catch (Exception ex)
+            {
+                TrackToolUpdateJobHandle(result);
+                string forcedDetail = ResetToolStateForExitWithoutDefinitionDestroy(
+                    $"{pendingCommand.ProcessingReason}; deferred cleanup failure",
+                    pendingCommand.SwitchToDefaultTool);
+                Mod.LogException(ex, $"[IntersectionTool] Failed during deferred active-tool cleanup from tool update cleanup runner; forced tool state disabled. queuedActiveTool={pendingCommand.QueuedActiveToolOrDefault} currentActiveTool={m_ToolSystem?.activeTool?.toolID ?? "<null>"} {forcedDetail}");
+            }
         }
 
         private string GetToolExitSnapshot()
